@@ -25,6 +25,8 @@ import net.runelite.client.ui.PluginPanel;
 
 public final class HapticScapePanel extends PluginPanel
 {
+	private static final int MAXIMUM_XP_GAIN = 200_000_000;
+
 	private final JLabel statusLabel = new JLabel("Disconnected", SwingConstants.CENTER);
 	private final DefaultListModel<DeviceInfo> deviceModel = new DefaultListModel<>();
 	private final JButton connectButton = new JButton("Connect");
@@ -33,8 +35,10 @@ public final class HapticScapePanel extends PluginPanel
 	private final JButton stopButton = new JButton("Stop now");
 	private final JLabel intensityValueLabel = new JLabel();
 	private final JSlider intensitySlider;
+	private final JSpinner minimumXpGainSpinner;
 	private final JSpinner pulseDurationSpinner;
 	private volatile int intensityPercent;
+	private volatile int minimumXpGain;
 	private volatile int pulseDurationMillis;
 
 	public HapticScapePanel(
@@ -52,9 +56,15 @@ public final class HapticScapePanel extends PluginPanel
 		statusLabel.setBorder(BorderFactory.createEmptyBorder(4, 2, 4, 2));
 
 		intensityPercent = clamp(config.intensityPercent(), 0, 100);
+		minimumXpGain = clamp(config.minimumXpGain(), 1, MAXIMUM_XP_GAIN);
 		pulseDurationMillis = clamp(config.pulseDurationMillis(), 50, 10_000);
 
 		intensitySlider = new JSlider(0, 100, intensityPercent);
+		minimumXpGainSpinner = new JSpinner(new SpinnerNumberModel(
+			minimumXpGain,
+			1,
+			MAXIMUM_XP_GAIN,
+			1));
 		pulseDurationSpinner = new JSpinner(new SpinnerNumberModel(
 			pulseDurationMillis,
 			50,
@@ -74,6 +84,14 @@ public final class HapticScapePanel extends PluginPanel
 					intensityPercent);
 			}
 		});
+		minimumXpGainSpinner.addChangeListener(event ->
+		{
+			minimumXpGain = ((Number) minimumXpGainSpinner.getValue()).intValue();
+			configManager.setConfiguration(
+				HapticScapeConfig.GROUP,
+				HapticScapeConfig.MINIMUM_XP_GAIN_KEY,
+				minimumXpGain);
+		});
 		pulseDurationSpinner.addChangeListener(event ->
 		{
 			pulseDurationMillis = ((Number) pulseDurationSpinner.getValue()).intValue();
@@ -86,6 +104,11 @@ public final class HapticScapePanel extends PluginPanel
 		JPanel settingsPanel = new JPanel();
 		settingsPanel.setLayout(new BoxLayout(settingsPanel, BoxLayout.Y_AXIS));
 		settingsPanel.setBorder(BorderFactory.createTitledBorder("Feedback"));
+
+		JPanel thresholdRow = new JPanel(new BorderLayout(8, 0));
+		thresholdRow.add(new JLabel("Minimum XP gain"), BorderLayout.CENTER);
+		thresholdRow.add(minimumXpGainSpinner, BorderLayout.EAST);
+		settingsPanel.add(thresholdRow);
 
 		JPanel intensityHeader = new JPanel(new BorderLayout());
 		intensityHeader.add(new JLabel("Intensity"), BorderLayout.WEST);
@@ -133,6 +156,11 @@ public final class HapticScapePanel extends PluginPanel
 	public int getIntensityPercent()
 	{
 		return intensityPercent;
+	}
+
+	public int getMinimumXpGain()
+	{
+		return minimumXpGain;
 	}
 
 	public int getPulseDurationMillis()
