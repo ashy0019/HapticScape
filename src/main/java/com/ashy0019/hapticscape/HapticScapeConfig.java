@@ -9,6 +9,7 @@ import net.runelite.client.config.Range;
 public interface HapticScapeConfig extends Config
 {
 	String GROUP = "hapticscape";
+	String MINIMUM_XP_GAIN_KEY = "minimumXpGain";
 	String INTENSITY_PERCENT_KEY = "intensityPercent";
 	String PULSE_DURATION_MILLIS_KEY = "pulseDurationMillis";
 
@@ -24,12 +25,13 @@ public interface HapticScapeConfig extends Config
 		return "ws://localhost:12345";
 	}
 
-	@Range(min = 1)
+	@Range(min = 1, max = 200_000_000)
 	@ConfigItem(
-		keyName = "minimumXpGain",
+		keyName = MINIMUM_XP_GAIN_KEY,
 		name = "Minimum XP gain",
 		description = "Minimum XP gained by one stat change before feedback is triggered",
-		position = 1
+		position = 1,
+		hidden = true
 	)
 	default int minimumXpGain()
 	{
