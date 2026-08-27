@@ -8,7 +8,7 @@ configurable haptic feedback through a user-operated Intiface server.
 - Connect to and disconnect from an Intiface server
 - Display connected devices
 - Send a configurable test pulse
-- Trigger a pulse when one XP gain meets the configured threshold
+- Trigger a pulse when XP gain meets the configured threshold
 - Stop all devices immediately
 
 ## Privacy and networking
