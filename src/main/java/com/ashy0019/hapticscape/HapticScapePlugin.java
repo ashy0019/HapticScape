@@ -132,7 +132,9 @@ public class HapticScapePlugin extends Plugin
 
 		int gainedXp = xpTracker.update(event.getSkill(), event.getXp());
 		HapticScapePanel currentPanel = panel;
-		if (currentPanel != null && gainedXp >= currentPanel.getMinimumXpGain())
+		if (currentPanel != null
+			&& currentPanel.isSkillEnabled(event.getSkill())
+			&& gainedXp >= currentPanel.getMinimumXpGain())
 		{
 			onQualifiedXpGain(event.getSkill(), gainedXp);
 		}
