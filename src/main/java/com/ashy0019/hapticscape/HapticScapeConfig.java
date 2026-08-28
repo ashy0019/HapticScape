@@ -12,6 +12,7 @@ public interface HapticScapeConfig extends Config
 	String MINIMUM_XP_GAIN_KEY = "minimumXpGain";
 	String INTENSITY_PERCENT_KEY = "intensityPercent";
 	String PULSE_DURATION_MILLIS_KEY = "pulseDurationMillis";
+	String DISABLED_SKILLS_KEY = "disabledSkills";
 
 	@ConfigItem(
 		keyName = "intifaceServer",
@@ -62,5 +63,17 @@ public interface HapticScapeConfig extends Config
 	default int pulseDurationMillis()
 	{
 		return 500;
+	}
+
+	@ConfigItem(
+		keyName = DISABLED_SKILLS_KEY,
+		name = "Disabled XP skills",
+		description = "Skill identifiers which do not trigger XP feedback",
+		position = 4,
+		hidden = true
+	)
+	default String disabledSkills()
+	{
+		return "";
 	}
 }

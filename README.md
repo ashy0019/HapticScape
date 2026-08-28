@@ -8,6 +8,7 @@ configurable haptic feedback through a user-operated Intiface server.
 - Connect to and disconnect from an Intiface server.
 - Display connected devices and vibration support.
 - Adjust the XP threshold, intensity, and pulse duration from the HapticScape panel.
+- Enable or disable XP feedback for individual skills.
 - Send a configurable test pulse.
 - Trigger a pulse when one XP gain meets the configured threshold.
 - Stop all devices immediately.

@@ -1,16 +1,20 @@
 package com.ashy0019.hapticscape.ui;
 
 import com.ashy0019.hapticscape.HapticScapeConfig;
+import com.ashy0019.hapticscape.SkillSelection;
 import com.ashy0019.hapticscape.device.ConnectionSnapshot;
 import com.ashy0019.hapticscape.device.ConnectionState;
 import com.ashy0019.hapticscape.device.DeviceInfo;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.GridLayout;
+import java.util.EnumMap;
+import java.util.Map;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
@@ -20,6 +24,7 @@ import javax.swing.JSpinner;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import net.runelite.api.Skill;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.ui.PluginPanel;
 
@@ -34,12 +39,17 @@ public final class HapticScapePanel extends PluginPanel
 	private final JButton testButton = new JButton("Test pulse");
 	private final JButton stopButton = new JButton("Stop now");
 	private final JLabel intensityValueLabel = new JLabel();
+	private final JLabel enabledSkillsValueLabel = new JLabel();
+	private final Map<Skill, JCheckBox> skillCheckBoxes = new EnumMap<>(Skill.class);
+	private final ConfigManager configManager;
 	private final JSlider intensitySlider;
 	private final JSpinner minimumXpGainSpinner;
 	private final JSpinner pulseDurationSpinner;
 	private volatile int intensityPercent;
 	private volatile int minimumXpGain;
 	private volatile int pulseDurationMillis;
+	private volatile SkillSelection skillSelection;
+	private boolean updatingSkillCheckBoxes;
 
 	public HapticScapePanel(
 		HapticScapeConfig config,
@@ -50,6 +60,7 @@ public final class HapticScapePanel extends PluginPanel
 		Runnable stopAction)
 	{
 		super(false);
+		this.configManager = configManager;
 		setLayout(new BorderLayout(0, 8));
 		setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
@@ -58,6 +69,7 @@ public final class HapticScapePanel extends PluginPanel
 		intensityPercent = clamp(config.intensityPercent(), 0, 100);
 		minimumXpGain = clamp(config.minimumXpGain(), 1, MAXIMUM_XP_GAIN);
 		pulseDurationMillis = clamp(config.pulseDurationMillis(), 50, 10_000);
+		skillSelection = SkillSelection.fromConfigValue(config.disabledSkills());
 
 		intensitySlider = new JSlider(0, 100, intensityPercent);
 		minimumXpGainSpinner = new JSpinner(new SpinnerNumberModel(
@@ -121,10 +133,43 @@ public final class HapticScapePanel extends PluginPanel
 		durationRow.add(pulseDurationSpinner, BorderLayout.EAST);
 		settingsPanel.add(durationRow);
 
+		JPanel skillsPanel = new JPanel(new BorderLayout(0, 4));
+		skillsPanel.setBorder(BorderFactory.createTitledBorder("XP skills"));
+
+		JButton allSkillsButton = new JButton("All");
+		allSkillsButton.setToolTipText("Enable XP feedback for every skill");
+		allSkillsButton.addActionListener(event -> setAllSkillsEnabled(true));
+
+		JButton noSkillsButton = new JButton("None");
+		noSkillsButton.setToolTipText("Disable XP feedback for every skill");
+		noSkillsButton.addActionListener(event -> setAllSkillsEnabled(false));
+
+		JPanel bulkSkillButtons = new JPanel(new GridLayout(1, 2, 4, 0));
+		bulkSkillButtons.add(allSkillsButton);
+		bulkSkillButtons.add(noSkillsButton);
+
+		JPanel skillsHeader = new JPanel(new BorderLayout(4, 0));
+		skillsHeader.add(enabledSkillsValueLabel, BorderLayout.WEST);
+		skillsHeader.add(bulkSkillButtons, BorderLayout.EAST);
+		skillsPanel.add(skillsHeader, BorderLayout.NORTH);
+
+		JPanel skillGrid = new JPanel(new GridLayout(0, 2, 4, 2));
+		for (Skill skill : SkillSelection.getSelectableSkills())
+		{
+			JCheckBox skillCheckBox = new JCheckBox(skill.getName(), skillSelection.isEnabled(skill));
+			skillCheckBox.addActionListener(event -> setSkillEnabled(skill, skillCheckBox.isSelected()));
+			skillCheckBoxes.put(skill, skillCheckBox);
+			skillGrid.add(skillCheckBox);
+		}
+
+		skillsPanel.add(skillGrid, BorderLayout.CENTER);
+		updateEnabledSkillsLabel();
+
 		JPanel topPanel = new JPanel();
 		topPanel.setLayout(new BoxLayout(topPanel, BoxLayout.Y_AXIS));
 		topPanel.add(statusLabel);
 		topPanel.add(settingsPanel);
+		topPanel.add(skillsPanel);
 		add(topPanel, BorderLayout.NORTH);
 
 		JList<DeviceInfo> deviceList = new JList<>(deviceModel);
@@ -166,6 +211,64 @@ public final class HapticScapePanel extends PluginPanel
 	public int getPulseDurationMillis()
 	{
 		return pulseDurationMillis;
+	}
+
+	public boolean isSkillEnabled(Skill skill)
+	{
+		return skillSelection.isEnabled(skill);
+	}
+
+	private void setSkillEnabled(Skill skill, boolean enabled)
+	{
+		if (updatingSkillCheckBoxes)
+		{
+			return;
+		}
+
+		skillSelection = skillSelection.withEnabled(skill, enabled);
+		persistSkillSelection();
+		updateEnabledSkillsLabel();
+	}
+
+	private void setAllSkillsEnabled(boolean enabled)
+	{
+		SkillSelection updated = skillSelection.withAllEnabled(enabled);
+		skillSelection = updated;
+
+		updatingSkillCheckBoxes = true;
+		try
+		{
+			for (Map.Entry<Skill, JCheckBox> entry : skillCheckBoxes.entrySet())
+			{
+				entry.getValue().setSelected(updated.isEnabled(entry.getKey()));
+			}
+		}
+		finally
+		{
+			updatingSkillCheckBoxes = false;
+		}
+
+		persistSkillSelection();
+		updateEnabledSkillsLabel();
+	}
+
+	private void persistSkillSelection()
+	{
+		configManager.setConfiguration(
+			HapticScapeConfig.GROUP,
+			HapticScapeConfig.DISABLED_SKILLS_KEY,
+			skillSelection.toConfigValue()
+		);
+	}
+
+	private void updateEnabledSkillsLabel()
+	{
+		enabledSkillsValueLabel.setText(
+			skillSelection.getEnabledCount()
+				+ "/"
+				+ SkillSelection.getSelectableSkills().size()
+				+ " enabled"
+		);
 	}
 
 	private static int clamp(int value, int minimum, int maximum)
