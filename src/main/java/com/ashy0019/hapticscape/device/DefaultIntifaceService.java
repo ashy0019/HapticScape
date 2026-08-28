@@ -37,7 +37,7 @@ public final class DefaultIntifaceService implements IntifaceService
 	private IntifaceGateway gateway;
 	private Future<?> connectAttempt;
 	private ScheduledFuture<?> connectTimeout;
-	private ScheduledFuture<?> pendingStop;
+	private ScheduledFuture<?> pendingPatternStep;
 	private ScheduledFuture<?> connectionMonitor;
 	private long connectionGeneration;
 
@@ -100,7 +100,14 @@ public final class DefaultIntifaceService implements IntifaceService
 		Objects.requireNonNull(duration, "duration");
 		double safeIntensity = Math.max(0.0, Math.min(1.0, intensity));
 		long durationMillis = Math.max(1, duration.toMillis());
-		submit(() -> pulseInternal(safeIntensity, durationMillis));
+		playPattern(HapticPattern.single(safeIntensity, Duration.ofMillis(durationMillis)));
+	}
+
+	@Override
+	public void playPattern(HapticPattern pattern)
+	{
+		Objects.requireNonNull(pattern, "pattern");
+		submit(() -> beginPattern(pattern));
 	}
 
 	@Override
@@ -296,31 +303,54 @@ public final class DefaultIntifaceService implements IntifaceService
 		return candidate == gateway && generation == connectionGeneration && !closing.get();
 	}
 
-	private void pulseInternal(double intensity, long durationMillis)
+	private void beginPattern(HapticPattern pattern)
+	{
+		cancelPendingPatternStep();
+		if (!hasLiveConnection())
+		{
+			return;
+		}
+		executePatternStep(pattern, 0);
+	}
+
+	private void executePatternStep(HapticPattern pattern, int stepIndex)
 	{
 		if (!hasLiveConnection())
 		{
 			return;
 		}
 
-		int submittedCommands = gateway.vibrate(intensity);
+		HapticPattern.Step step = pattern.getSteps().get(stepIndex);
+		int submittedCommands = gateway.vibrate(step.getIntensity());
 		if (submittedCommands == 0)
 		{
 			publish(ConnectionState.CONNECTED, "Connected — no vibration-capable devices", gateway.getDevices());
 			return;
 		}
 
-		cancelPendingStop();
-		pendingStop = executor.schedule(
-			() -> runGuarded(() -> stopAllInternal(false)),
-			durationMillis,
+		pendingPatternStep = executor.schedule(
+			() -> runGuarded(() -> advancePattern(pattern, stepIndex + 1)),
+			step.getDuration().toMillis(),
 			TimeUnit.MILLISECONDS
 		);
 	}
 
+	private void advancePattern(HapticPattern pattern, int nextStepIndex)
+	{
+		pendingPatternStep = null;
+		if (nextStepIndex < pattern.getSteps().size())
+		{
+			executePatternStep(pattern, nextStepIndex);
+		}
+		else
+		{
+			stopAllInternal(false);
+		}
+	}
+
 	private void stopAllInternal(boolean userRequested)
 	{
-		cancelPendingStop();
+		cancelPendingPatternStep();
 		if (!hasLiveConnection())
 		{
 			return;
@@ -428,7 +458,7 @@ public final class DefaultIntifaceService implements IntifaceService
 	private void cleanupGateway()
 	{
 		cancelConnectionAttempt();
-		cancelPendingStop();
+		cancelPendingPatternStep();
 		cancelConnectionMonitor();
 
 		IntifaceGateway current = gateway;
@@ -479,12 +509,12 @@ public final class DefaultIntifaceService implements IntifaceService
 		}
 	}
 
-	private void cancelPendingStop()
+	private void cancelPendingPatternStep()
 	{
-		if (pendingStop != null)
+		if (pendingPatternStep != null)
 		{
-			pendingStop.cancel(false);
-			pendingStop = null;
+			pendingPatternStep.cancel(false);
+			pendingPatternStep = null;
 		}
 	}
 

@@ -1,6 +1,7 @@
 package com.ashy0019.hapticscape.ui;
 
 import com.ashy0019.hapticscape.HapticScapeConfig;
+import com.ashy0019.hapticscape.HapticPatternPreset;
 import com.ashy0019.hapticscape.SkillSelection;
 import com.ashy0019.hapticscape.device.ConnectionSnapshot;
 import com.ashy0019.hapticscape.device.ConnectionState;
@@ -15,6 +16,7 @@ import javax.swing.BoxLayout;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
@@ -36,18 +38,20 @@ public final class HapticScapePanel extends PluginPanel
 	private final DefaultListModel<DeviceInfo> deviceModel = new DefaultListModel<>();
 	private final JButton connectButton = new JButton("Connect");
 	private final JButton disconnectButton = new JButton("Disconnect");
-	private final JButton testButton = new JButton("Test pulse");
+	private final JButton testButton = new JButton("Test pattern");
 	private final JButton stopButton = new JButton("Stop now");
 	private final JLabel intensityValueLabel = new JLabel();
 	private final JLabel enabledSkillsValueLabel = new JLabel();
 	private final Map<Skill, JCheckBox> skillCheckBoxes = new EnumMap<>(Skill.class);
 	private final ConfigManager configManager;
 	private final JSlider intensitySlider;
+	private final JComboBox<HapticPatternPreset> patternPresetComboBox;
 	private final JSpinner minimumXpGainSpinner;
 	private final JSpinner pulseDurationSpinner;
 	private volatile int intensityPercent;
 	private volatile int minimumXpGain;
 	private volatile int pulseDurationMillis;
+	private volatile HapticPatternPreset patternPreset;
 	private volatile SkillSelection skillSelection;
 	private boolean updatingSkillCheckBoxes;
 
@@ -69,9 +73,13 @@ public final class HapticScapePanel extends PluginPanel
 		intensityPercent = clamp(config.intensityPercent(), 0, 100);
 		minimumXpGain = clamp(config.minimumXpGain(), 1, MAXIMUM_XP_GAIN);
 		pulseDurationMillis = clamp(config.pulseDurationMillis(), 50, 10_000);
+		patternPreset = HapticPatternPreset.fromConfigValue(config.patternPreset());
 		skillSelection = SkillSelection.fromConfigValue(config.disabledSkills());
 
 		intensitySlider = new JSlider(0, 100, intensityPercent);
+		patternPresetComboBox = new JComboBox<>(HapticPatternPreset.values());
+		patternPresetComboBox.setSelectedItem(patternPreset);
+		patternPresetComboBox.setToolTipText("Choose the pulse sequence used for XP feedback");
 		minimumXpGainSpinner = new JSpinner(new SpinnerNumberModel(
 			minimumXpGain,
 			1,
@@ -82,6 +90,7 @@ public final class HapticScapePanel extends PluginPanel
 			50,
 			10_000,
 			50));
+		pulseDurationSpinner.setToolTipText("Total time shared by all pulses and gaps in the pattern");
 
 		intensityValueLabel.setText(intensitySlider.getValue() + "%");
 		intensitySlider.addChangeListener(event ->
@@ -112,6 +121,20 @@ public final class HapticScapePanel extends PluginPanel
 				HapticScapeConfig.PULSE_DURATION_MILLIS_KEY,
 				pulseDurationMillis);
 		});
+		patternPresetComboBox.addActionListener(event ->
+		{
+			HapticPatternPreset selected = (HapticPatternPreset) patternPresetComboBox.getSelectedItem();
+			if (selected == null)
+			{
+				return;
+			}
+
+			patternPreset = selected;
+			configManager.setConfiguration(
+				HapticScapeConfig.GROUP,
+				HapticScapeConfig.PATTERN_PRESET_KEY,
+				selected.name());
+		});
 
 		JPanel settingsPanel = new JPanel();
 		settingsPanel.setLayout(new BoxLayout(settingsPanel, BoxLayout.Y_AXIS));
@@ -128,8 +151,13 @@ public final class HapticScapePanel extends PluginPanel
 		settingsPanel.add(intensityHeader);
 		settingsPanel.add(intensitySlider);
 
+		JPanel patternRow = new JPanel(new BorderLayout(8, 0));
+		patternRow.add(new JLabel("Pattern"), BorderLayout.CENTER);
+		patternRow.add(patternPresetComboBox, BorderLayout.EAST);
+		settingsPanel.add(patternRow);
+
 		JPanel durationRow = new JPanel(new BorderLayout(8, 0));
-		durationRow.add(new JLabel("Pulse duration (ms)"), BorderLayout.CENTER);
+		durationRow.add(new JLabel("Pattern duration (ms)"), BorderLayout.CENTER);
 		durationRow.add(pulseDurationSpinner, BorderLayout.EAST);
 		settingsPanel.add(durationRow);
 
@@ -211,6 +239,11 @@ public final class HapticScapePanel extends PluginPanel
 	public int getPulseDurationMillis()
 	{
 		return pulseDurationMillis;
+	}
+
+	public HapticPatternPreset getPatternPreset()
+	{
+		return patternPreset;
 	}
 
 	public boolean isSkillEnabled(Skill skill)

@@ -1,6 +1,7 @@
 package com.ashy0019.hapticscape;
 
 import com.ashy0019.hapticscape.device.DefaultIntifaceService;
+import com.ashy0019.hapticscape.device.HapticPattern;
 import com.ashy0019.hapticscape.device.IntifaceService;
 import com.ashy0019.hapticscape.ui.HapticScapePanel;
 import com.google.gson.Gson;
@@ -67,7 +68,7 @@ public class HapticScapePlugin extends Plugin
 			configManager,
 			this::connectToIntiface,
 			intifaceService::disconnect,
-			this::sendTestPulse,
+			this::sendTestPattern,
 			intifaceService::stopAll
 		);
 		intifaceService.setConnectionListener(panel::updateConnection);
@@ -151,7 +152,7 @@ public class HapticScapePlugin extends Plugin
 	private void onQualifiedXpGain(Skill skill, int gainedXp)
 	{
 		log.debug("Qualified XP gain: {} XP in {}", gainedXp, skill);
-		sendConfiguredPulse();
+		sendConfiguredPattern();
 	}
 
 	private void connectToIntiface()
@@ -174,13 +175,13 @@ public class HapticScapePlugin extends Plugin
 		}
 	}
 
-	private void sendTestPulse()
+	private void sendTestPattern()
 	{
-		log.debug("Sending test pulse");
-		sendConfiguredPulse();
+		log.debug("Sending test haptic pattern");
+		sendConfiguredPattern();
 	}
 
-	private void sendConfiguredPulse()
+	private void sendConfiguredPattern()
 	{
 		HapticScapePanel currentPanel = panel;
 		if (intifaceService == null || currentPanel == null)
@@ -190,11 +191,18 @@ public class HapticScapePlugin extends Plugin
 
 		int intensityPercent = currentPanel.getIntensityPercent();
 		int durationMillis = currentPanel.getPulseDurationMillis();
-		log.debug("Requesting pulse at {}% for {} ms", intensityPercent, durationMillis);
+		HapticPatternPreset preset = currentPanel.getPatternPreset();
+		log.debug(
+			"Requesting {} pattern at {}% for {} ms",
+			preset,
+			intensityPercent,
+			durationMillis
+		);
 
 		double intensity = intensityPercent / 100.0;
 		Duration duration = Duration.ofMillis(durationMillis);
-		intifaceService.pulse(intensity, duration);
+		HapticPattern pattern = preset.createPattern(intensity, duration);
+		intifaceService.playPattern(pattern);
 	}
 
 	private static BufferedImage loadNavigationIcon()
