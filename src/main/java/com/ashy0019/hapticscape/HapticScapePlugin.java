@@ -212,7 +212,7 @@ public class HapticScapePlugin extends Plugin
 				preset = currentPanel.getLevelUpPatternPreset();
 				break;
 			case MILESTONE:
-				preset = HapticPatternSelection.TRIPLE;
+				preset = currentPanel.getMilestonePatternPreset();
 				break;
 			case LEVEL_99:
 				preset = HapticPatternSelection.ASCENDING;

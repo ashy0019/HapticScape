@@ -79,7 +79,7 @@ public final class XpFeedbackSettings
 		return minimumXpGain == that.minimumXpGain
 			&& intensityPercent == that.intensityPercent
 			&& durationMillis == that.durationMillis
-			&& patternSelection == that.patternSelection;
+			&& patternSelection.equals(that.patternSelection);
 	}
 
 	@Override

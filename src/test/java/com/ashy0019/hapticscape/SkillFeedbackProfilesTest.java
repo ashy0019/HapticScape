@@ -68,6 +68,45 @@ public class SkillFeedbackProfilesTest
 	}
 
 	@Test
+	public void customPatternIdsRoundTrip()
+	{
+		XpFeedbackSettings custom = new XpFeedbackSettings(
+			100,
+			75,
+			900,
+			HapticPatternSelection.custom(42)
+		);
+		SkillFeedbackProfiles restored = SkillFeedbackProfiles.fromConfigValue(
+			SkillFeedbackProfiles.empty()
+				.withOverride(Skill.AGILITY, custom)
+				.toConfigValue()
+		);
+
+		assertEquals(custom, restored.getOverride(Skill.AGILITY).orElse(null));
+	}
+
+	@Test
+	public void deletedCustomPatternsFallBackToSinglePulse()
+	{
+		SkillFeedbackProfiles profiles = SkillFeedbackProfiles.empty()
+			.withOverride(
+				Skill.AGILITY,
+				new XpFeedbackSettings(
+					100,
+					75,
+					900,
+					HapticPatternSelection.custom(99)
+				)
+			)
+			.replaceMissingCustomPatterns(CustomPatternLibrary.defaults());
+
+		assertEquals(
+			HapticPatternSelection.SINGLE,
+			profiles.getOverride(Skill.AGILITY).get().getPatternSelection()
+		);
+	}
+
+	@Test
 	public void malformedAndUnknownEntriesAreIgnoredIndependently()
 	{
 		SkillFeedbackProfiles profiles = SkillFeedbackProfiles.fromConfigValue(

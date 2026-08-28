@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
+import javax.swing.DefaultComboBoxModel;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
@@ -47,7 +48,7 @@ public final class HapticScapePanel extends PluginPanel
 	private final JButton connectButton = new JButton("Connect");
 	private final JButton disconnectButton = new JButton("Disconnect");
 	private final JButton testButton = new JButton("Test pattern");
-	private final JButton testLevelUpButton = new JButton("Test level");
+	private final JButton testLevelUpButton = new JButton("Test level-up");
 	private final JButton testSkillProfileButton = new JButton("Test selected skill");
 	private final JButton testNotificationButton = new JButton("Preview notification");
 	private final JButton stopButton = new JButton("Stop now");
@@ -66,6 +67,7 @@ public final class HapticScapePanel extends PluginPanel
 	private final JSlider intensitySlider;
 	private final JComboBox<HapticPatternSelection> patternPresetComboBox;
 	private final JComboBox<HapticPatternSelection> levelUpPatternPresetComboBox;
+	private final JComboBox<HapticPatternSelection> milestonePatternPresetComboBox;
 	private final JComboBox<Skill> skillProfileSkillComboBox;
 	private final JCheckBox useGlobalSkillSettingsCheckBox =
 		new JCheckBox("Use global XP settings");
@@ -84,6 +86,7 @@ public final class HapticScapePanel extends PluginPanel
 	private volatile int pulseDurationMillis;
 	private volatile HapticPatternSelection patternPreset;
 	private volatile HapticPatternSelection levelUpPatternPreset;
+	private volatile HapticPatternSelection milestonePatternPreset;
 	private volatile boolean levelUpFeedbackEnabled;
 	private volatile boolean milestoneFeedbackEnabled;
 	private volatile SkillSelection skillSelection;
@@ -97,6 +100,7 @@ public final class HapticScapePanel extends PluginPanel
 	private volatile CustomPatternLibrary customPatterns;
 	private boolean updatingSkillCheckBoxes;
 	private boolean updatingSkillProfileControls;
+	private boolean updatingPatternSelectors;
 
 	public HapticScapePanel(
 		HapticScapeConfig config,
@@ -129,12 +133,19 @@ public final class HapticScapePanel extends PluginPanel
 			XpFeedbackSettings.MAXIMUM_DURATION_MILLIS
 		);
 		customPatterns = CustomPatternLibrary.fromConfigValue(config.customPatterns());
-		patternPreset = HapticPatternSelection.fromConfigValue(config.patternPreset());
-		levelUpPatternPreset = HapticPatternSelection.fromConfigValue(config.levelUpPatternPreset());
+		patternPreset = HapticPatternSelection.fromConfigValue(config.patternPreset())
+			.resolveAgainst(customPatterns);
+		levelUpPatternPreset = HapticPatternSelection
+			.fromConfigValue(config.levelUpPatternPreset())
+			.resolveAgainst(customPatterns);
+		milestonePatternPreset = HapticPatternSelection
+			.fromConfigValue(config.milestonePatternPreset())
+			.resolveAgainst(customPatterns);
 		levelUpFeedbackEnabled = config.levelUpFeedbackEnabled();
 		milestoneFeedbackEnabled = config.milestoneFeedbackEnabled();
 		skillSelection = SkillSelection.fromConfigValue(config.disabledSkills());
-		skillFeedbackProfiles = SkillFeedbackProfiles.fromConfigValue(config.skillFeedbackProfiles());
+		skillFeedbackProfiles = SkillFeedbackProfiles.fromConfigValue(config.skillFeedbackProfiles())
+			.replaceMissingCustomPatterns(customPatterns);
 		notificationFeedbackEnabled = config.notificationFeedbackEnabled();
 		notificationRespectFocus = config.notificationRespectFocus();
 		notificationIntensityPercent = clamp(
@@ -149,7 +160,7 @@ public final class HapticScapePanel extends PluginPanel
 		);
 		notificationPatternPreset = HapticPatternSelection.fromConfigValue(
 			config.notificationPatternPreset()
-		);
+		).resolveAgainst(customPatterns);
 
 		intensitySlider = new JSlider(0, 100, intensityPercent);
 		patternPresetComboBox = createPatternComboBox();
@@ -161,7 +172,14 @@ public final class HapticScapePanel extends PluginPanel
 		levelUpFeedbackCheckBox.setSelected(levelUpFeedbackEnabled);
 		levelUpFeedbackCheckBox.setToolTipText("Replace ordinary XP feedback when a real skill level increases");
 		milestoneFeedbackCheckBox.setSelected(milestoneFeedbackEnabled);
-		milestoneFeedbackCheckBox.setToolTipText("Use Triple pulse for levels 10–90 and Ascending for level 99");
+		milestoneFeedbackCheckBox.setToolTipText(
+			"Use distinct feedback for levels 10–90 and level 99"
+		);
+		milestonePatternPresetComboBox = createPatternComboBox();
+		milestonePatternPresetComboBox.setSelectedItem(milestonePatternPreset);
+		milestonePatternPresetComboBox.setToolTipText(
+			"Choose the pattern used for levels 10–90; level 99 remains Ascending"
+		);
 		testLevelUpButton.setToolTipText("Preview the configured ordinary level-up pattern");
 		testSkillProfileButton.setToolTipText("Preview the selected skill's effective XP settings");
 		minimumXpGainSpinner = new JSpinner(new SpinnerNumberModel(
@@ -275,6 +293,10 @@ public final class HapticScapePanel extends PluginPanel
 		});
 		patternPresetComboBox.addActionListener(event ->
 		{
+			if (updatingPatternSelectors)
+			{
+				return;
+			}
 			HapticPatternSelection selected =
 				(HapticPatternSelection) patternPresetComboBox.getSelectedItem();
 			if (selected == null)
@@ -286,11 +308,15 @@ public final class HapticScapePanel extends PluginPanel
 			configManager.setConfiguration(
 				HapticScapeConfig.GROUP,
 				HapticScapeConfig.PATTERN_PRESET_KEY,
-				selected.name());
+				selected.toConfigValue());
 			refreshInheritedSkillProfile();
 		});
 		levelUpPatternPresetComboBox.addActionListener(event ->
 		{
+			if (updatingPatternSelectors)
+			{
+				return;
+			}
 			HapticPatternSelection selected =
 				(HapticPatternSelection) levelUpPatternPresetComboBox.getSelectedItem();
 			if (selected == null)
@@ -302,7 +328,27 @@ public final class HapticScapePanel extends PluginPanel
 			configManager.setConfiguration(
 				HapticScapeConfig.GROUP,
 				HapticScapeConfig.LEVEL_UP_PATTERN_PRESET_KEY,
-				selected.name());
+				selected.toConfigValue());
+		});
+		milestonePatternPresetComboBox.addActionListener(event ->
+		{
+			if (updatingPatternSelectors)
+			{
+				return;
+			}
+			HapticPatternSelection selected =
+				(HapticPatternSelection) milestonePatternPresetComboBox.getSelectedItem();
+			if (selected == null)
+			{
+				return;
+			}
+
+			milestonePatternPreset = selected;
+			configManager.setConfiguration(
+				HapticScapeConfig.GROUP,
+				HapticScapeConfig.MILESTONE_PATTERN_PRESET_KEY,
+				selected.toConfigValue()
+			);
 		});
 		levelUpFeedbackCheckBox.addActionListener(event ->
 		{
@@ -398,6 +444,10 @@ public final class HapticScapePanel extends PluginPanel
 		});
 		notificationPatternPresetComboBox.addActionListener(event ->
 		{
+			if (updatingPatternSelectors)
+			{
+				return;
+			}
 			HapticPatternSelection selected =
 				(HapticPatternSelection) notificationPatternPresetComboBox.getSelectedItem();
 			if (selected == null)
@@ -409,7 +459,7 @@ public final class HapticScapePanel extends PluginPanel
 			configManager.setConfiguration(
 				HapticScapeConfig.GROUP,
 				HapticScapeConfig.NOTIFICATION_PATTERN_PRESET_KEY,
-				selected.name()
+				selected.toConfigValue()
 			);
 		});
 		notificationDurationSpinner.addChangeListener(event ->
@@ -453,9 +503,13 @@ public final class HapticScapePanel extends PluginPanel
 		levelUpRow.add(levelUpPatternPresetComboBox, BorderLayout.EAST);
 		settingsPanel.add(levelUpRow);
 
+		JPanel levelUpTestRow = new JPanel(new BorderLayout());
+		levelUpTestRow.add(testLevelUpButton, BorderLayout.EAST);
+		settingsPanel.add(levelUpTestRow);
+
 		JPanel milestoneRow = new JPanel(new BorderLayout(8, 0));
 		milestoneRow.add(milestoneFeedbackCheckBox, BorderLayout.CENTER);
-		milestoneRow.add(testLevelUpButton, BorderLayout.EAST);
+		milestoneRow.add(milestonePatternPresetComboBox, BorderLayout.EAST);
 		settingsPanel.add(milestoneRow);
 
 		JPanel enabledSkillsPanel = new JPanel(new BorderLayout(0, 4));
@@ -567,11 +621,7 @@ public final class HapticScapePanel extends PluginPanel
 			configManager,
 			this::getPulseDurationMillis,
 			patternForgePreviewAction,
-			updatedLibrary ->
-			{
-				customPatterns = updatedLibrary;
-				repaintPatternSelectors();
-			}
+			this::applyCustomPatternLibrary
 		);
 		addCompactTab(feedbackTabs, "Custom", patternForgePanel);
 		loadSelectedSkillProfile();
@@ -655,6 +705,11 @@ public final class HapticScapePanel extends PluginPanel
 	public HapticPatternSelection getLevelUpPatternPreset()
 	{
 		return levelUpPatternPreset;
+	}
+
+	public HapticPatternSelection getMilestonePatternPreset()
+	{
+		return milestonePatternPreset;
 	}
 
 	public boolean isLevelUpFeedbackEnabled()
@@ -762,6 +817,7 @@ public final class HapticScapePanel extends PluginPanel
 	private void updateSelectedSkillProfile()
 	{
 		if (updatingSkillProfileControls
+			|| updatingPatternSelectors
 			|| selectedProfileSkill == null
 			|| useGlobalSkillSettingsCheckBox.isSelected())
 		{
@@ -824,8 +880,10 @@ public final class HapticScapePanel extends PluginPanel
 
 	private JComboBox<HapticPatternSelection> createPatternComboBox()
 	{
-		JComboBox<HapticPatternSelection> comboBox =
-			new JComboBox<>(HapticPatternSelection.values());
+		HapticPatternSelection[] choices = HapticPatternSelection
+			.availableSelections(customPatterns)
+			.toArray(new HapticPatternSelection[0]);
+		JComboBox<HapticPatternSelection> comboBox = new JComboBox<>(choices);
 		comboBox.setRenderer(new DefaultListCellRenderer()
 		{
 			@Override
@@ -857,17 +915,116 @@ public final class HapticScapePanel extends PluginPanel
 		tabs.addTab(title, component);
 		int tabIndex = tabs.getTabCount() - 1;
 		JLabel label = new JLabel(title, SwingConstants.CENTER);
-		label.setFont(label.getFont().deriveFont(Font.PLAIN, 10f));
-		label.setPreferredSize(new Dimension(42, 16));
+		label.setFont(label.getFont().deriveFont(Font.PLAIN, 12f));
+		label.setPreferredSize(new Dimension(48, 18));
 		tabs.setTabComponentAt(tabIndex, label);
 	}
 
-	private void repaintPatternSelectors()
+	private void applyCustomPatternLibrary(CustomPatternLibrary updatedLibrary)
 	{
-		patternPresetComboBox.repaint();
-		levelUpPatternPresetComboBox.repaint();
-		skillProfilePatternPresetComboBox.repaint();
-		notificationPatternPresetComboBox.repaint();
+		customPatterns = updatedLibrary;
+
+		HapticPatternSelection resolvedPattern = patternPreset.resolveAgainst(customPatterns);
+		if (!resolvedPattern.equals(patternPreset))
+		{
+			patternPreset = resolvedPattern;
+			configManager.setConfiguration(
+				HapticScapeConfig.GROUP,
+				HapticScapeConfig.PATTERN_PRESET_KEY,
+				patternPreset.toConfigValue()
+			);
+		}
+
+		HapticPatternSelection resolvedLevelUp =
+			levelUpPatternPreset.resolveAgainst(customPatterns);
+		if (!resolvedLevelUp.equals(levelUpPatternPreset))
+		{
+			levelUpPatternPreset = resolvedLevelUp;
+			configManager.setConfiguration(
+				HapticScapeConfig.GROUP,
+				HapticScapeConfig.LEVEL_UP_PATTERN_PRESET_KEY,
+				levelUpPatternPreset.toConfigValue()
+			);
+		}
+
+		HapticPatternSelection resolvedMilestone =
+			milestonePatternPreset.resolveAgainst(customPatterns);
+		if (!resolvedMilestone.equals(milestonePatternPreset))
+		{
+			milestonePatternPreset = resolvedMilestone;
+			configManager.setConfiguration(
+				HapticScapeConfig.GROUP,
+				HapticScapeConfig.MILESTONE_PATTERN_PRESET_KEY,
+				milestonePatternPreset.toConfigValue()
+			);
+		}
+
+		HapticPatternSelection resolvedNotification =
+			notificationPatternPreset.resolveAgainst(customPatterns);
+		if (!resolvedNotification.equals(notificationPatternPreset))
+		{
+			notificationPatternPreset = resolvedNotification;
+			configManager.setConfiguration(
+				HapticScapeConfig.GROUP,
+				HapticScapeConfig.NOTIFICATION_PATTERN_PRESET_KEY,
+				notificationPatternPreset.toConfigValue()
+			);
+		}
+
+		SkillFeedbackProfiles resolvedProfiles =
+			skillFeedbackProfiles.replaceMissingCustomPatterns(customPatterns);
+		if (resolvedProfiles != skillFeedbackProfiles)
+		{
+			skillFeedbackProfiles = resolvedProfiles;
+			persistSkillFeedbackProfiles();
+		}
+
+		refreshPatternSelectors();
+	}
+
+	private void refreshPatternSelectors()
+	{
+		updatingPatternSelectors = true;
+		try
+		{
+			setPatternChoices(patternPresetComboBox, patternPreset);
+			setPatternChoices(levelUpPatternPresetComboBox, levelUpPatternPreset);
+			setPatternChoices(
+				milestonePatternPresetComboBox,
+				milestonePatternPreset
+			);
+			setPatternChoices(
+				notificationPatternPresetComboBox,
+				notificationPatternPreset
+			);
+			XpFeedbackSettings selectedSkillSettings = selectedProfileSkill == null
+				? getGlobalXpFeedbackSettings()
+				: skillFeedbackProfiles.resolve(
+					selectedProfileSkill,
+					getGlobalXpFeedbackSettings()
+				);
+			setPatternChoices(
+				skillProfilePatternPresetComboBox,
+				selectedSkillSettings.getPatternSelection()
+			);
+		}
+		finally
+		{
+			updatingPatternSelectors = false;
+		}
+		loadSelectedSkillProfile();
+	}
+
+	private void setPatternChoices(
+		JComboBox<HapticPatternSelection> comboBox,
+		HapticPatternSelection selected)
+	{
+		HapticPatternSelection[] choices = HapticPatternSelection
+			.availableSelections(customPatterns)
+			.toArray(new HapticPatternSelection[0]);
+		comboBox.setModel(new DefaultComboBoxModel<>(choices));
+		comboBox.setSelectedItem(selected.resolveAgainst(customPatterns));
+		comboBox.repaint();
 	}
 
 	public void close()
