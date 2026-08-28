@@ -28,6 +28,7 @@ import javax.swing.DefaultComboBoxModel;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JOptionPane;
@@ -113,9 +114,9 @@ final class PatternForgePanel extends JPanel
 		JPanel patternChoice = new JPanel(new BorderLayout());
 		patternChoice.add(patternComboBox, BorderLayout.CENTER);
 		JPanel patternButtons = new JPanel(new GridLayout(1, 3, 4, 0));
-		addButton.setMargin(new Insets(2, 5, 2, 5));
-		renameButton.setMargin(new Insets(2, 5, 2, 5));
-		deleteButton.setMargin(new Insets(2, 5, 2, 5));
+		configureCompactButton(addButton);
+		configureCompactButton(renameButton);
+		configureCompactButton(deleteButton);
 		patternButtons.add(addButton);
 		patternButtons.add(renameButton);
 		patternButtons.add(deleteButton);
@@ -124,26 +125,30 @@ final class PatternForgePanel extends JPanel
 		JPanel patternRow = new JPanel(new BorderLayout(8, 0));
 		patternRow.add(new JLabel("Pattern"), BorderLayout.WEST);
 		patternRow.add(patternChoice, BorderLayout.CENTER);
-		add(patternRow);
+		addVerticalComponent(this, patternRow);
 
 		JLabel instructions = new JLabel(
 			"<html>Draw directly on the curve below.<br>Left to right is time; height is intensity.</html>"
 		);
 		instructions.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));
-		add(instructions);
-		add(canvas);
+		addVerticalComponent(this, instructions);
+		addVerticalComponent(this, canvas);
 
 		JPanel saveStateRow = new JPanel(new BorderLayout());
-		saveStateRow.add(new JLabel("Uses the active intensity and duration"), BorderLayout.WEST);
+		JLabel activeSettingsLabel = new JLabel("Global intensity + duration");
+		activeSettingsLabel.setToolTipText(
+			"Custom patterns use the active global intensity and duration"
+		);
+		saveStateRow.add(activeSettingsLabel, BorderLayout.WEST);
 		saveStateRow.add(saveStateLabel, BorderLayout.EAST);
-		add(saveStateRow);
+		addVerticalComponent(this, saveStateRow);
 
 		JPanel actionButtons = new JPanel(new GridLayout(2, 2, 4, 4));
 		actionButtons.add(undoButton);
 		actionButtons.add(clearButton);
 		actionButtons.add(previewButton);
 		actionButtons.add(saveButton);
-		add(actionButtons);
+		addVerticalComponent(this, actionButtons);
 
 		canvas.setGestureStartAction(this::rememberUndoState);
 		canvas.setPatternChangeAction(pattern -> changeDraft(pattern, false));
@@ -159,6 +164,20 @@ final class PatternForgePanel extends JPanel
 		int initialId = library.getPatterns().get(0).getId();
 		refreshPatternChoices(initialId);
 		loadPattern(initialId);
+	}
+
+	private static void configureCompactButton(JButton button)
+	{
+		button.setMargin(new Insets(2, 3, 2, 3));
+		button.putClientProperty("JButton.minimumWidth", 0);
+	}
+
+	private static void addVerticalComponent(JPanel panel, JComponent component)
+	{
+		Dimension preferredSize = component.getPreferredSize();
+		component.setAlignmentX(Component.LEFT_ALIGNMENT);
+		component.setMaximumSize(new Dimension(Integer.MAX_VALUE, preferredSize.height));
+		panel.add(component);
 	}
 
 	CustomPatternLibrary getLibrary()
