@@ -77,6 +77,7 @@ public class HapticScapePlugin extends Plugin
 			this::sendTestLevelUpPattern,
 			this::sendTestSkillProfile,
 			this::sendTestNotificationPattern,
+			this::sendPatternForgePreview,
 			intifaceService::stopAll
 		);
 		intifaceService.setConnectionListener(panel::updateConnection);
@@ -109,7 +110,11 @@ public class HapticScapePlugin extends Plugin
 			intifaceService.close();
 			intifaceService = null;
 		}
-		panel = null;
+		if (panel != null)
+		{
+			panel.close();
+			panel = null;
+		}
 
 		log.info("HapticScape stopped");
 	}
@@ -176,7 +181,7 @@ public class HapticScapePlugin extends Plugin
 
 		log.debug("RuneLite notification haptic requested");
 		sendPattern(
-			settings.getPatternPreset(),
+			settings.getPatternSelection(),
 			"RUNELITE_NOTIFICATION",
 			settings.getIntensityPercent(),
 			settings.getDurationMillis()
@@ -197,20 +202,20 @@ public class HapticScapePlugin extends Plugin
 		HapticScapePanel currentPanel,
 		XpFeedbackSettings skillXpSettings)
 	{
-		HapticPatternPreset preset;
+		HapticPatternSelection preset;
 		switch (trigger)
 		{
 			case XP_GAIN:
-				preset = skillXpSettings.getPatternPreset();
+				preset = skillXpSettings.getPatternSelection();
 				break;
 			case LEVEL_UP:
 				preset = currentPanel.getLevelUpPatternPreset();
 				break;
 			case MILESTONE:
-				preset = HapticPatternPreset.TRIPLE;
+				preset = HapticPatternSelection.TRIPLE;
 				break;
 			case LEVEL_99:
-				preset = HapticPatternPreset.ASCENDING;
+				preset = HapticPatternSelection.ASCENDING;
 				break;
 			case NONE:
 			default:
@@ -297,7 +302,7 @@ public class HapticScapePlugin extends Plugin
 		XpFeedbackSettings settings = currentPanel.getXpFeedbackSettings(skill);
 		log.debug("Sending test XP profile for {}", skill);
 		sendPattern(
-			settings.getPatternPreset(),
+			settings.getPatternSelection(),
 			"TEST_SKILL_" + skill.name(),
 			settings.getIntensityPercent(),
 			settings.getDurationMillis()
@@ -316,14 +321,28 @@ public class HapticScapePlugin extends Plugin
 			currentPanel.getNotificationFeedbackSettings();
 		log.debug("Sending test notification haptic pattern");
 		sendPattern(
-			settings.getPatternPreset(),
+			settings.getPatternSelection(),
 			"TEST_NOTIFICATION",
 			settings.getIntensityPercent(),
 			settings.getDurationMillis()
 		);
 	}
 
-	private void sendConfiguredPattern(HapticPatternPreset preset, String triggerName)
+	private void sendPatternForgePreview(CustomPattern pattern)
+	{
+		HapticScapePanel currentPanel = panel;
+		if (intifaceService == null || currentPanel == null)
+		{
+			return;
+		}
+
+		double intensity = currentPanel.getIntensityPercent() / 100.0;
+		Duration duration = Duration.ofMillis(currentPanel.getPulseDurationMillis());
+		log.debug("Previewing unsaved Pattern Forge curve");
+		intifaceService.playPattern(pattern.createPattern(intensity, duration));
+	}
+
+	private void sendConfiguredPattern(HapticPatternSelection preset, String triggerName)
 	{
 		HapticScapePanel currentPanel = panel;
 		if (intifaceService == null || currentPanel == null)
@@ -337,7 +356,7 @@ public class HapticScapePlugin extends Plugin
 	}
 
 	private void sendPattern(
-		HapticPatternPreset preset,
+		HapticPatternSelection preset,
 		String triggerName,
 		int intensityPercent,
 		int durationMillis)
@@ -357,7 +376,16 @@ public class HapticScapePlugin extends Plugin
 
 		double intensity = intensityPercent / 100.0;
 		Duration duration = Duration.ofMillis(durationMillis);
-		HapticPattern pattern = preset.createPattern(intensity, duration);
+		HapticScapePanel currentPanel = panel;
+		if (currentPanel == null)
+		{
+			return;
+		}
+		HapticPattern pattern = preset.createPattern(
+			currentPanel.getCustomPatterns(),
+			intensity,
+			duration
+		);
 		intifaceService.playPattern(pattern);
 	}
 

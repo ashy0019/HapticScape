@@ -13,7 +13,7 @@ public class SkillFeedbackProfilesTest
 		1,
 		50,
 		500,
-		HapticPatternPreset.SINGLE
+		HapticPatternSelection.SINGLE
 	);
 
 	@Test
@@ -31,7 +31,7 @@ public class SkillFeedbackProfilesTest
 			100,
 			75,
 			900,
-			HapticPatternPreset.TRIPLE
+			HapticPatternSelection.TRIPLE
 		);
 		SkillFeedbackProfiles profiles = SkillFeedbackProfiles.empty()
 			.withOverride(Skill.AGILITY, agility);
@@ -47,13 +47,13 @@ public class SkillFeedbackProfilesTest
 			100,
 			75,
 			900,
-			HapticPatternPreset.TRIPLE
+			HapticPatternSelection.TRIPLE
 		);
 		XpFeedbackSettings cooking = new XpFeedbackSettings(
 			25,
 			40,
 			350,
-			HapticPatternPreset.DOUBLE
+			HapticPatternSelection.DOUBLE
 		);
 		SkillFeedbackProfiles original = SkillFeedbackProfiles.empty()
 			.withOverride(Skill.AGILITY, agility)
@@ -98,7 +98,7 @@ public class SkillFeedbackProfilesTest
 		SkillFeedbackProfiles profiles = SkillFeedbackProfiles.empty()
 			.withOverride(
 				Skill.AGILITY,
-				new XpFeedbackSettings(100, 75, 900, HapticPatternPreset.TRIPLE)
+				new XpFeedbackSettings(100, 75, 900, HapticPatternSelection.TRIPLE)
 			)
 			.withoutOverride(Skill.AGILITY);
 

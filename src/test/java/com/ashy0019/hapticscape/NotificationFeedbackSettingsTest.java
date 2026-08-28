@@ -56,14 +56,14 @@ public class NotificationFeedbackSettingsTest
 			true,
 			47,
 			650,
-			HapticPatternPreset.TRIPLE
+			HapticPatternSelection.CUSTOM_III
 		);
 
 		assertTrue(settings.isEnabled());
 		assertTrue(settings.isRespectRuneLiteFocus());
 		assertEquals(47, settings.getIntensityPercent());
 		assertEquals(650, settings.getDurationMillis());
-		assertEquals(HapticPatternPreset.TRIPLE, settings.getPatternPreset());
+		assertEquals(HapticPatternSelection.CUSTOM_III, settings.getPatternSelection());
 	}
 
 	@Test(expected = IllegalArgumentException.class)
@@ -74,7 +74,7 @@ public class NotificationFeedbackSettingsTest
 			true,
 			101,
 			500,
-			HapticPatternPreset.DOUBLE
+			HapticPatternSelection.DOUBLE
 		);
 	}
 
@@ -87,7 +87,7 @@ public class NotificationFeedbackSettingsTest
 			respectRuneLiteFocus,
 			50,
 			500,
-			HapticPatternPreset.DOUBLE
+			HapticPatternSelection.DOUBLE
 		);
 	}
 }

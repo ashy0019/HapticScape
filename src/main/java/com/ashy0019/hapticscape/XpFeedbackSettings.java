@@ -14,13 +14,13 @@ public final class XpFeedbackSettings
 	private final int minimumXpGain;
 	private final int intensityPercent;
 	private final int durationMillis;
-	private final HapticPatternPreset patternPreset;
+	private final HapticPatternSelection patternSelection;
 
 	public XpFeedbackSettings(
 		int minimumXpGain,
 		int intensityPercent,
 		int durationMillis,
-		HapticPatternPreset patternPreset)
+		HapticPatternSelection patternSelection)
 	{
 		this.minimumXpGain = requireRange(
 			minimumXpGain,
@@ -40,7 +40,7 @@ public final class XpFeedbackSettings
 			MAXIMUM_DURATION_MILLIS,
 			"duration"
 		);
-		this.patternPreset = Objects.requireNonNull(patternPreset, "patternPreset");
+		this.patternSelection = Objects.requireNonNull(patternSelection, "patternSelection");
 	}
 
 	public int getMinimumXpGain()
@@ -58,9 +58,9 @@ public final class XpFeedbackSettings
 		return durationMillis;
 	}
 
-	public HapticPatternPreset getPatternPreset()
+	public HapticPatternSelection getPatternSelection()
 	{
-		return patternPreset;
+		return patternSelection;
 	}
 
 	@Override
@@ -79,13 +79,13 @@ public final class XpFeedbackSettings
 		return minimumXpGain == that.minimumXpGain
 			&& intensityPercent == that.intensityPercent
 			&& durationMillis == that.durationMillis
-			&& patternPreset == that.patternPreset;
+			&& patternSelection == that.patternSelection;
 	}
 
 	@Override
 	public int hashCode()
 	{
-		return Objects.hash(minimumXpGain, intensityPercent, durationMillis, patternPreset);
+		return Objects.hash(minimumXpGain, intensityPercent, durationMillis, patternSelection);
 	}
 
 	private static int requireRange(int value, int minimum, int maximum, String name)
