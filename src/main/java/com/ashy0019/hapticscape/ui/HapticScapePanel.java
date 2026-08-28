@@ -21,7 +21,6 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
-import javax.swing.ScrollPaneConstants;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
@@ -163,13 +162,7 @@ public final class HapticScapePanel extends PluginPanel
 			skillGrid.add(skillCheckBox);
 		}
 
-		JScrollPane skillScrollPane = new JScrollPane(
-			skillGrid,
-			ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
-			ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
-		);
-		skillScrollPane.setPreferredSize(new Dimension(0, 150));
-		skillsPanel.add(skillScrollPane, BorderLayout.CENTER);
+		skillsPanel.add(skillGrid, BorderLayout.CENTER);
 		updateEnabledSkillsLabel();
 
 		JPanel topPanel = new JPanel();
