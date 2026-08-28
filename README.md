@@ -13,17 +13,6 @@ configurable haptic feedback through a user-operated Intiface server.
 - Trigger a pulse when one XP gain meets the configured threshold.
 - Stop all devices immediately.
 - Detect connection loss without blocking RuneLite.
-- Communicate over the Intiface WebSocket protocol using RuneLite's existing
-  HTTP and JSON libraries; no additional runtime dependencies are bundled.
-
-## Design
-
-- RuneLite callbacks detect game events and never perform device I/O.
-- A dedicated service owns the Intiface connection and its worker thread.
-- The gateway requests Intiface protocol version 3 to preserve compatibility
-  with the previously tested implementation.
-- Connection failures are reported as state and never escape into RuneLite's event bus.
-- Swing components are only touched on Swing's event-dispatch thread.
 
 ## Privacy and networking
 
