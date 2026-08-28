@@ -1,0 +1,127 @@
+HapticScape Third-Party Notices
+==============================
+
+This file describes the third-party software included in the HapticScape
+Windows client built against RuneLite 1.12.37. The build also extracts every
+license, notice, copying, and copyright file embedded in the resolved runtime
+JARs before those JARs are combined. Those exact files and the resolved
+dependency inventory are placed in:
+
+    licenses/resolved-artifacts/
+
+The source repository for HapticScape is available at:
+
+    https://github.com/ashy0019/HapticScape
+
+RuneLite and RuneLite components -- BSD 2-Clause
+-------------------------------------------------
+
+Artifacts:
+
+    net.runelite:client:1.12.37
+    net.runelite:runelite-api:1.12.37
+    net.runelite:jshell:1.12.37
+    net.runelite:injected-client:1.12.37
+    net.runelite.arn:http-api:1.2.23
+    net.runelite:discord:1.4 (Java wrapper)
+    net.runelite:rlawt:1.8
+    net.runelite:rlicn:1.1
+
+The RuneLite license is supplied as RUNELITE-LICENSE.txt. The separate rlawt
+copyright and license notice is supplied as RLAWT-BSD-2.txt. RuneLite source is
+available at https://github.com/runelite/runelite and the HTTP API source is
+available at https://github.com/runelite/api.runelite.net.
+
+Apache License 2.0 components
+-----------------------------
+
+Artifacts:
+
+    com.squareup.okhttp3:okhttp:3.14.9
+    com.squareup.okio:okio:1.17.2
+    com.google.code.gson:gson:2.8.5
+    com.google.guava:guava:23.2-jre
+    com.google.inject:guice:4.1.0
+    javax.inject:javax.inject:1
+    net.runelite:flatlaf:3.2.5-rl4
+    net.runelite:flatlaf-extras:3.2.5-rl4
+    org.apache.commons:commons-text:1.2
+    org.apache.commons:commons-lang3:3.7
+    net.java.dev.jna:jna:5.9.0
+    net.java.dev.jna:jna-platform:5.9.0
+    com.google.code.findbugs:jsr305:3.0.2
+
+JNA is dual-licensed; this distribution uses the Apache License 2.0 option.
+The complete Apache License 2.0 is supplied as APACHE-2.0.txt. Applicable
+artifact-specific NOTICE files are preserved under resolved-artifacts.
+
+Logback -- Eclipse Public License 1.0
+-------------------------------------
+
+Artifacts:
+
+    ch.qos.logback:logback-classic:1.2.9
+    ch.qos.logback:logback-core:1.2.9
+
+Logback 1.2.9 is offered under either EPL 1.0 or LGPL 2.1. This distribution
+uses the EPL 1.0 option. Its original notice is supplied as
+LOGBACK-NOTICE.txt, and the complete EPL 1.0 is supplied as EPL-1.0.txt.
+The corresponding source is available at:
+
+    https://github.com/qos-ch/logback/tree/v_1.2.9
+
+MIT-licensed components
+-----------------------
+
+Artifacts:
+
+    org.slf4j:slf4j-api:1.7.25
+    net.sf.jopt-simple:jopt-simple:5.0.1
+    com.github.weisj:jsvg:1.2.0
+    Discord RPC native libraries included by net.runelite:discord:1.4
+
+The applicable notices are supplied as SLF4J-MIT.txt, JOPT-SIMPLE-MIT.txt,
+DISCORD-RPC-MIT.txt, and the JSVG license extracted under
+resolved-artifacts.
+
+BSD 3-Clause components
+-----------------------
+
+Artifacts:
+
+    com.google.protobuf:protobuf-javalite:3.21.12
+    org.lwjgl:lwjgl:3.3.2
+    org.lwjgl:lwjgl-opengl:3.3.2
+    org.lwjgl:lwjgl-opencl:3.3.2
+    com.fifesoft:rsyntaxtextarea:3.1.2
+    com.fifesoft:autocomplete:3.1.1
+
+The applicable notices are supplied as PROTOBUF-BSD-3.txt,
+LWJGL-BSD-3.txt, AUTOCOMPLETE-BSD-3.txt, and the RSyntaxTextArea license
+extracted under resolved-artifacts.
+
+JSON License component
+----------------------
+
+Artifact:
+
+    org.json:json:20090211
+
+The complete applicable license is supplied as JSON-LICENSE.txt.
+
+Public-domain component
+-----------------------
+
+Artifact:
+
+    aopalliance:aopalliance:1.0
+
+The project's public-domain declaration is supplied as
+AOPALLIANCE-PUBLIC-DOMAIN.txt.
+
+Build-only dependencies
+-----------------------
+
+Lombok, JUnit, and Hamcrest are used only while compiling or testing
+HapticScape. They are not included in the Windows client JAR. The packaging
+build verifies that JUnit, Hamcrest, and HapticScape test classes are absent.
