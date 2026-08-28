@@ -2,16 +2,19 @@ package com.ashy0019.hapticscape.device;
 
 import java.net.URI;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 public class DefaultIntifaceServiceTest
@@ -43,6 +46,55 @@ public class DefaultIntifaceServiceTest
 
 		assertEquals(0.65, gateway.vibrated.get(1, TimeUnit.SECONDS), 0.0001);
 		gateway.stopped.get(1, TimeUnit.SECONDS);
+	}
+
+	@Test
+	public void patternRunsEveryStepAndStops() throws Exception
+	{
+		connect();
+		service.playPattern(new HapticPattern(Arrays.asList(
+			new HapticPattern.Step(0.25, Duration.ofMillis(10)),
+			new HapticPattern.Step(0.0, Duration.ofMillis(10)),
+			new HapticPattern.Step(0.75, Duration.ofMillis(10))
+		)));
+
+		assertEquals(0.25, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+		assertEquals(0.0, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+		assertEquals(0.75, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+		gateway.stopped.get(1, TimeUnit.SECONDS);
+	}
+
+	@Test
+	public void newPatternReplacesRemainingSteps() throws Exception
+	{
+		connect();
+		service.playPattern(new HapticPattern(Arrays.asList(
+			new HapticPattern.Step(0.2, Duration.ofMillis(300)),
+			new HapticPattern.Step(0.4, Duration.ofMillis(10))
+		)));
+		assertEquals(0.2, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+
+		service.playPattern(HapticPattern.single(0.9, Duration.ofMillis(20)));
+
+		assertEquals(0.9, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+		gateway.stopped.get(1, TimeUnit.SECONDS);
+		assertNull(gateway.vibrationCommands.poll(350, TimeUnit.MILLISECONDS));
+	}
+
+	@Test
+	public void stopNowCancelsRemainingPatternSteps() throws Exception
+	{
+		connect();
+		service.playPattern(new HapticPattern(Arrays.asList(
+			new HapticPattern.Step(0.4, Duration.ofMillis(250)),
+			new HapticPattern.Step(0.8, Duration.ofMillis(10))
+		)));
+		assertEquals(0.4, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+
+		service.stopAll();
+
+		gateway.stopped.get(1, TimeUnit.SECONDS);
+		assertNull(gateway.vibrationCommands.poll(300, TimeUnit.MILLISECONDS));
 	}
 
 	@Test
@@ -194,6 +246,7 @@ public class DefaultIntifaceServiceTest
 		private final CompletableFuture<Void> disconnectStarted = new CompletableFuture<>();
 		private final CompletableFuture<Void> releaseDisconnect = new CompletableFuture<>();
 		private final CompletableFuture<Double> vibrated = new CompletableFuture<>();
+		private final LinkedBlockingQueue<Double> vibrationCommands = new LinkedBlockingQueue<>();
 		private final CompletableFuture<Void> stopped = new CompletableFuture<>();
 
 		private FakeGateway()
@@ -251,6 +304,7 @@ public class DefaultIntifaceServiceTest
 		public int vibrate(double intensity)
 		{
 			vibrated.complete(intensity);
+			vibrationCommands.offer(intensity);
 			return 1;
 		}
 

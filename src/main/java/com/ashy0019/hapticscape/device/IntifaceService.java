@@ -12,6 +12,8 @@ public interface IntifaceService extends AutoCloseable
 
 	void pulse(double intensity, Duration duration);
 
+	void playPattern(HapticPattern pattern);
+
 	void stopAll();
 
 	ConnectionSnapshot getSnapshot();
