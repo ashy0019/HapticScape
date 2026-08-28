@@ -56,9 +56,8 @@ public final class SkillFeedbackProfiles
 				int minimumXpGain = Integer.parseInt(fields[1].trim());
 				int intensityPercent = Integer.parseInt(fields[2].trim());
 				int durationMillis = Integer.parseInt(fields[3].trim());
-				HapticPatternPreset pattern = HapticPatternPreset.valueOf(
-					fields[4].trim().toUpperCase(Locale.ROOT)
-				);
+				HapticPatternSelection pattern = HapticPatternSelection.valueOf(
+					fields[4].trim().toUpperCase(Locale.ROOT));
 				parsed.put(
 					skill,
 					new XpFeedbackSettings(
@@ -139,7 +138,7 @@ public final class SkillFeedbackProfiles
 					+ "," + settings.getMinimumXpGain()
 					+ "," + settings.getIntensityPercent()
 					+ "," + settings.getDurationMillis()
-					+ "," + settings.getPatternPreset().name()
+					+ "," + settings.getPatternSelection().name()
 			);
 		}
 		return VERSION_PREFIX + entries;

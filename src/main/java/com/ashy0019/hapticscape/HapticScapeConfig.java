@@ -23,6 +23,7 @@ public interface HapticScapeConfig extends Config
 	String NOTIFICATION_PATTERN_PRESET_KEY = "notificationPatternPreset";
 	String NOTIFICATION_DURATION_MILLIS_KEY = "notificationDurationMillis";
 	String NOTIFICATION_RESPECT_FOCUS_KEY = "notificationRespectFocus";
+	String CUSTOM_PATTERNS_KEY = "customPatterns";
 
 	@ConfigItem(
 		keyName = "intifaceServer",
@@ -84,7 +85,7 @@ public interface HapticScapeConfig extends Config
 	)
 	default String patternPreset()
 	{
-		return HapticPatternPreset.SINGLE.name();
+		return HapticPatternSelection.SINGLE.name();
 	}
 
 	@ConfigItem(
@@ -120,7 +121,7 @@ public interface HapticScapeConfig extends Config
 	)
 	default String levelUpPatternPreset()
 	{
-		return HapticPatternPreset.DOUBLE.name();
+		return HapticPatternSelection.DOUBLE.name();
 	}
 
 	@ConfigItem(
@@ -181,7 +182,7 @@ public interface HapticScapeConfig extends Config
 	)
 	default String notificationPatternPreset()
 	{
-		return HapticPatternPreset.DOUBLE.name();
+		return HapticPatternSelection.DOUBLE.name();
 	}
 
 	@Range(min = 50, max = 10_000)
@@ -207,5 +208,17 @@ public interface HapticScapeConfig extends Config
 	default boolean notificationRespectFocus()
 	{
 		return true;
+	}
+
+	@ConfigItem(
+		keyName = CUSTOM_PATTERNS_KEY,
+		name = "Pattern Forge library",
+		description = "Named custom haptic patterns created in the Pattern Forge",
+		position = 15,
+		hidden = true
+	)
+	default String customPatterns()
+	{
+		return "";
 	}
 }

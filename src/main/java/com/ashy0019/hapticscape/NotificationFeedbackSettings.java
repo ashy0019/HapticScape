@@ -13,14 +13,14 @@ public final class NotificationFeedbackSettings
 	private final boolean respectRuneLiteFocus;
 	private final int intensityPercent;
 	private final int durationMillis;
-	private final HapticPatternPreset patternPreset;
+	private final HapticPatternSelection patternSelection;
 
 	public NotificationFeedbackSettings(
 		boolean enabled,
 		boolean respectRuneLiteFocus,
 		int intensityPercent,
 		int durationMillis,
-		HapticPatternPreset patternPreset)
+		HapticPatternSelection patternSelection)
 	{
 		this.enabled = enabled;
 		this.respectRuneLiteFocus = respectRuneLiteFocus;
@@ -36,7 +36,7 @@ public final class NotificationFeedbackSettings
 			MAXIMUM_DURATION_MILLIS,
 			"duration"
 		);
-		this.patternPreset = Objects.requireNonNull(patternPreset, "patternPreset");
+		this.patternSelection = Objects.requireNonNull(patternSelection, "patternSelection");
 	}
 
 	public boolean isEnabled()
@@ -59,9 +59,9 @@ public final class NotificationFeedbackSettings
 		return durationMillis;
 	}
 
-	public HapticPatternPreset getPatternPreset()
+	public HapticPatternSelection getPatternSelection()
 	{
-		return patternPreset;
+		return patternSelection;
 	}
 
 	public boolean shouldPlay(boolean runeLiteFocused, boolean notificationSendsWhenFocused)
