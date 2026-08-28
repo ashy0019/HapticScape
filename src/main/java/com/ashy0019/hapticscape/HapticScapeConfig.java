@@ -14,6 +14,9 @@ public interface HapticScapeConfig extends Config
 	String PULSE_DURATION_MILLIS_KEY = "pulseDurationMillis";
 	String PATTERN_PRESET_KEY = "patternPreset";
 	String DISABLED_SKILLS_KEY = "disabledSkills";
+	String LEVEL_UP_FEEDBACK_ENABLED_KEY = "levelUpFeedbackEnabled";
+	String LEVEL_UP_PATTERN_PRESET_KEY = "levelUpPatternPreset";
+	String MILESTONE_FEEDBACK_ENABLED_KEY = "milestoneFeedbackEnabled";
 
 	@ConfigItem(
 		keyName = "intifaceServer",
@@ -88,5 +91,41 @@ public interface HapticScapeConfig extends Config
 	default String disabledSkills()
 	{
 		return "";
+	}
+
+	@ConfigItem(
+		keyName = LEVEL_UP_FEEDBACK_ENABLED_KEY,
+		name = "Level-up feedback",
+		description = "Use distinct haptic feedback when a skill level increases",
+		position = 6,
+		hidden = true
+	)
+	default boolean levelUpFeedbackEnabled()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = LEVEL_UP_PATTERN_PRESET_KEY,
+		name = "Level-up pattern",
+		description = "Pattern used for ordinary skill level increases",
+		position = 7,
+		hidden = true
+	)
+	default String levelUpPatternPreset()
+	{
+		return HapticPatternPreset.DOUBLE.name();
+	}
+
+	@ConfigItem(
+		keyName = MILESTONE_FEEDBACK_ENABLED_KEY,
+		name = "Milestone feedback",
+		description = "Use special patterns for levels 10 through 90 and level 99",
+		position = 8,
+		hidden = true
+	)
+	default boolean milestoneFeedbackEnabled()
+	{
+		return true;
 	}
 }

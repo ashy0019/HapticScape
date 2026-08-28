@@ -39,19 +39,26 @@ public final class HapticScapePanel extends PluginPanel
 	private final JButton connectButton = new JButton("Connect");
 	private final JButton disconnectButton = new JButton("Disconnect");
 	private final JButton testButton = new JButton("Test pattern");
+	private final JButton testLevelUpButton = new JButton("Test level");
 	private final JButton stopButton = new JButton("Stop now");
+	private final JCheckBox levelUpFeedbackCheckBox = new JCheckBox("Level-ups");
+	private final JCheckBox milestoneFeedbackCheckBox = new JCheckBox("Milestones");
 	private final JLabel intensityValueLabel = new JLabel();
 	private final JLabel enabledSkillsValueLabel = new JLabel();
 	private final Map<Skill, JCheckBox> skillCheckBoxes = new EnumMap<>(Skill.class);
 	private final ConfigManager configManager;
 	private final JSlider intensitySlider;
 	private final JComboBox<HapticPatternPreset> patternPresetComboBox;
+	private final JComboBox<HapticPatternPreset> levelUpPatternPresetComboBox;
 	private final JSpinner minimumXpGainSpinner;
 	private final JSpinner pulseDurationSpinner;
 	private volatile int intensityPercent;
 	private volatile int minimumXpGain;
 	private volatile int pulseDurationMillis;
 	private volatile HapticPatternPreset patternPreset;
+	private volatile HapticPatternPreset levelUpPatternPreset;
+	private volatile boolean levelUpFeedbackEnabled;
+	private volatile boolean milestoneFeedbackEnabled;
 	private volatile SkillSelection skillSelection;
 	private boolean updatingSkillCheckBoxes;
 
@@ -61,6 +68,7 @@ public final class HapticScapePanel extends PluginPanel
 		Runnable connectAction,
 		Runnable disconnectAction,
 		Runnable testAction,
+		Runnable testLevelUpAction,
 		Runnable stopAction)
 	{
 		super(false);
@@ -74,12 +82,23 @@ public final class HapticScapePanel extends PluginPanel
 		minimumXpGain = clamp(config.minimumXpGain(), 1, MAXIMUM_XP_GAIN);
 		pulseDurationMillis = clamp(config.pulseDurationMillis(), 50, 10_000);
 		patternPreset = HapticPatternPreset.fromConfigValue(config.patternPreset());
+		levelUpPatternPreset = HapticPatternPreset.fromConfigValue(config.levelUpPatternPreset());
+		levelUpFeedbackEnabled = config.levelUpFeedbackEnabled();
+		milestoneFeedbackEnabled = config.milestoneFeedbackEnabled();
 		skillSelection = SkillSelection.fromConfigValue(config.disabledSkills());
 
 		intensitySlider = new JSlider(0, 100, intensityPercent);
 		patternPresetComboBox = new JComboBox<>(HapticPatternPreset.values());
 		patternPresetComboBox.setSelectedItem(patternPreset);
 		patternPresetComboBox.setToolTipText("Choose the pulse sequence used for XP feedback");
+		levelUpPatternPresetComboBox = new JComboBox<>(HapticPatternPreset.values());
+		levelUpPatternPresetComboBox.setSelectedItem(levelUpPatternPreset);
+		levelUpPatternPresetComboBox.setToolTipText("Choose the pattern used for ordinary level-ups");
+		levelUpFeedbackCheckBox.setSelected(levelUpFeedbackEnabled);
+		levelUpFeedbackCheckBox.setToolTipText("Replace ordinary XP feedback when a real skill level increases");
+		milestoneFeedbackCheckBox.setSelected(milestoneFeedbackEnabled);
+		milestoneFeedbackCheckBox.setToolTipText("Use Triple pulse for levels 10–90 and Ascending for level 99");
+		testLevelUpButton.setToolTipText("Preview the configured ordinary level-up pattern");
 		minimumXpGainSpinner = new JSpinner(new SpinnerNumberModel(
 			minimumXpGain,
 			1,
@@ -135,6 +154,37 @@ public final class HapticScapePanel extends PluginPanel
 				HapticScapeConfig.PATTERN_PRESET_KEY,
 				selected.name());
 		});
+		levelUpPatternPresetComboBox.addActionListener(event ->
+		{
+			HapticPatternPreset selected =
+				(HapticPatternPreset) levelUpPatternPresetComboBox.getSelectedItem();
+			if (selected == null)
+			{
+				return;
+			}
+
+			levelUpPatternPreset = selected;
+			configManager.setConfiguration(
+				HapticScapeConfig.GROUP,
+				HapticScapeConfig.LEVEL_UP_PATTERN_PRESET_KEY,
+				selected.name());
+		});
+		levelUpFeedbackCheckBox.addActionListener(event ->
+		{
+			levelUpFeedbackEnabled = levelUpFeedbackCheckBox.isSelected();
+			configManager.setConfiguration(
+				HapticScapeConfig.GROUP,
+				HapticScapeConfig.LEVEL_UP_FEEDBACK_ENABLED_KEY,
+				levelUpFeedbackEnabled);
+		});
+		milestoneFeedbackCheckBox.addActionListener(event ->
+		{
+			milestoneFeedbackEnabled = milestoneFeedbackCheckBox.isSelected();
+			configManager.setConfiguration(
+				HapticScapeConfig.GROUP,
+				HapticScapeConfig.MILESTONE_FEEDBACK_ENABLED_KEY,
+				milestoneFeedbackEnabled);
+		});
 
 		JPanel settingsPanel = new JPanel();
 		settingsPanel.setLayout(new BoxLayout(settingsPanel, BoxLayout.Y_AXIS));
@@ -160,6 +210,16 @@ public final class HapticScapePanel extends PluginPanel
 		durationRow.add(new JLabel("Pattern duration (ms)"), BorderLayout.CENTER);
 		durationRow.add(pulseDurationSpinner, BorderLayout.EAST);
 		settingsPanel.add(durationRow);
+
+		JPanel levelUpRow = new JPanel(new BorderLayout(8, 0));
+		levelUpRow.add(levelUpFeedbackCheckBox, BorderLayout.CENTER);
+		levelUpRow.add(levelUpPatternPresetComboBox, BorderLayout.EAST);
+		settingsPanel.add(levelUpRow);
+
+		JPanel milestoneRow = new JPanel(new BorderLayout(8, 0));
+		milestoneRow.add(milestoneFeedbackCheckBox, BorderLayout.CENTER);
+		milestoneRow.add(testLevelUpButton, BorderLayout.EAST);
+		settingsPanel.add(milestoneRow);
 
 		JPanel skillsPanel = new JPanel(new BorderLayout(0, 4));
 		skillsPanel.setBorder(BorderFactory.createTitledBorder("XP skills"));
@@ -214,6 +274,7 @@ public final class HapticScapePanel extends PluginPanel
 		});
 		disconnectButton.addActionListener(event -> disconnectAction.run());
 		testButton.addActionListener(event -> testAction.run());
+		testLevelUpButton.addActionListener(event -> testLevelUpAction.run());
 		stopButton.addActionListener(event -> stopAction.run());
 
 		JPanel buttons = new JPanel(new GridLayout(2, 2, 6, 6));
@@ -244,6 +305,21 @@ public final class HapticScapePanel extends PluginPanel
 	public HapticPatternPreset getPatternPreset()
 	{
 		return patternPreset;
+	}
+
+	public HapticPatternPreset getLevelUpPatternPreset()
+	{
+		return levelUpPatternPreset;
+	}
+
+	public boolean isLevelUpFeedbackEnabled()
+	{
+		return levelUpFeedbackEnabled;
+	}
+
+	public boolean isMilestoneFeedbackEnabled()
+	{
+		return milestoneFeedbackEnabled;
 	}
 
 	public boolean isSkillEnabled(Skill skill)
@@ -345,6 +421,7 @@ public final class HapticScapePanel extends PluginPanel
 		connectButton.setEnabled(state == ConnectionState.DISCONNECTED);
 		disconnectButton.setEnabled(state == ConnectionState.CONNECTING || connected);
 		testButton.setEnabled(connected);
+		testLevelUpButton.setEnabled(connected);
 		stopButton.setEnabled(connected);
 	}
 }

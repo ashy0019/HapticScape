@@ -69,6 +69,7 @@ public class HapticScapePlugin extends Plugin
 			this::connectToIntiface,
 			intifaceService::disconnect,
 			this::sendTestPattern,
+			this::sendTestLevelUpPattern,
 			intifaceService::stopAll
 		);
 		intifaceService.setConnectionListener(panel::updateConnection);
@@ -131,14 +132,20 @@ public class HapticScapePlugin extends Plugin
 			return;
 		}
 
-		int gainedXp = xpTracker.update(event.getSkill(), event.getXp());
+		XpChange change = xpTracker.update(event.getSkill(), event.getXp());
 		HapticScapePanel currentPanel = panel;
-		if (currentPanel != null
-			&& currentPanel.isSkillEnabled(event.getSkill())
-			&& gainedXp >= currentPanel.getMinimumXpGain())
+		if (currentPanel == null || !currentPanel.isSkillEnabled(change.getSkill()))
 		{
-			onQualifiedXpGain(event.getSkill(), gainedXp);
+			return;
 		}
+
+		XpFeedbackTrigger trigger = XpFeedbackTrigger.classify(
+			change,
+			currentPanel.getMinimumXpGain(),
+			currentPanel.isLevelUpFeedbackEnabled(),
+			currentPanel.isMilestoneFeedbackEnabled()
+		);
+		handleFeedbackTrigger(change, trigger, currentPanel);
 	}
 
 	private void seedCurrentXp()
@@ -149,10 +156,40 @@ public class HapticScapePlugin extends Plugin
 		}
 	}
 
-	private void onQualifiedXpGain(Skill skill, int gainedXp)
+	private void handleFeedbackTrigger(
+		XpChange change,
+		XpFeedbackTrigger trigger,
+		HapticScapePanel currentPanel)
 	{
-		log.debug("Qualified XP gain: {} XP in {}", gainedXp, skill);
-		sendConfiguredPattern();
+		HapticPatternPreset preset;
+		switch (trigger)
+		{
+			case XP_GAIN:
+				preset = currentPanel.getPatternPreset();
+				break;
+			case LEVEL_UP:
+				preset = currentPanel.getLevelUpPatternPreset();
+				break;
+			case MILESTONE:
+				preset = HapticPatternPreset.TRIPLE;
+				break;
+			case LEVEL_99:
+				preset = HapticPatternPreset.ASCENDING;
+				break;
+			case NONE:
+			default:
+				return;
+		}
+
+		log.debug(
+			"{} feedback for {}: {} XP, level {} -> {}",
+			trigger,
+			change.getSkill(),
+			change.getGainedXp(),
+			change.getPreviousLevel(),
+			change.getCurrentLevel()
+		);
+		sendConfiguredPattern(preset, trigger.name());
 	}
 
 	private void connectToIntiface()
@@ -178,10 +215,24 @@ public class HapticScapePlugin extends Plugin
 	private void sendTestPattern()
 	{
 		log.debug("Sending test haptic pattern");
-		sendConfiguredPattern();
+		HapticScapePanel currentPanel = panel;
+		if (currentPanel != null)
+		{
+			sendConfiguredPattern(currentPanel.getPatternPreset(), "TEST_XP");
+		}
 	}
 
-	private void sendConfiguredPattern()
+	private void sendTestLevelUpPattern()
+	{
+		log.debug("Sending test level-up pattern");
+		HapticScapePanel currentPanel = panel;
+		if (currentPanel != null)
+		{
+			sendConfiguredPattern(currentPanel.getLevelUpPatternPreset(), "TEST_LEVEL_UP");
+		}
+	}
+
+	private void sendConfiguredPattern(HapticPatternPreset preset, String triggerName)
 	{
 		HapticScapePanel currentPanel = panel;
 		if (intifaceService == null || currentPanel == null)
@@ -191,10 +242,10 @@ public class HapticScapePlugin extends Plugin
 
 		int intensityPercent = currentPanel.getIntensityPercent();
 		int durationMillis = currentPanel.getPulseDurationMillis();
-		HapticPatternPreset preset = currentPanel.getPatternPreset();
 		log.debug(
-			"Requesting {} pattern at {}% for {} ms",
+			"Requesting {} pattern for {} at {}% for {} ms",
 			preset,
+			triggerName,
 			intensityPercent,
 			durationMillis
 		);
