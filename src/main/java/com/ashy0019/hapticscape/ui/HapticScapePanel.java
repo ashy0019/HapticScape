@@ -20,6 +20,7 @@ import java.util.EnumMap;
 import java.util.Map;
 import java.util.function.Consumer;
 import javax.swing.BorderFactory;
+import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.DefaultListCellRenderer;
@@ -27,6 +28,7 @@ import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
@@ -43,6 +45,10 @@ import net.runelite.client.ui.PluginPanel;
 
 public final class HapticScapePanel extends PluginPanel
 {
+	private static final int NUMERIC_CONTROL_WIDTH = 96;
+	private static final int SELECTOR_CONTROL_WIDTH = 108;
+	private static final String DURATION_LABEL = "Duration (ms)";
+
 	private final JLabel statusLabel = new JLabel("Disconnected", SwingConstants.CENTER);
 	private final DefaultListModel<DeviceInfo> deviceModel = new DefaultListModel<>();
 	private final JButton connectButton = new JButton("Connect");
@@ -55,9 +61,9 @@ public final class HapticScapePanel extends PluginPanel
 	private final JCheckBox levelUpFeedbackCheckBox = new JCheckBox("Level-ups");
 	private final JCheckBox milestoneFeedbackCheckBox = new JCheckBox("Milestones");
 	private final JCheckBox notificationFeedbackCheckBox =
-		new JCheckBox("RuneLite notification haptics");
+		new JCheckBox("RuneLite notifications");
 	private final JCheckBox notificationRespectFocusCheckBox =
-		new JCheckBox("Respect RuneLite focus behavior");
+		new JCheckBox("Respect RuneLite focus");
 	private final JLabel intensityValueLabel = new JLabel();
 	private final JLabel skillProfileIntensityValueLabel = new JLabel();
 	private final JLabel notificationIntensityValueLabel = new JLabel();
@@ -187,11 +193,13 @@ public final class HapticScapePanel extends PluginPanel
 			XpFeedbackSettings.MINIMUM_XP_GAIN,
 			XpFeedbackSettings.MAXIMUM_XP_GAIN,
 			1));
+		setFixedWidth(minimumXpGainSpinner, NUMERIC_CONTROL_WIDTH);
 		pulseDurationSpinner = new JSpinner(new SpinnerNumberModel(
 			pulseDurationMillis,
 			XpFeedbackSettings.MINIMUM_DURATION_MILLIS,
 			XpFeedbackSettings.MAXIMUM_DURATION_MILLIS,
 			50));
+		setFixedWidth(pulseDurationSpinner, NUMERIC_CONTROL_WIDTH);
 		pulseDurationSpinner.setToolTipText("Total time shared by all pulses and gaps in the pattern");
 
 		Skill[] selectableSkills = SkillSelection.getSelectableSkills().toArray(new Skill[0]);
@@ -217,6 +225,7 @@ public final class HapticScapePanel extends PluginPanel
 				return this;
 			}
 		});
+		setFixedWidth(skillProfileSkillComboBox, SELECTOR_CONTROL_WIDTH);
 		selectedProfileSkill = selectableSkills[0];
 		skillProfilePatternPresetComboBox = createPatternComboBox();
 		skillProfileMinimumXpGainSpinner = new JSpinner(new SpinnerNumberModel(
@@ -224,6 +233,7 @@ public final class HapticScapePanel extends PluginPanel
 			XpFeedbackSettings.MINIMUM_XP_GAIN,
 			XpFeedbackSettings.MAXIMUM_XP_GAIN,
 			1));
+		setFixedWidth(skillProfileMinimumXpGainSpinner, NUMERIC_CONTROL_WIDTH);
 		skillProfileIntensitySlider = new JSlider(
 			XpFeedbackSettings.MINIMUM_INTENSITY_PERCENT,
 			XpFeedbackSettings.MAXIMUM_INTENSITY_PERCENT,
@@ -234,6 +244,7 @@ public final class HapticScapePanel extends PluginPanel
 			XpFeedbackSettings.MINIMUM_DURATION_MILLIS,
 			XpFeedbackSettings.MAXIMUM_DURATION_MILLIS,
 			50));
+		setFixedWidth(skillProfileDurationSpinner, NUMERIC_CONTROL_WIDTH);
 		skillProfileIntensityValueLabel.setText(intensityPercent + "%");
 
 		notificationFeedbackCheckBox.setSelected(notificationFeedbackEnabled);
@@ -257,6 +268,7 @@ public final class HapticScapePanel extends PluginPanel
 			NotificationFeedbackSettings.MINIMUM_DURATION_MILLIS,
 			NotificationFeedbackSettings.MAXIMUM_DURATION_MILLIS,
 			50));
+		setFixedWidth(notificationDurationSpinner, NUMERIC_CONTROL_WIDTH);
 		testNotificationButton.setToolTipText("Preview the configured notification pattern");
 
 		intensityValueLabel.setText(intensitySlider.getValue() + "%");
@@ -480,37 +492,37 @@ public final class HapticScapePanel extends PluginPanel
 		JPanel thresholdRow = new JPanel(new BorderLayout(8, 0));
 		thresholdRow.add(new JLabel("Minimum XP gain"), BorderLayout.CENTER);
 		thresholdRow.add(minimumXpGainSpinner, BorderLayout.EAST);
-		settingsPanel.add(thresholdRow);
+		addVerticalComponent(settingsPanel, thresholdRow);
 
 		JPanel intensityHeader = new JPanel(new BorderLayout());
 		intensityHeader.add(new JLabel("Intensity"), BorderLayout.WEST);
 		intensityHeader.add(intensityValueLabel, BorderLayout.EAST);
-		settingsPanel.add(intensityHeader);
-		settingsPanel.add(intensitySlider);
+		addVerticalComponent(settingsPanel, intensityHeader);
+		addVerticalComponent(settingsPanel, intensitySlider);
 
 		JPanel patternRow = new JPanel(new BorderLayout(8, 0));
 		patternRow.add(new JLabel("Pattern"), BorderLayout.CENTER);
 		patternRow.add(patternPresetComboBox, BorderLayout.EAST);
-		settingsPanel.add(patternRow);
+		addVerticalComponent(settingsPanel, patternRow);
 
 		JPanel durationRow = new JPanel(new BorderLayout(8, 0));
-		durationRow.add(new JLabel("Pattern duration (ms)"), BorderLayout.CENTER);
+		durationRow.add(new JLabel(DURATION_LABEL), BorderLayout.CENTER);
 		durationRow.add(pulseDurationSpinner, BorderLayout.EAST);
-		settingsPanel.add(durationRow);
+		addVerticalComponent(settingsPanel, durationRow);
 
 		JPanel levelUpRow = new JPanel(new BorderLayout(8, 0));
 		levelUpRow.add(levelUpFeedbackCheckBox, BorderLayout.CENTER);
 		levelUpRow.add(levelUpPatternPresetComboBox, BorderLayout.EAST);
-		settingsPanel.add(levelUpRow);
+		addVerticalComponent(settingsPanel, levelUpRow);
 
 		JPanel levelUpTestRow = new JPanel(new BorderLayout());
 		levelUpTestRow.add(testLevelUpButton, BorderLayout.EAST);
-		settingsPanel.add(levelUpTestRow);
+		addVerticalComponent(settingsPanel, levelUpTestRow);
 
 		JPanel milestoneRow = new JPanel(new BorderLayout(8, 0));
 		milestoneRow.add(milestoneFeedbackCheckBox, BorderLayout.CENTER);
 		milestoneRow.add(milestonePatternPresetComboBox, BorderLayout.EAST);
-		settingsPanel.add(milestoneRow);
+		addVerticalComponent(settingsPanel, milestoneRow);
 
 		JPanel enabledSkillsPanel = new JPanel(new BorderLayout(0, 4));
 		enabledSkillsPanel.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
@@ -551,59 +563,61 @@ public final class HapticScapePanel extends PluginPanel
 		JPanel profileSkillRow = new JPanel(new BorderLayout(8, 0));
 		profileSkillRow.add(new JLabel("Skill"), BorderLayout.CENTER);
 		profileSkillRow.add(skillProfileSkillComboBox, BorderLayout.EAST);
-		skillProfilePanel.add(profileSkillRow);
-		skillProfilePanel.add(useGlobalSkillSettingsCheckBox);
+		addVerticalComponent(skillProfilePanel, profileSkillRow);
+		addVerticalComponent(skillProfilePanel, useGlobalSkillSettingsCheckBox);
+		skillProfilePanel.add(Box.createVerticalStrut(6));
 
 		JPanel profileThresholdRow = new JPanel(new BorderLayout(8, 0));
 		profileThresholdRow.add(new JLabel("Minimum XP gain"), BorderLayout.CENTER);
 		profileThresholdRow.add(skillProfileMinimumXpGainSpinner, BorderLayout.EAST);
-		skillProfilePanel.add(profileThresholdRow);
+		addVerticalComponent(skillProfilePanel, profileThresholdRow);
 
 		JPanel profileIntensityHeader = new JPanel(new BorderLayout());
 		profileIntensityHeader.add(new JLabel("Intensity"), BorderLayout.WEST);
 		profileIntensityHeader.add(skillProfileIntensityValueLabel, BorderLayout.EAST);
-		skillProfilePanel.add(profileIntensityHeader);
-		skillProfilePanel.add(skillProfileIntensitySlider);
+		addVerticalComponent(skillProfilePanel, profileIntensityHeader);
+		addVerticalComponent(skillProfilePanel, skillProfileIntensitySlider);
 
 		JPanel profilePatternRow = new JPanel(new BorderLayout(8, 0));
 		profilePatternRow.add(new JLabel("Pattern"), BorderLayout.CENTER);
 		profilePatternRow.add(skillProfilePatternPresetComboBox, BorderLayout.EAST);
-		skillProfilePanel.add(profilePatternRow);
+		addVerticalComponent(skillProfilePanel, profilePatternRow);
 
 		JPanel profileDurationRow = new JPanel(new BorderLayout(8, 0));
-		profileDurationRow.add(new JLabel("Pattern duration (ms)"), BorderLayout.CENTER);
+		profileDurationRow.add(new JLabel(DURATION_LABEL), BorderLayout.CENTER);
 		profileDurationRow.add(skillProfileDurationSpinner, BorderLayout.EAST);
-		skillProfilePanel.add(profileDurationRow);
+		addVerticalComponent(skillProfilePanel, profileDurationRow);
 
 		JPanel profileTestRow = new JPanel(new BorderLayout());
 		profileTestRow.add(testSkillProfileButton, BorderLayout.EAST);
-		skillProfilePanel.add(profileTestRow);
+		addVerticalComponent(skillProfilePanel, profileTestRow);
 
 		JPanel notificationPanel = new JPanel();
 		notificationPanel.setLayout(new BoxLayout(notificationPanel, BoxLayout.Y_AXIS));
 		notificationPanel.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
-		notificationPanel.add(notificationFeedbackCheckBox);
-		notificationPanel.add(notificationRespectFocusCheckBox);
+		addVerticalComponent(notificationPanel, notificationFeedbackCheckBox);
+		addVerticalComponent(notificationPanel, notificationRespectFocusCheckBox);
+		notificationPanel.add(Box.createVerticalStrut(6));
 
 		JPanel notificationIntensityHeader = new JPanel(new BorderLayout());
 		notificationIntensityHeader.add(new JLabel("Intensity"), BorderLayout.WEST);
 		notificationIntensityHeader.add(notificationIntensityValueLabel, BorderLayout.EAST);
-		notificationPanel.add(notificationIntensityHeader);
-		notificationPanel.add(notificationIntensitySlider);
+		addVerticalComponent(notificationPanel, notificationIntensityHeader);
+		addVerticalComponent(notificationPanel, notificationIntensitySlider);
 
 		JPanel notificationPatternRow = new JPanel(new BorderLayout(8, 0));
 		notificationPatternRow.add(new JLabel("Pattern"), BorderLayout.CENTER);
 		notificationPatternRow.add(notificationPatternPresetComboBox, BorderLayout.EAST);
-		notificationPanel.add(notificationPatternRow);
+		addVerticalComponent(notificationPanel, notificationPatternRow);
 
 		JPanel notificationDurationRow = new JPanel(new BorderLayout(8, 0));
-		notificationDurationRow.add(new JLabel("Pattern duration (ms)"), BorderLayout.CENTER);
+		notificationDurationRow.add(new JLabel(DURATION_LABEL), BorderLayout.CENTER);
 		notificationDurationRow.add(notificationDurationSpinner, BorderLayout.EAST);
-		notificationPanel.add(notificationDurationRow);
+		addVerticalComponent(notificationPanel, notificationDurationRow);
 
 		JPanel notificationTestRow = new JPanel(new BorderLayout());
 		notificationTestRow.add(testNotificationButton, BorderLayout.EAST);
-		notificationPanel.add(notificationTestRow);
+		addVerticalComponent(notificationPanel, notificationTestRow);
 
 		JTabbedPane feedbackTabs = new JTabbedPane(
 			JTabbedPane.TOP,
@@ -628,9 +642,9 @@ public final class HapticScapePanel extends PluginPanel
 
 		JPanel topPanel = new JPanel();
 		topPanel.setLayout(new BoxLayout(topPanel, BoxLayout.Y_AXIS));
-		topPanel.add(statusLabel);
-		topPanel.add(settingsPanel);
-		topPanel.add(feedbackTabs);
+		addVerticalComponent(topPanel, statusLabel);
+		addVerticalComponent(topPanel, settingsPanel);
+		addVerticalComponent(topPanel, feedbackTabs);
 		add(topPanel, BorderLayout.NORTH);
 
 		JList<DeviceInfo> deviceList = new JList<>(deviceModel);
@@ -870,11 +884,11 @@ public final class HapticScapePanel extends PluginPanel
 
 	private void updateEnabledSkillsLabel()
 	{
-		enabledSkillsValueLabel.setText(
-			skillSelection.getEnabledCount()
-				+ "/"
-				+ SkillSelection.getSelectableSkills().size()
-				+ " enabled"
+		int enabledCount = skillSelection.getEnabledCount();
+		int skillCount = SkillSelection.getSelectableSkills().size();
+		enabledSkillsValueLabel.setText(enabledCount + "/" + skillCount);
+		enabledSkillsValueLabel.setToolTipText(
+			enabledCount + " of " + skillCount + " skills enabled"
 		);
 	}
 
@@ -907,7 +921,25 @@ public final class HapticScapePanel extends PluginPanel
 				return this;
 			}
 		});
+		setFixedWidth(comboBox, SELECTOR_CONTROL_WIDTH);
 		return comboBox;
+	}
+
+	private static void setFixedWidth(JComponent component, int width)
+	{
+		Dimension preferredSize = component.getPreferredSize();
+		Dimension fixedSize = new Dimension(width, preferredSize.height);
+		component.setPreferredSize(fixedSize);
+		component.setMinimumSize(fixedSize);
+		component.setMaximumSize(fixedSize);
+	}
+
+	private static void addVerticalComponent(JPanel panel, JComponent component)
+	{
+		Dimension preferredSize = component.getPreferredSize();
+		component.setAlignmentX(Component.LEFT_ALIGNMENT);
+		component.setMaximumSize(new Dimension(Integer.MAX_VALUE, preferredSize.height));
+		panel.add(component);
 	}
 
 	private static void addCompactTab(JTabbedPane tabs, String title, Component component)
