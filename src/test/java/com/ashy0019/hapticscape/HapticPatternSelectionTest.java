@@ -18,11 +18,21 @@ public class HapticPatternSelectionTest
 	}
 
 	@Test
+	public void fixedCustomSelectionNamesMigrateToStableIds()
+	{
+		assertEquals(
+			HapticPatternSelection.custom(2),
+			HapticPatternSelection.fromConfigValue("CUSTOM_II")
+		);
+	}
+
+	@Test
 	public void customSelectionsResolveCurrentSavedCurve()
 	{
 		CustomPatternLibrary library = CustomPatternLibrary.defaults()
-			.withPattern(CustomPatternSlot.II, new CustomPattern(100, 0));
-		HapticPattern pattern = HapticPatternSelection.CUSTOM_II.createPattern(
+			.addBlankPattern()
+			.withPattern(2, new CustomPattern(100, 0));
+		HapticPattern pattern = HapticPatternSelection.custom(2).createPattern(
 			library,
 			0.5,
 			Duration.ofMillis(100)
@@ -33,14 +43,25 @@ public class HapticPatternSelectionTest
 	}
 
 	@Test
-	public void renamedSlotsAppearInPatternSelectors()
+	public void renamedPatternsAppearInPatternSelectors()
 	{
 		CustomPatternLibrary library = CustomPatternLibrary.defaults()
-			.withName(CustomPatternSlot.III, "Goblin drum");
+			.withName(1, "Goblin drum");
 
 		assertEquals(
 			"Goblin drum",
-			HapticPatternSelection.CUSTOM_III.getDisplayName(library)
+			HapticPatternSelection.custom(1).getDisplayName(library)
+		);
+	}
+
+	@Test
+	public void deletedCustomSelectionFallsBackToSinglePulse()
+	{
+		CustomPatternLibrary library = CustomPatternLibrary.defaults();
+
+		assertEquals(
+			HapticPatternSelection.SINGLE,
+			HapticPatternSelection.custom(99).resolveAgainst(library)
 		);
 	}
 }

@@ -56,8 +56,8 @@ public final class SkillFeedbackProfiles
 				int minimumXpGain = Integer.parseInt(fields[1].trim());
 				int intensityPercent = Integer.parseInt(fields[2].trim());
 				int durationMillis = Integer.parseInt(fields[3].trim());
-				HapticPatternSelection pattern = HapticPatternSelection.valueOf(
-					fields[4].trim().toUpperCase(Locale.ROOT));
+				HapticPatternSelection pattern =
+					HapticPatternSelection.fromConfigValue(fields[4]);
 				parsed.put(
 					skill,
 					new XpFeedbackSettings(
@@ -117,6 +117,31 @@ public final class SkillFeedbackProfiles
 		return overrides.isEmpty();
 	}
 
+	public SkillFeedbackProfiles replaceMissingCustomPatterns(
+		CustomPatternLibrary customPatterns)
+	{
+		EnumMap<Skill, XpFeedbackSettings> updated = new EnumMap<>(Skill.class);
+		boolean changed = false;
+		for (Map.Entry<Skill, XpFeedbackSettings> entry : overrides.entrySet())
+		{
+			XpFeedbackSettings settings = entry.getValue();
+			HapticPatternSelection resolved = settings.getPatternSelection()
+				.resolveAgainst(customPatterns);
+			if (!resolved.equals(settings.getPatternSelection()))
+			{
+				settings = new XpFeedbackSettings(
+					settings.getMinimumXpGain(),
+					settings.getIntensityPercent(),
+					settings.getDurationMillis(),
+					resolved
+				);
+				changed = true;
+			}
+			updated.put(entry.getKey(), settings);
+		}
+		return changed ? new SkillFeedbackProfiles(updated) : this;
+	}
+
 	public String toConfigValue()
 	{
 		if (overrides.isEmpty())
@@ -138,7 +163,7 @@ public final class SkillFeedbackProfiles
 					+ "," + settings.getMinimumXpGain()
 					+ "," + settings.getIntensityPercent()
 					+ "," + settings.getDurationMillis()
-					+ "," + settings.getPatternSelection().name()
+					+ "," + settings.getPatternSelection().toConfigValue()
 			);
 		}
 		return VERSION_PREFIX + entries;

@@ -17,6 +17,7 @@ public interface HapticScapeConfig extends Config
 	String LEVEL_UP_FEEDBACK_ENABLED_KEY = "levelUpFeedbackEnabled";
 	String LEVEL_UP_PATTERN_PRESET_KEY = "levelUpPatternPreset";
 	String MILESTONE_FEEDBACK_ENABLED_KEY = "milestoneFeedbackEnabled";
+	String MILESTONE_PATTERN_PRESET_KEY = "milestonePatternPreset";
 	String SKILL_FEEDBACK_PROFILES_KEY = "skillFeedbackProfiles";
 	String NOTIFICATION_FEEDBACK_ENABLED_KEY = "notificationFeedbackEnabled";
 	String NOTIFICATION_INTENSITY_PERCENT_KEY = "notificationIntensityPercent";
@@ -85,7 +86,7 @@ public interface HapticScapeConfig extends Config
 	)
 	default String patternPreset()
 	{
-		return HapticPatternSelection.SINGLE.name();
+		return HapticPatternSelection.SINGLE.toConfigValue();
 	}
 
 	@ConfigItem(
@@ -121,7 +122,7 @@ public interface HapticScapeConfig extends Config
 	)
 	default String levelUpPatternPreset()
 	{
-		return HapticPatternSelection.DOUBLE.name();
+		return HapticPatternSelection.DOUBLE.toConfigValue();
 	}
 
 	@ConfigItem(
@@ -137,10 +138,22 @@ public interface HapticScapeConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = MILESTONE_PATTERN_PRESET_KEY,
+		name = "Milestone pattern",
+		description = "Pattern used for skill levels 10 through 90",
+		position = 9,
+		hidden = true
+	)
+	default String milestonePatternPreset()
+	{
+		return HapticPatternSelection.TRIPLE.toConfigValue();
+	}
+
+	@ConfigItem(
 		keyName = SKILL_FEEDBACK_PROFILES_KEY,
 		name = "Skill XP profiles",
 		description = "Per-skill XP feedback overrides",
-		position = 9,
+		position = 10,
 		hidden = true
 	)
 	default String skillFeedbackProfiles()
@@ -152,7 +165,7 @@ public interface HapticScapeConfig extends Config
 		keyName = NOTIFICATION_FEEDBACK_ENABLED_KEY,
 		name = "RuneLite notifications",
 		description = "Trigger haptic feedback for RuneLite notifications",
-		position = 10,
+		position = 11,
 		hidden = true
 	)
 	default boolean notificationFeedbackEnabled()
@@ -165,7 +178,7 @@ public interface HapticScapeConfig extends Config
 		keyName = NOTIFICATION_INTENSITY_PERCENT_KEY,
 		name = "Notification intensity",
 		description = "Device intensity used for RuneLite notification feedback",
-		position = 11,
+		position = 12,
 		hidden = true
 	)
 	default int notificationIntensityPercent()
@@ -177,12 +190,12 @@ public interface HapticScapeConfig extends Config
 		keyName = NOTIFICATION_PATTERN_PRESET_KEY,
 		name = "Notification pattern",
 		description = "Pattern used for RuneLite notification feedback",
-		position = 12,
+		position = 13,
 		hidden = true
 	)
 	default String notificationPatternPreset()
 	{
-		return HapticPatternSelection.DOUBLE.name();
+		return HapticPatternSelection.DOUBLE.toConfigValue();
 	}
 
 	@Range(min = 50, max = 10_000)
@@ -190,7 +203,7 @@ public interface HapticScapeConfig extends Config
 		keyName = NOTIFICATION_DURATION_MILLIS_KEY,
 		name = "Notification duration",
 		description = "Total duration of a RuneLite notification pattern in milliseconds",
-		position = 13,
+		position = 14,
 		hidden = true
 	)
 	default int notificationDurationMillis()
@@ -202,7 +215,7 @@ public interface HapticScapeConfig extends Config
 		keyName = NOTIFICATION_RESPECT_FOCUS_KEY,
 		name = "Respect notification focus",
 		description = "Suppress haptics while focused when RuneLite suppresses the notification",
-		position = 14,
+		position = 15,
 		hidden = true
 	)
 	default boolean notificationRespectFocus()
@@ -214,7 +227,7 @@ public interface HapticScapeConfig extends Config
 		keyName = CUSTOM_PATTERNS_KEY,
 		name = "Pattern Forge library",
 		description = "Named custom haptic patterns created in the Pattern Forge",
-		position = 15,
+		position = 16,
 		hidden = true
 	)
 	default String customPatterns()

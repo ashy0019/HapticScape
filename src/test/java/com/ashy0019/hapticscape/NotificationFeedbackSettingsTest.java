@@ -56,14 +56,14 @@ public class NotificationFeedbackSettingsTest
 			true,
 			47,
 			650,
-			HapticPatternSelection.CUSTOM_III
+			HapticPatternSelection.custom(3)
 		);
 
 		assertTrue(settings.isEnabled());
 		assertTrue(settings.isRespectRuneLiteFocus());
 		assertEquals(47, settings.getIntensityPercent());
 		assertEquals(650, settings.getDurationMillis());
-		assertEquals(HapticPatternSelection.CUSTOM_III, settings.getPatternSelection());
+		assertEquals(HapticPatternSelection.custom(3), settings.getPatternSelection());
 	}
 
 	@Test(expected = IllegalArgumentException.class)

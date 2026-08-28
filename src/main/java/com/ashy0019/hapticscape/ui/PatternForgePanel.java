@@ -1,8 +1,8 @@
 package com.ashy0019.hapticscape.ui;
 
 import com.ashy0019.hapticscape.CustomPattern;
+import com.ashy0019.hapticscape.CustomPatternEntry;
 import com.ashy0019.hapticscape.CustomPatternLibrary;
-import com.ashy0019.hapticscape.CustomPatternSlot;
 import com.ashy0019.hapticscape.HapticScapeConfig;
 import java.awt.BasicStroke;
 import java.awt.BorderLayout;
@@ -24,6 +24,7 @@ import java.util.function.Consumer;
 import java.util.function.IntSupplier;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
+import javax.swing.DefaultComboBoxModel;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
@@ -43,9 +44,10 @@ final class PatternForgePanel extends JPanel
 	private final IntSupplier previewDurationMillis;
 	private final Consumer<CustomPattern> previewAction;
 	private final Consumer<CustomPatternLibrary> libraryChangeAction;
-	private final JComboBox<CustomPatternSlot> slotComboBox =
-		new JComboBox<>(CustomPatternSlot.values());
+	private final JComboBox<CustomPatternEntry> patternComboBox = new JComboBox<>();
+	private final JButton addButton = new JButton("Add");
 	private final JButton renameButton = new JButton("Rename");
+	private final JButton deleteButton = new JButton("Delete");
 	private final PatternCanvas canvas = new PatternCanvas();
 	private final JButton undoButton = new JButton("Undo");
 	private final JButton clearButton = new JButton("Clear");
@@ -55,7 +57,7 @@ final class PatternForgePanel extends JPanel
 	private final Deque<CustomPattern> undoStates = new ArrayDeque<>();
 
 	private CustomPatternLibrary library;
-	private CustomPatternSlot selectedSlot = CustomPatternSlot.I;
+	private int selectedPatternId = -1;
 	private CustomPattern draft;
 	private boolean loadingControls;
 	private boolean dirty;
@@ -84,7 +86,7 @@ final class PatternForgePanel extends JPanel
 		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
 		setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
 
-		slotComboBox.setRenderer(new DefaultListCellRenderer()
+		patternComboBox.setRenderer(new DefaultListCellRenderer()
 		{
 			@Override
 			public Component getListCellRendererComponent(
@@ -101,17 +103,24 @@ final class PatternForgePanel extends JPanel
 					isSelected,
 					cellHasFocus
 				);
-				setText(value instanceof CustomPatternSlot
-					? PatternForgePanel.this.library.getName((CustomPatternSlot) value)
+				setText(value instanceof CustomPatternEntry
+					? ((CustomPatternEntry) value).getName()
 					: "");
 				return this;
 			}
 		});
 
-		JPanel patternChoice = new JPanel(new BorderLayout(4, 0));
+		JPanel patternChoice = new JPanel(new BorderLayout());
+		patternChoice.add(patternComboBox, BorderLayout.CENTER);
+		JPanel patternButtons = new JPanel(new GridLayout(1, 3, 4, 0));
+		addButton.setMargin(new Insets(2, 5, 2, 5));
 		renameButton.setMargin(new Insets(2, 5, 2, 5));
-		patternChoice.add(slotComboBox, BorderLayout.CENTER);
-		patternChoice.add(renameButton, BorderLayout.EAST);
+		deleteButton.setMargin(new Insets(2, 5, 2, 5));
+		patternButtons.add(addButton);
+		patternButtons.add(renameButton);
+		patternButtons.add(deleteButton);
+		patternButtons.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
+		patternChoice.add(patternButtons, BorderLayout.SOUTH);
 		JPanel patternRow = new JPanel(new BorderLayout(8, 0));
 		patternRow.add(new JLabel("Pattern"), BorderLayout.WEST);
 		patternRow.add(patternChoice, BorderLayout.CENTER);
@@ -138,14 +147,18 @@ final class PatternForgePanel extends JPanel
 
 		canvas.setGestureStartAction(this::rememberUndoState);
 		canvas.setPatternChangeAction(pattern -> changeDraft(pattern, false));
-		slotComboBox.addActionListener(event -> selectSlotFromControls());
+		patternComboBox.addActionListener(event -> selectPatternFromControls());
+		addButton.addActionListener(event -> addPattern());
 		renameButton.addActionListener(event -> renameSelectedPattern());
+		deleteButton.addActionListener(event -> deleteSelectedPattern());
 		undoButton.addActionListener(event -> undo());
 		clearButton.addActionListener(event -> changeDraft(CustomPattern.silent(), true));
 		previewButton.addActionListener(event -> preview());
 		saveButton.addActionListener(event -> saveDraft());
 
-		loadSlot(selectedSlot);
+		int initialId = library.getPatterns().get(0).getId();
+		refreshPatternChoices(initialId);
+		loadPattern(initialId);
 	}
 
 	CustomPatternLibrary getLibrary()
@@ -172,15 +185,15 @@ final class PatternForgePanel extends JPanel
 		stopAnimation();
 	}
 
-	private void selectSlotFromControls()
+	private void selectPatternFromControls()
 	{
 		if (loadingControls)
 		{
 			return;
 		}
 
-		CustomPatternSlot selected = (CustomPatternSlot) slotComboBox.getSelectedItem();
-		if (selected == null || selected == selectedSlot)
+		CustomPatternEntry selected = (CustomPatternEntry) patternComboBox.getSelectedItem();
+		if (selected == null || selected.getId() == selectedPatternId)
 		{
 			return;
 		}
@@ -189,22 +202,24 @@ final class PatternForgePanel extends JPanel
 		{
 			saveDraft();
 		}
-		selectedSlot = selected;
-		loadSlot(selectedSlot);
+		loadPattern(selected.getId());
 	}
 
-	private void loadSlot(CustomPatternSlot slot)
+	private void loadPattern(int patternId)
 	{
+		CustomPatternEntry entry = library.findById(patternId)
+			.orElse(library.getPatterns().get(0));
 		stopAnimation();
 		loadingControls = true;
 		try
 		{
-			selectedSlot = slot;
-			slotComboBox.setSelectedItem(slot);
-			draft = library.get(slot);
+			selectedPatternId = entry.getId();
+			patternComboBox.setSelectedItem(entry);
+			draft = entry.getPattern();
 			canvas.setPattern(draft);
 			undoStates.clear();
 			setDirty(false);
+			updateLibraryButtons();
 		}
 		finally
 		{
@@ -257,9 +272,27 @@ final class PatternForgePanel extends JPanel
 
 	private void saveDraft()
 	{
-		library = library.withPattern(selectedSlot, draft);
+		library = library.withPattern(selectedPatternId, draft);
 		persistLibrary();
 		setDirty(false);
+	}
+
+	private void addPattern()
+	{
+		if (!library.canAddPattern())
+		{
+			return;
+		}
+		if (dirty)
+		{
+			saveDraft();
+		}
+
+		int addedId = library.getNextPatternId();
+		library = library.addBlankPattern();
+		persistLibrary();
+		refreshPatternChoices(addedId);
+		loadPattern(addedId);
 	}
 
 	private void renameSelectedPattern()
@@ -271,15 +304,52 @@ final class PatternForgePanel extends JPanel
 			JOptionPane.PLAIN_MESSAGE,
 			null,
 			null,
-			library.getName(selectedSlot)
+			library.findById(selectedPatternId)
+				.map(CustomPatternEntry::getName)
+				.orElse("")
 		);
 		if (updatedName == null)
 		{
 			return;
 		}
 
-		library = library.withName(selectedSlot, updatedName);
+		library = library.withName(selectedPatternId, updatedName);
 		persistLibrary();
+		refreshPatternChoices(selectedPatternId);
+	}
+
+	private void deleteSelectedPattern()
+	{
+		if (library.size() == 1)
+		{
+			return;
+		}
+
+		CustomPatternEntry selected = library.findById(selectedPatternId).orElse(null);
+		if (selected == null)
+		{
+			return;
+		}
+		int answer = JOptionPane.showConfirmDialog(
+			this,
+			"Delete \"" + selected.getName() + "\"?\n"
+				+ "Any settings using it will return to Single pulse.",
+			"Delete custom pattern",
+			JOptionPane.YES_NO_OPTION,
+			JOptionPane.WARNING_MESSAGE
+		);
+		if (answer != JOptionPane.YES_OPTION)
+		{
+			return;
+		}
+
+		int currentIndex = library.getPatterns().indexOf(selected);
+		library = library.withoutPattern(selectedPatternId);
+		int replacementIndex = Math.min(currentIndex, library.size() - 1);
+		int replacementId = library.getPatterns().get(replacementIndex).getId();
+		persistLibrary();
+		refreshPatternChoices(replacementId);
+		loadPattern(replacementId);
 	}
 
 	private void persistLibrary()
@@ -289,8 +359,39 @@ final class PatternForgePanel extends JPanel
 			HapticScapeConfig.CUSTOM_PATTERNS_KEY,
 			library.toConfigValue()
 		);
-		slotComboBox.repaint();
+		patternComboBox.repaint();
 		libraryChangeAction.accept(library);
+	}
+
+	private void refreshPatternChoices(int selectedId)
+	{
+		loadingControls = true;
+		try
+		{
+			DefaultComboBoxModel<CustomPatternEntry> model = new DefaultComboBoxModel<>();
+			for (CustomPatternEntry entry : library.getPatterns())
+			{
+				model.addElement(entry);
+			}
+			patternComboBox.setModel(model);
+			library.findById(selectedId).ifPresent(patternComboBox::setSelectedItem);
+		}
+		finally
+		{
+			loadingControls = false;
+		}
+		updateLibraryButtons();
+	}
+
+	private void updateLibraryButtons()
+	{
+		addButton.setEnabled(library.canAddPattern());
+		deleteButton.setEnabled(library.size() > 1);
+		addButton.setToolTipText(library.canAddPattern()
+			? "Create a blank custom pattern (" + library.size() + "/"
+				+ CustomPatternLibrary.MAXIMUM_PATTERN_COUNT + ")"
+			: "Maximum of " + CustomPatternLibrary.MAXIMUM_PATTERN_COUNT
+				+ " custom patterns reached");
 	}
 
 	private void preview()
