@@ -18,6 +18,11 @@ public interface HapticScapeConfig extends Config
 	String LEVEL_UP_PATTERN_PRESET_KEY = "levelUpPatternPreset";
 	String MILESTONE_FEEDBACK_ENABLED_KEY = "milestoneFeedbackEnabled";
 	String SKILL_FEEDBACK_PROFILES_KEY = "skillFeedbackProfiles";
+	String NOTIFICATION_FEEDBACK_ENABLED_KEY = "notificationFeedbackEnabled";
+	String NOTIFICATION_INTENSITY_PERCENT_KEY = "notificationIntensityPercent";
+	String NOTIFICATION_PATTERN_PRESET_KEY = "notificationPatternPreset";
+	String NOTIFICATION_DURATION_MILLIS_KEY = "notificationDurationMillis";
+	String NOTIFICATION_RESPECT_FOCUS_KEY = "notificationRespectFocus";
 
 	@ConfigItem(
 		keyName = "intifaceServer",
@@ -140,5 +145,67 @@ public interface HapticScapeConfig extends Config
 	default String skillFeedbackProfiles()
 	{
 		return "";
+	}
+
+	@ConfigItem(
+		keyName = NOTIFICATION_FEEDBACK_ENABLED_KEY,
+		name = "RuneLite notifications",
+		description = "Trigger haptic feedback for RuneLite notifications",
+		position = 10,
+		hidden = true
+	)
+	default boolean notificationFeedbackEnabled()
+	{
+		return false;
+	}
+
+	@Range(min = 0, max = 100)
+	@ConfigItem(
+		keyName = NOTIFICATION_INTENSITY_PERCENT_KEY,
+		name = "Notification intensity",
+		description = "Device intensity used for RuneLite notification feedback",
+		position = 11,
+		hidden = true
+	)
+	default int notificationIntensityPercent()
+	{
+		return 50;
+	}
+
+	@ConfigItem(
+		keyName = NOTIFICATION_PATTERN_PRESET_KEY,
+		name = "Notification pattern",
+		description = "Pattern used for RuneLite notification feedback",
+		position = 12,
+		hidden = true
+	)
+	default String notificationPatternPreset()
+	{
+		return HapticPatternPreset.DOUBLE.name();
+	}
+
+	@Range(min = 50, max = 10_000)
+	@ConfigItem(
+		keyName = NOTIFICATION_DURATION_MILLIS_KEY,
+		name = "Notification duration",
+		description = "Total duration of a RuneLite notification pattern in milliseconds",
+		position = 13,
+		hidden = true
+	)
+	default int notificationDurationMillis()
+	{
+		return 500;
+	}
+
+	@ConfigItem(
+		keyName = NOTIFICATION_RESPECT_FOCUS_KEY,
+		name = "Respect notification focus",
+		description = "Suppress haptics while focused when RuneLite suppresses the notification",
+		position = 14,
+		hidden = true
+	)
+	default boolean notificationRespectFocus()
+	{
+		return true;
 	}
 }

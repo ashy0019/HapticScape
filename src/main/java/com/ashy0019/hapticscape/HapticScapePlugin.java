@@ -19,9 +19,11 @@ import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.StatChanged;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.events.NotificationFired;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.ClientToolbar;
+import net.runelite.client.ui.ClientUI;
 import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.util.ImageUtil;
 import okhttp3.OkHttpClient;
@@ -52,6 +54,9 @@ public class HapticScapePlugin extends Plugin
 	private ClientToolbar clientToolbar;
 
 	@Inject
+	private ClientUI clientUI;
+
+	@Inject
 	private OkHttpClient httpClient;
 
 	@Inject
@@ -71,6 +76,7 @@ public class HapticScapePlugin extends Plugin
 			this::sendTestPattern,
 			this::sendTestLevelUpPattern,
 			this::sendTestSkillProfile,
+			this::sendTestNotificationPattern,
 			intifaceService::stopAll
 		);
 		intifaceService.setConnectionListener(panel::updateConnection);
@@ -148,6 +154,33 @@ public class HapticScapePlugin extends Plugin
 			currentPanel.isMilestoneFeedbackEnabled()
 		);
 		handleFeedbackTrigger(change, trigger, currentPanel, skillXpSettings);
+	}
+
+	@Subscribe
+	public void onNotificationFired(NotificationFired event)
+	{
+		HapticScapePanel currentPanel = panel;
+		if (currentPanel == null)
+		{
+			return;
+		}
+
+		NotificationFeedbackSettings settings =
+			currentPanel.getNotificationFeedbackSettings();
+		if (!settings.shouldPlay(
+			clientUI.isFocused(),
+			event.getNotification().isSendWhenFocused()))
+		{
+			return;
+		}
+
+		log.debug("RuneLite notification haptic requested");
+		sendPattern(
+			settings.getPatternPreset(),
+			"RUNELITE_NOTIFICATION",
+			settings.getIntensityPercent(),
+			settings.getDurationMillis()
+		);
 	}
 
 	private void seedCurrentXp()
@@ -266,6 +299,25 @@ public class HapticScapePlugin extends Plugin
 		sendPattern(
 			settings.getPatternPreset(),
 			"TEST_SKILL_" + skill.name(),
+			settings.getIntensityPercent(),
+			settings.getDurationMillis()
+		);
+	}
+
+	private void sendTestNotificationPattern()
+	{
+		HapticScapePanel currentPanel = panel;
+		if (currentPanel == null)
+		{
+			return;
+		}
+
+		NotificationFeedbackSettings settings =
+			currentPanel.getNotificationFeedbackSettings();
+		log.debug("Sending test notification haptic pattern");
+		sendPattern(
+			settings.getPatternPreset(),
+			"TEST_NOTIFICATION",
 			settings.getIntensityPercent(),
 			settings.getDurationMillis()
 		);

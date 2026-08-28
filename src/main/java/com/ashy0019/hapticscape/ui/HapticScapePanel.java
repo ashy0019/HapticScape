@@ -2,6 +2,7 @@ package com.ashy0019.hapticscape.ui;
 
 import com.ashy0019.hapticscape.HapticScapeConfig;
 import com.ashy0019.hapticscape.HapticPatternPreset;
+import com.ashy0019.hapticscape.NotificationFeedbackSettings;
 import com.ashy0019.hapticscape.SkillFeedbackProfiles;
 import com.ashy0019.hapticscape.SkillSelection;
 import com.ashy0019.hapticscape.XpFeedbackSettings;
@@ -44,11 +45,17 @@ public final class HapticScapePanel extends PluginPanel
 	private final JButton testButton = new JButton("Test pattern");
 	private final JButton testLevelUpButton = new JButton("Test level");
 	private final JButton testSkillProfileButton = new JButton("Test selected skill");
+	private final JButton testNotificationButton = new JButton("Preview notification");
 	private final JButton stopButton = new JButton("Stop now");
 	private final JCheckBox levelUpFeedbackCheckBox = new JCheckBox("Level-ups");
 	private final JCheckBox milestoneFeedbackCheckBox = new JCheckBox("Milestones");
+	private final JCheckBox notificationFeedbackCheckBox =
+		new JCheckBox("RuneLite notification haptics");
+	private final JCheckBox notificationRespectFocusCheckBox =
+		new JCheckBox("Respect RuneLite focus behavior");
 	private final JLabel intensityValueLabel = new JLabel();
 	private final JLabel skillProfileIntensityValueLabel = new JLabel();
+	private final JLabel notificationIntensityValueLabel = new JLabel();
 	private final JLabel enabledSkillsValueLabel = new JLabel();
 	private final Map<Skill, JCheckBox> skillCheckBoxes = new EnumMap<>(Skill.class);
 	private final ConfigManager configManager;
@@ -64,6 +71,9 @@ public final class HapticScapePanel extends PluginPanel
 	private final JSpinner skillProfileMinimumXpGainSpinner;
 	private final JSlider skillProfileIntensitySlider;
 	private final JSpinner skillProfileDurationSpinner;
+	private final JSlider notificationIntensitySlider;
+	private final JComboBox<HapticPatternPreset> notificationPatternPresetComboBox;
+	private final JSpinner notificationDurationSpinner;
 	private volatile int intensityPercent;
 	private volatile int minimumXpGain;
 	private volatile int pulseDurationMillis;
@@ -74,6 +84,11 @@ public final class HapticScapePanel extends PluginPanel
 	private volatile SkillSelection skillSelection;
 	private volatile SkillFeedbackProfiles skillFeedbackProfiles;
 	private volatile Skill selectedProfileSkill;
+	private volatile boolean notificationFeedbackEnabled;
+	private volatile boolean notificationRespectFocus;
+	private volatile int notificationIntensityPercent;
+	private volatile int notificationDurationMillis;
+	private volatile HapticPatternPreset notificationPatternPreset;
 	private boolean updatingSkillCheckBoxes;
 	private boolean updatingSkillProfileControls;
 
@@ -85,6 +100,7 @@ public final class HapticScapePanel extends PluginPanel
 		Runnable testAction,
 		Runnable testLevelUpAction,
 		Runnable testSkillProfileAction,
+		Runnable testNotificationAction,
 		Runnable stopAction)
 	{
 		super(false);
@@ -111,6 +127,21 @@ public final class HapticScapePanel extends PluginPanel
 		milestoneFeedbackEnabled = config.milestoneFeedbackEnabled();
 		skillSelection = SkillSelection.fromConfigValue(config.disabledSkills());
 		skillFeedbackProfiles = SkillFeedbackProfiles.fromConfigValue(config.skillFeedbackProfiles());
+		notificationFeedbackEnabled = config.notificationFeedbackEnabled();
+		notificationRespectFocus = config.notificationRespectFocus();
+		notificationIntensityPercent = clamp(
+			config.notificationIntensityPercent(),
+			NotificationFeedbackSettings.MINIMUM_INTENSITY_PERCENT,
+			NotificationFeedbackSettings.MAXIMUM_INTENSITY_PERCENT
+		);
+		notificationDurationMillis = clamp(
+			config.notificationDurationMillis(),
+			NotificationFeedbackSettings.MINIMUM_DURATION_MILLIS,
+			NotificationFeedbackSettings.MAXIMUM_DURATION_MILLIS
+		);
+		notificationPatternPreset = HapticPatternPreset.fromConfigValue(
+			config.notificationPatternPreset()
+		);
 
 		intensitySlider = new JSlider(0, 100, intensityPercent);
 		patternPresetComboBox = new JComboBox<>(HapticPatternPreset.values());
@@ -178,6 +209,29 @@ public final class HapticScapePanel extends PluginPanel
 			XpFeedbackSettings.MAXIMUM_DURATION_MILLIS,
 			50));
 		skillProfileIntensityValueLabel.setText(intensityPercent + "%");
+
+		notificationFeedbackCheckBox.setSelected(notificationFeedbackEnabled);
+		notificationFeedbackCheckBox.setToolTipText(
+			"Play haptic feedback when RuneLite or another plugin fires a notification"
+		);
+		notificationRespectFocusCheckBox.setSelected(notificationRespectFocus);
+		notificationRespectFocusCheckBox.setToolTipText(
+			"Suppress haptics while RuneLite is focused when the notification would also be suppressed"
+		);
+		notificationIntensitySlider = new JSlider(
+			NotificationFeedbackSettings.MINIMUM_INTENSITY_PERCENT,
+			NotificationFeedbackSettings.MAXIMUM_INTENSITY_PERCENT,
+			notificationIntensityPercent
+		);
+		notificationIntensityValueLabel.setText(notificationIntensityPercent + "%");
+		notificationPatternPresetComboBox = new JComboBox<>(HapticPatternPreset.values());
+		notificationPatternPresetComboBox.setSelectedItem(notificationPatternPreset);
+		notificationDurationSpinner = new JSpinner(new SpinnerNumberModel(
+			notificationDurationMillis,
+			NotificationFeedbackSettings.MINIMUM_DURATION_MILLIS,
+			NotificationFeedbackSettings.MAXIMUM_DURATION_MILLIS,
+			50));
+		testNotificationButton.setToolTipText("Preview the configured notification pattern");
 
 		intensityValueLabel.setText(intensitySlider.getValue() + "%");
 		intensitySlider.addChangeListener(event ->
@@ -302,6 +356,64 @@ public final class HapticScapePanel extends PluginPanel
 		skillProfilePatternPresetComboBox.addActionListener(event -> updateSelectedSkillProfile());
 		skillProfileDurationSpinner.addChangeListener(event -> updateSelectedSkillProfile());
 
+		notificationFeedbackCheckBox.addActionListener(event ->
+		{
+			notificationFeedbackEnabled = notificationFeedbackCheckBox.isSelected();
+			configManager.setConfiguration(
+				HapticScapeConfig.GROUP,
+				HapticScapeConfig.NOTIFICATION_FEEDBACK_ENABLED_KEY,
+				notificationFeedbackEnabled
+			);
+		});
+		notificationRespectFocusCheckBox.addActionListener(event ->
+		{
+			notificationRespectFocus = notificationRespectFocusCheckBox.isSelected();
+			configManager.setConfiguration(
+				HapticScapeConfig.GROUP,
+				HapticScapeConfig.NOTIFICATION_RESPECT_FOCUS_KEY,
+				notificationRespectFocus
+			);
+		});
+		notificationIntensitySlider.addChangeListener(event ->
+		{
+			notificationIntensityPercent = notificationIntensitySlider.getValue();
+			notificationIntensityValueLabel.setText(notificationIntensityPercent + "%");
+			if (!notificationIntensitySlider.getValueIsAdjusting())
+			{
+				configManager.setConfiguration(
+					HapticScapeConfig.GROUP,
+					HapticScapeConfig.NOTIFICATION_INTENSITY_PERCENT_KEY,
+					notificationIntensityPercent
+				);
+			}
+		});
+		notificationPatternPresetComboBox.addActionListener(event ->
+		{
+			HapticPatternPreset selected =
+				(HapticPatternPreset) notificationPatternPresetComboBox.getSelectedItem();
+			if (selected == null)
+			{
+				return;
+			}
+
+			notificationPatternPreset = selected;
+			configManager.setConfiguration(
+				HapticScapeConfig.GROUP,
+				HapticScapeConfig.NOTIFICATION_PATTERN_PRESET_KEY,
+				selected.name()
+			);
+		});
+		notificationDurationSpinner.addChangeListener(event ->
+		{
+			notificationDurationMillis =
+				((Number) notificationDurationSpinner.getValue()).intValue();
+			configManager.setConfiguration(
+				HapticScapeConfig.GROUP,
+				HapticScapeConfig.NOTIFICATION_DURATION_MILLIS_KEY,
+				notificationDurationMillis
+			);
+		});
+
 		JPanel settingsPanel = new JPanel();
 		settingsPanel.setLayout(new BoxLayout(settingsPanel, BoxLayout.Y_AXIS));
 		settingsPanel.setBorder(BorderFactory.createTitledBorder("Feedback"));
@@ -404,16 +516,43 @@ public final class HapticScapePanel extends PluginPanel
 		profileTestRow.add(testSkillProfileButton, BorderLayout.EAST);
 		skillProfilePanel.add(profileTestRow);
 
-		JTabbedPane skillTabs = new JTabbedPane();
-		skillTabs.addTab("Enabled skills", enabledSkillsPanel);
-		skillTabs.addTab("Skill profiles", skillProfilePanel);
+		JPanel notificationPanel = new JPanel();
+		notificationPanel.setLayout(new BoxLayout(notificationPanel, BoxLayout.Y_AXIS));
+		notificationPanel.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+		notificationPanel.add(notificationFeedbackCheckBox);
+		notificationPanel.add(notificationRespectFocusCheckBox);
+
+		JPanel notificationIntensityHeader = new JPanel(new BorderLayout());
+		notificationIntensityHeader.add(new JLabel("Intensity"), BorderLayout.WEST);
+		notificationIntensityHeader.add(notificationIntensityValueLabel, BorderLayout.EAST);
+		notificationPanel.add(notificationIntensityHeader);
+		notificationPanel.add(notificationIntensitySlider);
+
+		JPanel notificationPatternRow = new JPanel(new BorderLayout(8, 0));
+		notificationPatternRow.add(new JLabel("Pattern"), BorderLayout.CENTER);
+		notificationPatternRow.add(notificationPatternPresetComboBox, BorderLayout.EAST);
+		notificationPanel.add(notificationPatternRow);
+
+		JPanel notificationDurationRow = new JPanel(new BorderLayout(8, 0));
+		notificationDurationRow.add(new JLabel("Pattern duration (ms)"), BorderLayout.CENTER);
+		notificationDurationRow.add(notificationDurationSpinner, BorderLayout.EAST);
+		notificationPanel.add(notificationDurationRow);
+
+		JPanel notificationTestRow = new JPanel(new BorderLayout());
+		notificationTestRow.add(testNotificationButton, BorderLayout.EAST);
+		notificationPanel.add(notificationTestRow);
+
+		JTabbedPane feedbackTabs = new JTabbedPane();
+		feedbackTabs.addTab("Skills", enabledSkillsPanel);
+		feedbackTabs.addTab("Profiles", skillProfilePanel);
+		feedbackTabs.addTab("Notifications", notificationPanel);
 		loadSelectedSkillProfile();
 
 		JPanel topPanel = new JPanel();
 		topPanel.setLayout(new BoxLayout(topPanel, BoxLayout.Y_AXIS));
 		topPanel.add(statusLabel);
 		topPanel.add(settingsPanel);
-		topPanel.add(skillTabs);
+		topPanel.add(feedbackTabs);
 		add(topPanel, BorderLayout.NORTH);
 
 		JList<DeviceInfo> deviceList = new JList<>(deviceModel);
@@ -432,6 +571,7 @@ public final class HapticScapePanel extends PluginPanel
 		testButton.addActionListener(event -> testAction.run());
 		testLevelUpButton.addActionListener(event -> testLevelUpAction.run());
 		testSkillProfileButton.addActionListener(event -> testSkillProfileAction.run());
+		testNotificationButton.addActionListener(event -> testNotificationAction.run());
 		stopButton.addActionListener(event -> stopAction.run());
 
 		JPanel buttons = new JPanel(new GridLayout(2, 2, 6, 6));
@@ -502,6 +642,17 @@ public final class HapticScapePanel extends PluginPanel
 	public boolean isSkillEnabled(Skill skill)
 	{
 		return skillSelection.isEnabled(skill);
+	}
+
+	public NotificationFeedbackSettings getNotificationFeedbackSettings()
+	{
+		return new NotificationFeedbackSettings(
+			notificationFeedbackEnabled,
+			notificationRespectFocus,
+			notificationIntensityPercent,
+			notificationDurationMillis,
+			notificationPatternPreset
+		);
 	}
 
 	private void setSkillEnabled(Skill skill, boolean enabled)
@@ -681,6 +832,7 @@ public final class HapticScapePanel extends PluginPanel
 		testButton.setEnabled(connected);
 		testLevelUpButton.setEnabled(connected);
 		testSkillProfileButton.setEnabled(connected);
+		testNotificationButton.setEnabled(connected);
 		stopButton.setEnabled(connected);
 	}
 }
