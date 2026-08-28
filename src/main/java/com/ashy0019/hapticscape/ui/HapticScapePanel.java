@@ -2,17 +2,21 @@ package com.ashy0019.hapticscape.ui;
 
 import com.ashy0019.hapticscape.HapticScapeConfig;
 import com.ashy0019.hapticscape.HapticPatternPreset;
+import com.ashy0019.hapticscape.SkillFeedbackProfiles;
 import com.ashy0019.hapticscape.SkillSelection;
+import com.ashy0019.hapticscape.XpFeedbackSettings;
 import com.ashy0019.hapticscape.device.ConnectionSnapshot;
 import com.ashy0019.hapticscape.device.ConnectionState;
 import com.ashy0019.hapticscape.device.DeviceInfo;
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.GridLayout;
 import java.util.EnumMap;
 import java.util.Map;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
@@ -23,6 +27,7 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
+import javax.swing.JTabbedPane;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
@@ -32,26 +37,33 @@ import net.runelite.client.ui.PluginPanel;
 
 public final class HapticScapePanel extends PluginPanel
 {
-	private static final int MAXIMUM_XP_GAIN = 200_000_000;
-
 	private final JLabel statusLabel = new JLabel("Disconnected", SwingConstants.CENTER);
 	private final DefaultListModel<DeviceInfo> deviceModel = new DefaultListModel<>();
 	private final JButton connectButton = new JButton("Connect");
 	private final JButton disconnectButton = new JButton("Disconnect");
 	private final JButton testButton = new JButton("Test pattern");
 	private final JButton testLevelUpButton = new JButton("Test level");
+	private final JButton testSkillProfileButton = new JButton("Test selected skill");
 	private final JButton stopButton = new JButton("Stop now");
 	private final JCheckBox levelUpFeedbackCheckBox = new JCheckBox("Level-ups");
 	private final JCheckBox milestoneFeedbackCheckBox = new JCheckBox("Milestones");
 	private final JLabel intensityValueLabel = new JLabel();
+	private final JLabel skillProfileIntensityValueLabel = new JLabel();
 	private final JLabel enabledSkillsValueLabel = new JLabel();
 	private final Map<Skill, JCheckBox> skillCheckBoxes = new EnumMap<>(Skill.class);
 	private final ConfigManager configManager;
 	private final JSlider intensitySlider;
 	private final JComboBox<HapticPatternPreset> patternPresetComboBox;
 	private final JComboBox<HapticPatternPreset> levelUpPatternPresetComboBox;
+	private final JComboBox<Skill> skillProfileSkillComboBox;
+	private final JCheckBox useGlobalSkillSettingsCheckBox =
+		new JCheckBox("Use global XP settings");
+	private final JComboBox<HapticPatternPreset> skillProfilePatternPresetComboBox;
 	private final JSpinner minimumXpGainSpinner;
 	private final JSpinner pulseDurationSpinner;
+	private final JSpinner skillProfileMinimumXpGainSpinner;
+	private final JSlider skillProfileIntensitySlider;
+	private final JSpinner skillProfileDurationSpinner;
 	private volatile int intensityPercent;
 	private volatile int minimumXpGain;
 	private volatile int pulseDurationMillis;
@@ -60,7 +72,10 @@ public final class HapticScapePanel extends PluginPanel
 	private volatile boolean levelUpFeedbackEnabled;
 	private volatile boolean milestoneFeedbackEnabled;
 	private volatile SkillSelection skillSelection;
+	private volatile SkillFeedbackProfiles skillFeedbackProfiles;
+	private volatile Skill selectedProfileSkill;
 	private boolean updatingSkillCheckBoxes;
+	private boolean updatingSkillProfileControls;
 
 	public HapticScapePanel(
 		HapticScapeConfig config,
@@ -69,6 +84,7 @@ public final class HapticScapePanel extends PluginPanel
 		Runnable disconnectAction,
 		Runnable testAction,
 		Runnable testLevelUpAction,
+		Runnable testSkillProfileAction,
 		Runnable stopAction)
 	{
 		super(false);
@@ -79,13 +95,22 @@ public final class HapticScapePanel extends PluginPanel
 		statusLabel.setBorder(BorderFactory.createEmptyBorder(4, 2, 4, 2));
 
 		intensityPercent = clamp(config.intensityPercent(), 0, 100);
-		minimumXpGain = clamp(config.minimumXpGain(), 1, MAXIMUM_XP_GAIN);
-		pulseDurationMillis = clamp(config.pulseDurationMillis(), 50, 10_000);
+		minimumXpGain = clamp(
+			config.minimumXpGain(),
+			XpFeedbackSettings.MINIMUM_XP_GAIN,
+			XpFeedbackSettings.MAXIMUM_XP_GAIN
+		);
+		pulseDurationMillis = clamp(
+			config.pulseDurationMillis(),
+			XpFeedbackSettings.MINIMUM_DURATION_MILLIS,
+			XpFeedbackSettings.MAXIMUM_DURATION_MILLIS
+		);
 		patternPreset = HapticPatternPreset.fromConfigValue(config.patternPreset());
 		levelUpPatternPreset = HapticPatternPreset.fromConfigValue(config.levelUpPatternPreset());
 		levelUpFeedbackEnabled = config.levelUpFeedbackEnabled();
 		milestoneFeedbackEnabled = config.milestoneFeedbackEnabled();
 		skillSelection = SkillSelection.fromConfigValue(config.disabledSkills());
+		skillFeedbackProfiles = SkillFeedbackProfiles.fromConfigValue(config.skillFeedbackProfiles());
 
 		intensitySlider = new JSlider(0, 100, intensityPercent);
 		patternPresetComboBox = new JComboBox<>(HapticPatternPreset.values());
@@ -99,23 +124,67 @@ public final class HapticScapePanel extends PluginPanel
 		milestoneFeedbackCheckBox.setSelected(milestoneFeedbackEnabled);
 		milestoneFeedbackCheckBox.setToolTipText("Use Triple pulse for levels 10–90 and Ascending for level 99");
 		testLevelUpButton.setToolTipText("Preview the configured ordinary level-up pattern");
+		testSkillProfileButton.setToolTipText("Preview the selected skill's effective XP settings");
 		minimumXpGainSpinner = new JSpinner(new SpinnerNumberModel(
 			minimumXpGain,
-			1,
-			MAXIMUM_XP_GAIN,
+			XpFeedbackSettings.MINIMUM_XP_GAIN,
+			XpFeedbackSettings.MAXIMUM_XP_GAIN,
 			1));
 		pulseDurationSpinner = new JSpinner(new SpinnerNumberModel(
 			pulseDurationMillis,
-			50,
-			10_000,
+			XpFeedbackSettings.MINIMUM_DURATION_MILLIS,
+			XpFeedbackSettings.MAXIMUM_DURATION_MILLIS,
 			50));
 		pulseDurationSpinner.setToolTipText("Total time shared by all pulses and gaps in the pattern");
+
+		Skill[] selectableSkills = SkillSelection.getSelectableSkills().toArray(new Skill[0]);
+		skillProfileSkillComboBox = new JComboBox<>(selectableSkills);
+		skillProfileSkillComboBox.setRenderer(new DefaultListCellRenderer()
+		{
+			@Override
+			public Component getListCellRendererComponent(
+				JList<?> list,
+				Object value,
+				int index,
+				boolean isSelected,
+				boolean cellHasFocus)
+			{
+				super.getListCellRendererComponent(
+					list,
+					value,
+					index,
+					isSelected,
+					cellHasFocus
+				);
+				setText(value instanceof Skill ? ((Skill) value).getName() : "");
+				return this;
+			}
+		});
+		selectedProfileSkill = selectableSkills[0];
+		skillProfilePatternPresetComboBox = new JComboBox<>(HapticPatternPreset.values());
+		skillProfileMinimumXpGainSpinner = new JSpinner(new SpinnerNumberModel(
+			minimumXpGain,
+			XpFeedbackSettings.MINIMUM_XP_GAIN,
+			XpFeedbackSettings.MAXIMUM_XP_GAIN,
+			1));
+		skillProfileIntensitySlider = new JSlider(
+			XpFeedbackSettings.MINIMUM_INTENSITY_PERCENT,
+			XpFeedbackSettings.MAXIMUM_INTENSITY_PERCENT,
+			intensityPercent
+		);
+		skillProfileDurationSpinner = new JSpinner(new SpinnerNumberModel(
+			pulseDurationMillis,
+			XpFeedbackSettings.MINIMUM_DURATION_MILLIS,
+			XpFeedbackSettings.MAXIMUM_DURATION_MILLIS,
+			50));
+		skillProfileIntensityValueLabel.setText(intensityPercent + "%");
 
 		intensityValueLabel.setText(intensitySlider.getValue() + "%");
 		intensitySlider.addChangeListener(event ->
 		{
 			intensityPercent = intensitySlider.getValue();
 			intensityValueLabel.setText(intensityPercent + "%");
+			refreshInheritedSkillProfile();
 			if (!intensitySlider.getValueIsAdjusting())
 			{
 				configManager.setConfiguration(
@@ -131,6 +200,7 @@ public final class HapticScapePanel extends PluginPanel
 				HapticScapeConfig.GROUP,
 				HapticScapeConfig.MINIMUM_XP_GAIN_KEY,
 				minimumXpGain);
+			refreshInheritedSkillProfile();
 		});
 		pulseDurationSpinner.addChangeListener(event ->
 		{
@@ -139,6 +209,7 @@ public final class HapticScapePanel extends PluginPanel
 				HapticScapeConfig.GROUP,
 				HapticScapeConfig.PULSE_DURATION_MILLIS_KEY,
 				pulseDurationMillis);
+			refreshInheritedSkillProfile();
 		});
 		patternPresetComboBox.addActionListener(event ->
 		{
@@ -153,6 +224,7 @@ public final class HapticScapePanel extends PluginPanel
 				HapticScapeConfig.GROUP,
 				HapticScapeConfig.PATTERN_PRESET_KEY,
 				selected.name());
+			refreshInheritedSkillProfile();
 		});
 		levelUpPatternPresetComboBox.addActionListener(event ->
 		{
@@ -185,6 +257,50 @@ public final class HapticScapePanel extends PluginPanel
 				HapticScapeConfig.MILESTONE_FEEDBACK_ENABLED_KEY,
 				milestoneFeedbackEnabled);
 		});
+
+		skillProfileSkillComboBox.addActionListener(event ->
+		{
+			Skill selected = (Skill) skillProfileSkillComboBox.getSelectedItem();
+			if (selected == null)
+			{
+				return;
+			}
+
+			selectedProfileSkill = selected;
+			loadSelectedSkillProfile();
+		});
+		useGlobalSkillSettingsCheckBox.addActionListener(event ->
+		{
+			if (updatingSkillProfileControls || selectedProfileSkill == null)
+			{
+				return;
+			}
+
+			if (useGlobalSkillSettingsCheckBox.isSelected())
+			{
+				skillFeedbackProfiles = skillFeedbackProfiles.withoutOverride(selectedProfileSkill);
+			}
+			else
+			{
+				skillFeedbackProfiles = skillFeedbackProfiles.withOverride(
+					selectedProfileSkill,
+					getGlobalXpFeedbackSettings()
+				);
+			}
+			persistSkillFeedbackProfiles();
+			loadSelectedSkillProfile();
+		});
+		skillProfileMinimumXpGainSpinner.addChangeListener(event -> updateSelectedSkillProfile());
+		skillProfileIntensitySlider.addChangeListener(event ->
+		{
+			skillProfileIntensityValueLabel.setText(skillProfileIntensitySlider.getValue() + "%");
+			if (!skillProfileIntensitySlider.getValueIsAdjusting())
+			{
+				updateSelectedSkillProfile();
+			}
+		});
+		skillProfilePatternPresetComboBox.addActionListener(event -> updateSelectedSkillProfile());
+		skillProfileDurationSpinner.addChangeListener(event -> updateSelectedSkillProfile());
 
 		JPanel settingsPanel = new JPanel();
 		settingsPanel.setLayout(new BoxLayout(settingsPanel, BoxLayout.Y_AXIS));
@@ -221,8 +337,8 @@ public final class HapticScapePanel extends PluginPanel
 		milestoneRow.add(testLevelUpButton, BorderLayout.EAST);
 		settingsPanel.add(milestoneRow);
 
-		JPanel skillsPanel = new JPanel(new BorderLayout(0, 4));
-		skillsPanel.setBorder(BorderFactory.createTitledBorder("XP skills"));
+		JPanel enabledSkillsPanel = new JPanel(new BorderLayout(0, 4));
+		enabledSkillsPanel.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
 
 		JButton allSkillsButton = new JButton("All");
 		allSkillsButton.setToolTipText("Enable XP feedback for every skill");
@@ -239,7 +355,7 @@ public final class HapticScapePanel extends PluginPanel
 		JPanel skillsHeader = new JPanel(new BorderLayout(4, 0));
 		skillsHeader.add(enabledSkillsValueLabel, BorderLayout.WEST);
 		skillsHeader.add(bulkSkillButtons, BorderLayout.EAST);
-		skillsPanel.add(skillsHeader, BorderLayout.NORTH);
+		enabledSkillsPanel.add(skillsHeader, BorderLayout.NORTH);
 
 		JPanel skillGrid = new JPanel(new GridLayout(0, 2, 4, 2));
 		for (Skill skill : SkillSelection.getSelectableSkills())
@@ -250,14 +366,54 @@ public final class HapticScapePanel extends PluginPanel
 			skillGrid.add(skillCheckBox);
 		}
 
-		skillsPanel.add(skillGrid, BorderLayout.CENTER);
+		enabledSkillsPanel.add(skillGrid, BorderLayout.CENTER);
 		updateEnabledSkillsLabel();
+
+		JPanel skillProfilePanel = new JPanel();
+		skillProfilePanel.setLayout(new BoxLayout(skillProfilePanel, BoxLayout.Y_AXIS));
+		skillProfilePanel.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+
+		JPanel profileSkillRow = new JPanel(new BorderLayout(8, 0));
+		profileSkillRow.add(new JLabel("Skill"), BorderLayout.CENTER);
+		profileSkillRow.add(skillProfileSkillComboBox, BorderLayout.EAST);
+		skillProfilePanel.add(profileSkillRow);
+		skillProfilePanel.add(useGlobalSkillSettingsCheckBox);
+
+		JPanel profileThresholdRow = new JPanel(new BorderLayout(8, 0));
+		profileThresholdRow.add(new JLabel("Minimum XP gain"), BorderLayout.CENTER);
+		profileThresholdRow.add(skillProfileMinimumXpGainSpinner, BorderLayout.EAST);
+		skillProfilePanel.add(profileThresholdRow);
+
+		JPanel profileIntensityHeader = new JPanel(new BorderLayout());
+		profileIntensityHeader.add(new JLabel("Intensity"), BorderLayout.WEST);
+		profileIntensityHeader.add(skillProfileIntensityValueLabel, BorderLayout.EAST);
+		skillProfilePanel.add(profileIntensityHeader);
+		skillProfilePanel.add(skillProfileIntensitySlider);
+
+		JPanel profilePatternRow = new JPanel(new BorderLayout(8, 0));
+		profilePatternRow.add(new JLabel("Pattern"), BorderLayout.CENTER);
+		profilePatternRow.add(skillProfilePatternPresetComboBox, BorderLayout.EAST);
+		skillProfilePanel.add(profilePatternRow);
+
+		JPanel profileDurationRow = new JPanel(new BorderLayout(8, 0));
+		profileDurationRow.add(new JLabel("Pattern duration (ms)"), BorderLayout.CENTER);
+		profileDurationRow.add(skillProfileDurationSpinner, BorderLayout.EAST);
+		skillProfilePanel.add(profileDurationRow);
+
+		JPanel profileTestRow = new JPanel(new BorderLayout());
+		profileTestRow.add(testSkillProfileButton, BorderLayout.EAST);
+		skillProfilePanel.add(profileTestRow);
+
+		JTabbedPane skillTabs = new JTabbedPane();
+		skillTabs.addTab("Enabled skills", enabledSkillsPanel);
+		skillTabs.addTab("Skill profiles", skillProfilePanel);
+		loadSelectedSkillProfile();
 
 		JPanel topPanel = new JPanel();
 		topPanel.setLayout(new BoxLayout(topPanel, BoxLayout.Y_AXIS));
 		topPanel.add(statusLabel);
 		topPanel.add(settingsPanel);
-		topPanel.add(skillsPanel);
+		topPanel.add(skillTabs);
 		add(topPanel, BorderLayout.NORTH);
 
 		JList<DeviceInfo> deviceList = new JList<>(deviceModel);
@@ -275,6 +431,7 @@ public final class HapticScapePanel extends PluginPanel
 		disconnectButton.addActionListener(event -> disconnectAction.run());
 		testButton.addActionListener(event -> testAction.run());
 		testLevelUpButton.addActionListener(event -> testLevelUpAction.run());
+		testSkillProfileButton.addActionListener(event -> testSkillProfileAction.run());
 		stopButton.addActionListener(event -> stopAction.run());
 
 		JPanel buttons = new JPanel(new GridLayout(2, 2, 6, 6));
@@ -305,6 +462,26 @@ public final class HapticScapePanel extends PluginPanel
 	public HapticPatternPreset getPatternPreset()
 	{
 		return patternPreset;
+	}
+
+	public XpFeedbackSettings getGlobalXpFeedbackSettings()
+	{
+		return new XpFeedbackSettings(
+			minimumXpGain,
+			intensityPercent,
+			pulseDurationMillis,
+			patternPreset
+		);
+	}
+
+	public XpFeedbackSettings getXpFeedbackSettings(Skill skill)
+	{
+		return skillFeedbackProfiles.resolve(skill, getGlobalXpFeedbackSettings());
+	}
+
+	public Skill getSelectedProfileSkill()
+	{
+		return selectedProfileSkill;
 	}
 
 	public HapticPatternPreset getLevelUpPatternPreset()
@@ -370,6 +547,87 @@ public final class HapticScapePanel extends PluginPanel
 		);
 	}
 
+	private void loadSelectedSkillProfile()
+	{
+		Skill skill = selectedProfileSkill;
+		if (skill == null)
+		{
+			return;
+		}
+
+		XpFeedbackSettings override = skillFeedbackProfiles.getOverride(skill).orElse(null);
+		XpFeedbackSettings displayed = override == null ? getGlobalXpFeedbackSettings() : override;
+
+		updatingSkillProfileControls = true;
+		try
+		{
+			useGlobalSkillSettingsCheckBox.setSelected(override == null);
+			skillProfileMinimumXpGainSpinner.setValue(displayed.getMinimumXpGain());
+			skillProfileIntensitySlider.setValue(displayed.getIntensityPercent());
+			skillProfileIntensityValueLabel.setText(displayed.getIntensityPercent() + "%");
+			skillProfilePatternPresetComboBox.setSelectedItem(displayed.getPatternPreset());
+			skillProfileDurationSpinner.setValue(displayed.getDurationMillis());
+			setSkillProfileControlsEnabled(override != null);
+		}
+		finally
+		{
+			updatingSkillProfileControls = false;
+		}
+	}
+
+	private void updateSelectedSkillProfile()
+	{
+		if (updatingSkillProfileControls
+			|| selectedProfileSkill == null
+			|| useGlobalSkillSettingsCheckBox.isSelected())
+		{
+			return;
+		}
+
+		HapticPatternPreset selectedPattern =
+			(HapticPatternPreset) skillProfilePatternPresetComboBox.getSelectedItem();
+		if (selectedPattern == null)
+		{
+			return;
+		}
+
+		XpFeedbackSettings updated = new XpFeedbackSettings(
+			((Number) skillProfileMinimumXpGainSpinner.getValue()).intValue(),
+			skillProfileIntensitySlider.getValue(),
+			((Number) skillProfileDurationSpinner.getValue()).intValue(),
+			selectedPattern
+		);
+		skillFeedbackProfiles = skillFeedbackProfiles.withOverride(selectedProfileSkill, updated);
+		persistSkillFeedbackProfiles();
+	}
+
+	private void refreshInheritedSkillProfile()
+	{
+		if (selectedProfileSkill != null
+			&& !skillFeedbackProfiles.getOverride(selectedProfileSkill).isPresent())
+		{
+			loadSelectedSkillProfile();
+		}
+	}
+
+	private void setSkillProfileControlsEnabled(boolean enabled)
+	{
+		skillProfileMinimumXpGainSpinner.setEnabled(enabled);
+		skillProfileIntensitySlider.setEnabled(enabled);
+		skillProfileIntensityValueLabel.setEnabled(enabled);
+		skillProfilePatternPresetComboBox.setEnabled(enabled);
+		skillProfileDurationSpinner.setEnabled(enabled);
+	}
+
+	private void persistSkillFeedbackProfiles()
+	{
+		configManager.setConfiguration(
+			HapticScapeConfig.GROUP,
+			HapticScapeConfig.SKILL_FEEDBACK_PROFILES_KEY,
+			skillFeedbackProfiles.toConfigValue()
+		);
+	}
+
 	private void updateEnabledSkillsLabel()
 	{
 		enabledSkillsValueLabel.setText(
@@ -422,6 +680,7 @@ public final class HapticScapePanel extends PluginPanel
 		disconnectButton.setEnabled(state == ConnectionState.CONNECTING || connected);
 		testButton.setEnabled(connected);
 		testLevelUpButton.setEnabled(connected);
+		testSkillProfileButton.setEnabled(connected);
 		stopButton.setEnabled(connected);
 	}
 }

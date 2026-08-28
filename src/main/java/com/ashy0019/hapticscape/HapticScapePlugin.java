@@ -70,6 +70,7 @@ public class HapticScapePlugin extends Plugin
 			intifaceService::disconnect,
 			this::sendTestPattern,
 			this::sendTestLevelUpPattern,
+			this::sendTestSkillProfile,
 			intifaceService::stopAll
 		);
 		intifaceService.setConnectionListener(panel::updateConnection);
@@ -139,13 +140,14 @@ public class HapticScapePlugin extends Plugin
 			return;
 		}
 
+		XpFeedbackSettings skillXpSettings = currentPanel.getXpFeedbackSettings(change.getSkill());
 		XpFeedbackTrigger trigger = XpFeedbackTrigger.classify(
 			change,
-			currentPanel.getMinimumXpGain(),
+			skillXpSettings.getMinimumXpGain(),
 			currentPanel.isLevelUpFeedbackEnabled(),
 			currentPanel.isMilestoneFeedbackEnabled()
 		);
-		handleFeedbackTrigger(change, trigger, currentPanel);
+		handleFeedbackTrigger(change, trigger, currentPanel, skillXpSettings);
 	}
 
 	private void seedCurrentXp()
@@ -159,13 +161,14 @@ public class HapticScapePlugin extends Plugin
 	private void handleFeedbackTrigger(
 		XpChange change,
 		XpFeedbackTrigger trigger,
-		HapticScapePanel currentPanel)
+		HapticScapePanel currentPanel,
+		XpFeedbackSettings skillXpSettings)
 	{
 		HapticPatternPreset preset;
 		switch (trigger)
 		{
 			case XP_GAIN:
-				preset = currentPanel.getPatternPreset();
+				preset = skillXpSettings.getPatternPreset();
 				break;
 			case LEVEL_UP:
 				preset = currentPanel.getLevelUpPatternPreset();
@@ -189,7 +192,19 @@ public class HapticScapePlugin extends Plugin
 			change.getPreviousLevel(),
 			change.getCurrentLevel()
 		);
-		sendConfiguredPattern(preset, trigger.name());
+		if (trigger == XpFeedbackTrigger.XP_GAIN)
+		{
+			sendPattern(
+				preset,
+				trigger.name(),
+				skillXpSettings.getIntensityPercent(),
+				skillXpSettings.getDurationMillis()
+			);
+		}
+		else
+		{
+			sendConfiguredPattern(preset, trigger.name());
+		}
 	}
 
 	private void connectToIntiface()
@@ -232,6 +247,30 @@ public class HapticScapePlugin extends Plugin
 		}
 	}
 
+	private void sendTestSkillProfile()
+	{
+		HapticScapePanel currentPanel = panel;
+		if (currentPanel == null)
+		{
+			return;
+		}
+
+		Skill skill = currentPanel.getSelectedProfileSkill();
+		if (skill == null)
+		{
+			return;
+		}
+
+		XpFeedbackSettings settings = currentPanel.getXpFeedbackSettings(skill);
+		log.debug("Sending test XP profile for {}", skill);
+		sendPattern(
+			settings.getPatternPreset(),
+			"TEST_SKILL_" + skill.name(),
+			settings.getIntensityPercent(),
+			settings.getDurationMillis()
+		);
+	}
+
 	private void sendConfiguredPattern(HapticPatternPreset preset, String triggerName)
 	{
 		HapticScapePanel currentPanel = panel;
@@ -242,6 +281,20 @@ public class HapticScapePlugin extends Plugin
 
 		int intensityPercent = currentPanel.getIntensityPercent();
 		int durationMillis = currentPanel.getPulseDurationMillis();
+		sendPattern(preset, triggerName, intensityPercent, durationMillis);
+	}
+
+	private void sendPattern(
+		HapticPatternPreset preset,
+		String triggerName,
+		int intensityPercent,
+		int durationMillis)
+	{
+		if (intifaceService == null)
+		{
+			return;
+		}
+
 		log.debug(
 			"Requesting {} pattern for {} at {}% for {} ms",
 			preset,

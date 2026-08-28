@@ -17,6 +17,7 @@ public interface HapticScapeConfig extends Config
 	String LEVEL_UP_FEEDBACK_ENABLED_KEY = "levelUpFeedbackEnabled";
 	String LEVEL_UP_PATTERN_PRESET_KEY = "levelUpPatternPreset";
 	String MILESTONE_FEEDBACK_ENABLED_KEY = "milestoneFeedbackEnabled";
+	String SKILL_FEEDBACK_PROFILES_KEY = "skillFeedbackProfiles";
 
 	@ConfigItem(
 		keyName = "intifaceServer",
@@ -127,5 +128,17 @@ public interface HapticScapeConfig extends Config
 	default boolean milestoneFeedbackEnabled()
 	{
 		return true;
+	}
+
+	@ConfigItem(
+		keyName = SKILL_FEEDBACK_PROFILES_KEY,
+		name = "Skill XP profiles",
+		description = "Per-skill XP feedback overrides",
+		position = 9,
+		hidden = true
+	)
+	default String skillFeedbackProfiles()
+	{
+		return "";
 	}
 }
