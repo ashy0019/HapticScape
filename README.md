@@ -33,3 +33,28 @@ account names, chat, credentials, or information about other players.
 
 Using a non-local server reveals the user's IP address and command traffic to
 that independently operated server.
+
+## Private Windows bundle
+
+HapticScape can be packaged as a portable Windows application for private
+testing. This is an unofficial RuneLite build and is not endorsed by RuneLite
+or Jagex.
+
+Prerequisites:
+
+- Windows 10 or newer.
+- The official RuneLite launcher installed. HapticScape reuses RuneLite's
+  bundled Java runtime.
+- Intiface installed separately.
+
+From PowerShell in the repository root, run:
+
+```powershell
+.\package-windows.ps1
+```
+
+The script runs the tests, builds the client, creates a small native Windows
+launcher, and produces
+`build/distribution/HapticScape-Windows-<architecture>-1.0.0.zip`.
+Distribute the ZIP rather than the executable by itself. Never include or
+share `.runelite/credentials.properties`.

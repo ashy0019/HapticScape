@@ -5,11 +5,6 @@ import com.ashy0019.hapticscape.device.IntifaceService;
 import com.ashy0019.hapticscape.ui.HapticScapePanel;
 import com.google.gson.Gson;
 import com.google.inject.Provides;
-import java.awt.BasicStroke;
-import java.awt.Color;
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
-import java.awt.geom.Path2D;
 import java.awt.image.BufferedImage;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -27,6 +22,7 @@ import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.NavigationButton;
+import net.runelite.client.util.ImageUtil;
 import okhttp3.OkHttpClient;
 
 @Slf4j
@@ -78,7 +74,7 @@ public class HapticScapePlugin extends Plugin
 
 		navigationButton = NavigationButton.builder()
 			.tooltip("HapticScape")
-			.icon(createNavigationIcon())
+			.icon(loadNavigationIcon())
 			.panel(panel)
 			.priority(5)
 			.build();
@@ -199,27 +195,14 @@ public class HapticScapePlugin extends Plugin
 		intifaceService.pulse(intensity, duration);
 	}
 
-	private static BufferedImage createNavigationIcon()
+	private static BufferedImage loadNavigationIcon()
 	{
-		BufferedImage image = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
-		Graphics2D graphics = image.createGraphics();
-		try
-		{
-			graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-			graphics.setColor(new Color(190, 125, 255));
-			graphics.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-
-			Path2D wave = new Path2D.Double();
-			wave.moveTo(1, 8);
-			wave.curveTo(3, 2, 5, 2, 7, 8);
-			wave.curveTo(9, 14, 11, 14, 15, 8);
-			graphics.draw(wave);
-		}
-		finally
-		{
-			graphics.dispose();
-		}
-		return image;
+		BufferedImage source = ImageUtil.loadImageResource(
+			HapticScapePlugin.class,
+			"/hapticscape.png"
+		);
+		BufferedImage scaled = ImageUtil.resizeImage(source, 16, 16, true);
+		return ImageUtil.resizeCanvas(scaled, 16, 16);
 	}
 
 	@Provides
