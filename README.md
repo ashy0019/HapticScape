@@ -10,6 +10,18 @@ HapticScape is an unofficial RuneLite integration. It is not endorsed by
 RuneLite, Jagex, or the Intiface project.
 
 ## Features
+<table>
+<tr>
+<td rowspan="3" valign="top"><a href="https://github.com/user-attachments/assets/afccc02a-d017-4780-a7a4-6b12f6f4edb7"><img src="https://github.com/user-attachments/assets/afccc02a-d017-4780-a7a4-6b12f6f4edb7" width="180" alt="HapticScape main panel"></a></td>
+<td valign="top"><a href="https://github.com/user-attachments/assets/0ebc2624-0bf8-4cbe-9881-74faf7187de9"><img src="https://github.com/user-attachments/assets/0ebc2624-0bf8-4cbe-9881-74faf7187de9" width="180" alt="HapticScape skill profiles"></a></td>
+</tr>
+<tr>
+<td valign="top"><a href="https://github.com/user-attachments/assets/ba565485-ab23-4a56-9c72-c26366a8a78a"><img src="https://github.com/user-attachments/assets/ba565485-ab23-4a56-9c72-c26366a8a78a" width="180" alt="HapticScape alerts"></a></td>
+</tr>
+<tr>
+<td valign="top"><a href="https://github.com/user-attachments/assets/6044a42d-67f2-4d3c-a23a-ea7abd155594"><img src="https://github.com/user-attachments/assets/6044a42d-67f2-4d3c-a23a-ea7abd155594" width="180" alt="HapticScape custom pattern editor"></a></td>
+</tr>
+</table>
 
 ### RuneScape feedback
 
