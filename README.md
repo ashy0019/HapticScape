@@ -65,7 +65,7 @@ emergency stop, and the list of devices reported by Intiface.
 
 - A supported Old School RuneScape account and RuneLite setup.
 - [Intiface Central](https://intiface.com/) installed and running.
-- A device that Intiface reports as supporting vibration/scalar output.
+- Supported Intiface device.
 - Bluetooth, USB, serial, or another connection method supported by the device
   and Intiface.
 
