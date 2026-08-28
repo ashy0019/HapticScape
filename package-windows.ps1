@@ -28,7 +28,7 @@ Push-Location $projectRoot
 try
 {
 	Write-Host 'Running tests and building the HapticScape client...'
-	& $gradleWrapper clean test shadowJar
+	& $gradleWrapper clean test verifyClientJar collectRuntimeLicenses
 	if ($LASTEXITCODE -ne 0)
 	{
 		throw "Gradle failed with exit code $LASTEXITCODE."
@@ -56,7 +56,8 @@ try
 
 	Copy-Item $jarPath (Join-Path $appFilesDirectory 'hapticscape-client.jar')
 	Copy-Item (Join-Path $projectRoot 'LICENSE') (Join-Path $licensesDirectory 'HapticScape.txt')
-	Copy-Item (Join-Path $projectRoot 'licenses\RUNELITE-LICENSE.txt') (Join-Path $licensesDirectory 'RuneLite.txt')
+	Copy-Item (Join-Path $projectRoot 'licenses\*') $licensesDirectory -Recurse
+	Copy-Item (Join-Path $projectRoot 'build\generated\runtime-licenses') (Join-Path $licensesDirectory 'resolved-artifacts') -Recurse
 	Copy-Item (Join-Path $projectRoot 'FRIEND-SETUP.md') (Join-Path $appDirectory 'README-FIRST.md')
 
 	$launcherSource = Join-Path $projectRoot 'launcher\HapticScapeLauncher.cs'

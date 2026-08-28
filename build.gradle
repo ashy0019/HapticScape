@@ -13,8 +13,44 @@ repositories {
 	mavenCentral()
 }
 
-def runeLiteVersion = 'latest.release'
-def pluginMainClass = 'com.ashy0019.hapticscape.HapticScapePluginTest'
+def runeLiteVersion = '1.12.37'
+def pluginMainClass = 'com.ashy0019.hapticscape.HapticScapeClient'
+def approvedRuntimeModules = [
+	'aopalliance:aopalliance',
+	'ch.qos.logback:logback-classic',
+	'ch.qos.logback:logback-core',
+	'com.fifesoft:autocomplete',
+	'com.fifesoft:rsyntaxtextarea',
+	'com.github.weisj:jsvg',
+	'com.google.code.findbugs:jsr305',
+	'com.google.code.gson:gson',
+	'com.google.guava:guava',
+	'com.google.inject:guice',
+	'com.google.protobuf:protobuf-javalite',
+	'com.squareup.okhttp3:okhttp',
+	'com.squareup.okio:okio',
+	'javax.inject:javax.inject',
+	'net.java.dev.jna:jna',
+	'net.java.dev.jna:jna-platform',
+	'net.runelite.arn:http-api',
+	'net.runelite:client',
+	'net.runelite:discord',
+	'net.runelite:flatlaf',
+	'net.runelite:flatlaf-extras',
+	'net.runelite:injected-client',
+	'net.runelite:jshell',
+	'net.runelite:rlawt',
+	'net.runelite:rlicn',
+	'net.runelite:runelite-api',
+	'net.sf.jopt-simple:jopt-simple',
+	'org.apache.commons:commons-lang3',
+	'org.apache.commons:commons-text',
+	'org.json:json',
+	'org.lwjgl:lwjgl',
+	'org.lwjgl:lwjgl-opencl',
+	'org.lwjgl:lwjgl-opengl',
+	'org.slf4j:slf4j-api'
+] as Set
 
 dependencies {
 	compileOnly group: 'net.runelite', name:'client', version: runeLiteVersion
@@ -25,6 +61,24 @@ dependencies {
 	testImplementation 'junit:junit:4.12'
 	testImplementation group: 'net.runelite', name:'client', version: runeLiteVersion
 	testImplementation group: 'net.runelite', name:'jshell', version: runeLiteVersion
+}
+
+def isTestOnlyRuntimeArtifact = { artifact ->
+	(artifact.moduleVersion.id.group == 'junit' && artifact.name == 'junit') ||
+		(artifact.moduleVersion.id.group == 'org.hamcrest' && artifact.name == 'hamcrest-core')
+}
+
+def packagedRuntimeArtifacts = {
+	configurations.testRuntimeClasspath.resolvedConfiguration.resolvedArtifacts.findAll { artifact ->
+		!isTestOnlyRuntimeArtifact(artifact)
+	}
+}
+
+def packagedRuntimeFiles = {
+	def testOnlyFiles = configurations.testRuntimeClasspath.resolvedConfiguration.resolvedArtifacts.findAll { artifact ->
+		isTestOnlyRuntimeArtifact(artifact)
+	}.collect { it.file }.toSet()
+	configurations.testRuntimeClasspath.findAll { !testOnlyFiles.contains(it) }
 }
 
 group = 'com.ashy0019'
@@ -50,9 +104,8 @@ tasks.register('shadowJar', Jar) {
 
 	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 	from sourceSets.main.output
-	from sourceSets.test.output
 	from {
-		configurations.testRuntimeClasspath.collect { file ->
+		packagedRuntimeFiles().collect { file ->
 			file.isDirectory() ? file : zipTree(file)
 		}
 	}
@@ -66,4 +119,97 @@ tasks.register('shadowJar', Jar) {
 	group = BasePlugin.BUILD_GROUP
 	archiveClassifier.set('shadow')
 	archiveFileName.set("hapticscape-client.jar")
+}
+
+tasks.register('verifyClientJar') {
+	dependsOn tasks.named('shadowJar')
+
+	doLast {
+		def clientJar = tasks.named('shadowJar').get().archiveFile.get().asFile
+		def forbiddenEntries = []
+		def hasLauncher = false
+
+		zipTree(clientJar).visit { details ->
+			if (details.directory) {
+				return
+			}
+
+			def path = details.relativePath.pathString
+			if (path == 'com/ashy0019/hapticscape/HapticScapeClient.class') {
+				hasLauncher = true
+			}
+			if (path.startsWith('org/junit/') ||
+				path.startsWith('org/hamcrest/') ||
+				(path.startsWith('com/ashy0019/hapticscape/') && path.endsWith('Test.class'))) {
+				forbiddenEntries.add(path)
+			}
+		}
+
+		if (!hasLauncher) {
+			throw new GradleException('The packaged client launcher class is missing.')
+		}
+		if (!forbiddenEntries.isEmpty()) {
+			throw new GradleException("Test code leaked into the packaged client: ${forbiddenEntries.join(', ')}")
+		}
+	}
+}
+
+tasks.register('collectRuntimeLicenses') {
+	dependsOn configurations.testRuntimeClasspath
+	inputs.files(configurations.testRuntimeClasspath)
+	outputs.dir(layout.buildDirectory.dir('generated/runtime-licenses'))
+
+	doLast {
+		def outputDirectory = layout.buildDirectory.dir('generated/runtime-licenses').get().asFile
+		delete outputDirectory
+		outputDirectory.mkdirs()
+
+		def artifacts = packagedRuntimeArtifacts().sort {
+			left, right ->
+			"${left.moduleVersion.id.group}:${left.name}:${left.moduleVersion.id.version}:${left.classifier ?: ''}" <=>
+				"${right.moduleVersion.id.group}:${right.name}:${right.moduleVersion.id.version}:${right.classifier ?: ''}"
+		}
+		def unexpectedModules = artifacts.collect {
+			"${it.moduleVersion.id.group}:${it.name}".toString()
+		}.toSet().findAll { !approvedRuntimeModules.contains(it) }
+		if (!unexpectedModules.isEmpty()) {
+			throw new GradleException(
+				"The runtime contains dependencies that have not been reviewed for redistribution: ${unexpectedModules.sort().join(', ')}"
+			)
+		}
+		def inventory = []
+
+		artifacts.each { artifact ->
+			def classifierSuffix = artifact.classifier ? ":${artifact.classifier}" : ''
+			def coordinate = "${artifact.moduleVersion.id.group}:${artifact.name}:${artifact.moduleVersion.id.version}${classifierSuffix}"
+			def artifactDirectoryName = coordinate.replaceAll('[^A-Za-z0-9._-]', '_')
+			def artifactDirectory = new File(outputDirectory, artifactDirectoryName)
+			def discoveredNotices = []
+
+			zipTree(artifact.file).visit { details ->
+				if (details.directory) {
+					return
+				}
+
+				def path = details.relativePath.pathString
+				def fileName = path.tokenize('/').last()
+				if (fileName ==~ /(?i)(LICENSE|NOTICE|COPYING|COPYRIGHT)([._-].*)?/) {
+					artifactDirectory.mkdirs()
+					def destinationName = path.replaceAll('[^A-Za-z0-9._-]', '_')
+					new File(artifactDirectory, destinationName).bytes = details.file.bytes
+					discoveredNotices.add(path)
+				}
+			}
+
+			def status = discoveredNotices.isEmpty()
+				? 'no embedded notice; covered by the curated notices supplied with HapticScape'
+				: "embedded: ${discoveredNotices.sort().join(', ')}"
+			inventory.add("${coordinate} -- ${status}")
+		}
+
+		new File(outputDirectory, 'RESOLVED-DEPENDENCIES.txt').setText(
+			inventory.join(System.lineSeparator()) + System.lineSeparator(),
+			'UTF-8'
+		)
+	}
 }

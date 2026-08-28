@@ -1,0 +1,7 @@
+AOP Alliance 1.0
+
+The AOP Alliance project states that all source code provided by AOP Alliance
+is in the public domain.
+
+Project: https://aopalliance.sourceforge.net/
+Artifact: aopalliance:aopalliance:1.0
