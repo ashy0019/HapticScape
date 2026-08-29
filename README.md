@@ -18,8 +18,7 @@ RuneLite, Jagex, or the Intiface project.
 <tr>
 <td valign="top"><a href="https://github.com/user-attachments/assets/ba565485-ab23-4a56-9c72-c26366a8a78a"><img src="https://github.com/user-attachments/assets/ba565485-ab23-4a56-9c72-c26366a8a78a" width="180" alt="HapticScape alerts"></a></td>
 </tr>
-<tr>
-<td valign="top"><a href="https://github.com/user-attachments/assets/6044a42d-67f2-4d3c-a23a-ea7abd155594"><img src="https://github.com/user-attachments/assets/6044a42d-67f2-4d3c-a23a-ea7abd155594" width="180" alt="HapticScape custom pattern editor"></a></td>
+<td valign="top"><a href="https://github.com/user-attachments/assets/25834e1d-2e60-4c2b-adf2-3aee17961a2f"><img src="https://github.com/user-attachments/assets/25834e1d-2e60-4c2b-adf2-3aee17961a2f" width="180" alt="HapticScape graph"></a></td>
 </tr>
 </table>
 
