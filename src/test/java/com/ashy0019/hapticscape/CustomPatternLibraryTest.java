@@ -16,6 +16,8 @@ public class CustomPatternLibraryTest
 		assertEquals(1, library.size());
 		assertEquals("Custom 1", entry(library, 1).getName());
 		assertTrue(entry(library, 1).getPattern().isSilent());
+		assertEquals(500, entry(library, 1).getBeatDurationMillis());
+		assertEquals(1, entry(library, 1).getBeatCount());
 	}
 
 	@Test
@@ -24,7 +26,7 @@ public class CustomPatternLibraryTest
 		CustomPatternLibrary original = CustomPatternLibrary.defaults()
 			.addBlankPattern()
 			.withName(2, "Dragon breath")
-			.withPattern(2, new CustomPattern(0, 25, 100, 0));
+			.withPattern(2, new CustomPattern(0, 25, 100, 0), 750, 7);
 
 		CustomPatternLibrary restored = CustomPatternLibrary.fromConfigValue(
 			original.toConfigValue()
@@ -32,6 +34,21 @@ public class CustomPatternLibraryTest
 
 		assertEquals("Dragon breath", entry(restored, 2).getName());
 		assertEquals(entry(original, 2).getPattern(), entry(restored, 2).getPattern());
+		assertEquals(750, entry(restored, 2).getBeatDurationMillis());
+		assertEquals(7, entry(restored, 2).getBeatCount());
+	}
+
+	@Test
+	public void versionThreeStorageMigratesToDefaultPlaybackSettings()
+	{
+		CustomPatternLibrary restored = CustomPatternLibrary.fromConfigValue(
+			"v3|2|1=Old custom,0,100,0"
+		);
+
+		assertEquals("Old custom", entry(restored, 1).getName());
+		assertEquals(new CustomPattern(0, 100, 0), entry(restored, 1).getPattern());
+		assertEquals(500, entry(restored, 1).getBeatDurationMillis());
+		assertEquals(1, entry(restored, 1).getBeatCount());
 	}
 
 	@Test
@@ -90,6 +107,8 @@ public class CustomPatternLibraryTest
 		assertEquals("Custom 1", entry(restored, 1).getName());
 		assertEquals("Goblin drum", entry(restored, 2).getName());
 		assertEquals(new CustomPattern(100, 50, 0), entry(restored, 2).getPattern());
+		assertEquals(500, entry(restored, 2).getBeatDurationMillis());
+		assertEquals(1, entry(restored, 2).getBeatCount());
 	}
 
 	@Test

@@ -1,6 +1,6 @@
 package com.ashy0019.hapticscape.ui;
 
-import com.ashy0019.hapticscape.CustomPattern;
+import com.ashy0019.hapticscape.CustomPatternEntry;
 import com.ashy0019.hapticscape.CustomPatternLibrary;
 import com.ashy0019.hapticscape.HapticScapeConfig;
 import com.ashy0019.hapticscape.HapticPatternSelection;
@@ -117,7 +117,7 @@ public final class HapticScapePanel extends PluginPanel
 		Runnable testLevelUpAction,
 		Runnable testSkillProfileAction,
 		Runnable testNotificationAction,
-		Consumer<CustomPattern> patternForgePreviewAction,
+		Consumer<CustomPatternEntry> patternForgePreviewAction,
 		Runnable stopAction)
 	{
 		super(false);
@@ -633,7 +633,6 @@ public final class HapticScapePanel extends PluginPanel
 		patternForgePanel = new PatternForgePanel(
 			customPatterns,
 			configManager,
-			this::getPulseDurationMillis,
 			patternForgePreviewAction,
 			this::applyCustomPatternLibrary
 		);

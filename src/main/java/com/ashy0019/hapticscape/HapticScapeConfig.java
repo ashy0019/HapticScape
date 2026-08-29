@@ -226,7 +226,7 @@ public interface HapticScapeConfig extends Config
 	@ConfigItem(
 		keyName = CUSTOM_PATTERNS_KEY,
 		name = "Pattern Forge library",
-		description = "Named custom haptic patterns created in the Pattern Forge",
+		description = "Named custom haptic patterns and timing created in the Pattern Forge",
 		position = 16,
 		hidden = true
 	)

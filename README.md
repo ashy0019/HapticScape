@@ -24,7 +24,7 @@ RuneLite, Jagex, or the Intiface project.
 ### Haptic controls
 
 - Adjust intensity from 0% to 100%.
-- Set the total pattern duration from 50 ms to 10 seconds.
+- Set built-in pattern duration from 50 ms to 10 seconds.
 - Choose from Single, Double, Triple, and Ascending built-in patterns.
 - Preview global XP, level-up, skill-profile, and notification feedback without
   waiting for an in-game event.
@@ -33,6 +33,10 @@ RuneLite, Jagex, or the Intiface project.
 ### Custom Pattern Forge
 
 - Draw an intensity curve directly with the mouse.
+- Set the length of one drawn beat from 50 ms to 10 seconds.
+- Repeat that beat anywhere from 1 to 72 times.
+- Reuse the saved custom timing for XP, level-ups, skill profiles, milestones,
+  and notifications while retaining each trigger's configured intensity.
 - Undo edits, clear the canvas, and save changes.
 - Add, rename, and delete custom patterns.
 - Keep up to 100 custom patterns at once.
