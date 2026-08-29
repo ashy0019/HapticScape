@@ -19,9 +19,9 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.function.Consumer;
-import java.util.function.IntSupplier;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.DefaultComboBoxModel;
@@ -33,6 +33,8 @@ import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JSpinner;
+import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.Timer;
 import net.runelite.client.config.ConfigManager;
@@ -42,8 +44,7 @@ final class PatternForgePanel extends JPanel
 	private static final int MAXIMUM_UNDO_STATES = 20;
 
 	private final ConfigManager configManager;
-	private final IntSupplier previewDurationMillis;
-	private final Consumer<CustomPattern> previewAction;
+	private final Consumer<CustomPatternEntry> previewAction;
 	private final Consumer<CustomPatternLibrary> libraryChangeAction;
 	private final JComboBox<CustomPatternEntry> patternComboBox = new JComboBox<>();
 	private final JButton addButton = new JButton("Add");
@@ -54,6 +55,19 @@ final class PatternForgePanel extends JPanel
 	private final JButton clearButton = new JButton("Clear");
 	private final JButton previewButton = new JButton("Preview");
 	private final JButton saveButton = new JButton("Save");
+	private final JSpinner beatDurationSpinner = new JSpinner(new SpinnerNumberModel(
+		CustomPatternEntry.DEFAULT_BEAT_DURATION_MILLIS,
+		CustomPatternEntry.MINIMUM_BEAT_DURATION_MILLIS,
+		CustomPatternEntry.MAXIMUM_BEAT_DURATION_MILLIS,
+		50
+	));
+	private final JSpinner beatCountSpinner = new JSpinner(new SpinnerNumberModel(
+		CustomPatternEntry.DEFAULT_BEAT_COUNT,
+		CustomPatternEntry.MINIMUM_BEAT_COUNT,
+		CustomPatternEntry.MAXIMUM_BEAT_COUNT,
+		1
+	));
+	private final JLabel playbackSummaryLabel = new JLabel();
 	private final JLabel saveStateLabel = new JLabel("Saved", SwingConstants.RIGHT);
 	private final Deque<CustomPattern> undoStates = new ArrayDeque<>();
 
@@ -68,16 +82,11 @@ final class PatternForgePanel extends JPanel
 	PatternForgePanel(
 		CustomPatternLibrary library,
 		ConfigManager configManager,
-		IntSupplier previewDurationMillis,
-		Consumer<CustomPattern> previewAction,
+		Consumer<CustomPatternEntry> previewAction,
 		Consumer<CustomPatternLibrary> libraryChangeAction)
 	{
 		this.library = Objects.requireNonNull(library, "library");
 		this.configManager = Objects.requireNonNull(configManager, "configManager");
-		this.previewDurationMillis = Objects.requireNonNull(
-			previewDurationMillis,
-			"previewDurationMillis"
-		);
 		this.previewAction = Objects.requireNonNull(previewAction, "previewAction");
 		this.libraryChangeAction = Objects.requireNonNull(
 			libraryChangeAction,
@@ -128,18 +137,35 @@ final class PatternForgePanel extends JPanel
 		addVerticalComponent(this, patternRow);
 
 		JLabel instructions = new JLabel(
-			"<html>Draw directly on the curve below.<br>Left to right is time; height is intensity.</html>"
+			"<html>Draw one beat on the curve below.<br>Left to right is time; height is intensity.</html>"
 		);
 		instructions.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));
 		addVerticalComponent(this, instructions);
 		addVerticalComponent(this, canvas);
 
-		JPanel saveStateRow = new JPanel(new BorderLayout());
-		JLabel activeSettingsLabel = new JLabel("Global intensity + duration");
-		activeSettingsLabel.setToolTipText(
-			"Custom patterns use the active global intensity and duration"
+		configureCompactSpinner(beatDurationSpinner);
+		configureCompactSpinner(beatCountSpinner);
+		beatDurationSpinner.setToolTipText(
+			"Length of one drawn beat, from 50 ms to 10 seconds"
 		);
-		saveStateRow.add(activeSettingsLabel, BorderLayout.WEST);
+		beatCountSpinner.setToolTipText(
+			"Number of times to repeat the drawn beat, from 1 to 72"
+		);
+		JPanel beatDurationRow = new JPanel(new BorderLayout(8, 0));
+		beatDurationRow.add(new JLabel("Beat length (ms)"), BorderLayout.CENTER);
+		beatDurationRow.add(beatDurationSpinner, BorderLayout.EAST);
+		addVerticalComponent(this, beatDurationRow);
+
+		JPanel beatCountRow = new JPanel(new BorderLayout(8, 0));
+		beatCountRow.add(new JLabel("Beats"), BorderLayout.CENTER);
+		beatCountRow.add(beatCountSpinner, BorderLayout.EAST);
+		addVerticalComponent(this, beatCountRow);
+
+		JPanel saveStateRow = new JPanel(new BorderLayout());
+		playbackSummaryLabel.setToolTipText(
+			"Custom patterns save their timing; intensity follows the active trigger"
+		);
+		saveStateRow.add(playbackSummaryLabel, BorderLayout.WEST);
 		saveStateRow.add(saveStateLabel, BorderLayout.EAST);
 		addVerticalComponent(this, saveStateRow);
 
@@ -160,6 +186,8 @@ final class PatternForgePanel extends JPanel
 		clearButton.addActionListener(event -> changeDraft(CustomPattern.silent(), true));
 		previewButton.addActionListener(event -> preview());
 		saveButton.addActionListener(event -> saveDraft());
+		beatDurationSpinner.addChangeListener(event -> changePlaybackSettings());
+		beatCountSpinner.addChangeListener(event -> changePlaybackSettings());
 
 		int initialId = library.getPatterns().get(0).getId();
 		refreshPatternChoices(initialId);
@@ -170,6 +198,13 @@ final class PatternForgePanel extends JPanel
 	{
 		button.setMargin(new Insets(2, 3, 2, 3));
 		button.putClientProperty("JButton.minimumWidth", 0);
+	}
+
+	private static void configureCompactSpinner(JSpinner spinner)
+	{
+		Dimension preferred = spinner.getPreferredSize();
+		spinner.setPreferredSize(new Dimension(82, preferred.height));
+		spinner.setMaximumSize(new Dimension(82, preferred.height));
 	}
 
 	private static void addVerticalComponent(JPanel panel, JComponent component)
@@ -236,6 +271,9 @@ final class PatternForgePanel extends JPanel
 			patternComboBox.setSelectedItem(entry);
 			draft = entry.getPattern();
 			canvas.setPattern(draft);
+			beatDurationSpinner.setValue(entry.getBeatDurationMillis());
+			beatCountSpinner.setValue(entry.getBeatCount());
+			updatePlaybackSummary();
 			undoStates.clear();
 			setDirty(false);
 			updateLibraryButtons();
@@ -277,6 +315,17 @@ final class PatternForgePanel extends JPanel
 		setDirty(true);
 	}
 
+	private void changePlaybackSettings()
+	{
+		if (loadingControls)
+		{
+			return;
+		}
+		stopAnimation();
+		updatePlaybackSummary();
+		setDirty(true);
+	}
+
 	private void undo()
 	{
 		if (undoStates.isEmpty())
@@ -291,7 +340,12 @@ final class PatternForgePanel extends JPanel
 
 	private void saveDraft()
 	{
-		library = library.withPattern(selectedPatternId, draft);
+		library = library.withPattern(
+			selectedPatternId,
+			draft,
+			getBeatDurationMillis(),
+			getBeatCount()
+		);
 		persistLibrary();
 		setDirty(false);
 	}
@@ -416,26 +470,37 @@ final class PatternForgePanel extends JPanel
 	private void preview()
 	{
 		startAnimation();
-		previewAction.accept(draft);
+		CustomPatternEntry previewEntry = library.withPattern(
+			selectedPatternId,
+			draft,
+			getBeatDurationMillis(),
+			getBeatCount()
+		).findById(selectedPatternId).orElse(null);
+		if (previewEntry != null)
+		{
+			previewAction.accept(previewEntry);
+		}
 	}
 
 	private void startAnimation()
 	{
 		stopAnimation();
-		int durationMillis = Math.max(1, previewDurationMillis.getAsInt());
+		int beatDurationMillis = getBeatDurationMillis();
+		long totalDurationMillis = (long) beatDurationMillis * getBeatCount();
 		previewStartedAt = System.currentTimeMillis();
 		canvas.setPlayheadProgress(0.0);
 		playheadTimer = new Timer(30, event ->
 		{
-			double progress = (double) (System.currentTimeMillis() - previewStartedAt)
-				/ durationMillis;
-			if (progress >= 1.0)
+			long elapsedMillis = System.currentTimeMillis() - previewStartedAt;
+			if (elapsedMillis >= totalDurationMillis)
 			{
 				stopAnimation();
 			}
 			else
 			{
-				canvas.setPlayheadProgress(progress);
+				double beatProgress = (double) (elapsedMillis % beatDurationMillis)
+					/ beatDurationMillis;
+				canvas.setPlayheadProgress(beatProgress);
 			}
 		});
 		playheadTimer.start();
@@ -449,6 +514,35 @@ final class PatternForgePanel extends JPanel
 			playheadTimer = null;
 		}
 		canvas.setPlayheadProgress(-1.0);
+	}
+
+	private int getBeatDurationMillis()
+	{
+		return ((Number) beatDurationSpinner.getValue()).intValue();
+	}
+
+	private int getBeatCount()
+	{
+		return ((Number) beatCountSpinner.getValue()).intValue();
+	}
+
+	private void updatePlaybackSummary()
+	{
+		long totalMillis = (long) getBeatDurationMillis() * getBeatCount();
+		playbackSummaryLabel.setText("Total " + formatDuration(totalMillis));
+	}
+
+	private static String formatDuration(long durationMillis)
+	{
+		if (durationMillis < 1_000)
+		{
+			return durationMillis + " ms";
+		}
+		if (durationMillis % 1_000 == 0)
+		{
+			return (durationMillis / 1_000) + " s";
+		}
+		return String.format(Locale.ROOT, "%.1f s", durationMillis / 1_000.0);
 	}
 
 	private void setDirty(boolean dirty)

@@ -328,7 +328,7 @@ public class HapticScapePlugin extends Plugin
 		);
 	}
 
-	private void sendPatternForgePreview(CustomPattern pattern)
+	private void sendPatternForgePreview(CustomPatternEntry pattern)
 	{
 		HapticScapePanel currentPanel = panel;
 		if (intifaceService == null || currentPanel == null)
@@ -337,9 +337,12 @@ public class HapticScapePlugin extends Plugin
 		}
 
 		double intensity = currentPanel.getIntensityPercent() / 100.0;
-		Duration duration = Duration.ofMillis(currentPanel.getPulseDurationMillis());
-		log.debug("Previewing unsaved Pattern Forge curve");
-		intifaceService.playPattern(pattern.createPattern(intensity, duration));
+		log.debug(
+			"Previewing unsaved Pattern Forge curve as {} beats of {} ms",
+			pattern.getBeatCount(),
+			pattern.getBeatDurationMillis()
+		);
+		intifaceService.playPattern(pattern.createPattern(intensity));
 	}
 
 	private void sendConfiguredPattern(HapticPatternSelection preset, String triggerName)
@@ -366,14 +369,6 @@ public class HapticScapePlugin extends Plugin
 			return;
 		}
 
-		log.debug(
-			"Requesting {} pattern for {} at {}% for {} ms",
-			preset,
-			triggerName,
-			intensityPercent,
-			durationMillis
-		);
-
 		double intensity = intensityPercent / 100.0;
 		Duration duration = Duration.ofMillis(durationMillis);
 		HapticScapePanel currentPanel = panel;
@@ -385,6 +380,17 @@ public class HapticScapePlugin extends Plugin
 			currentPanel.getCustomPatterns(),
 			intensity,
 			duration
+		);
+		long playbackDurationMillis = pattern.getSteps().stream()
+			.map(HapticPattern.Step::getDuration)
+			.mapToLong(Duration::toMillis)
+			.sum();
+		log.debug(
+			"Requesting {} pattern for {} at {}% for {} ms",
+			preset,
+			triggerName,
+			intensityPercent,
+			playbackDurationMillis
 		);
 		intifaceService.playPattern(pattern);
 	}

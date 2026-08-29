@@ -39,6 +39,25 @@ public final class HapticPattern
 		return steps;
 	}
 
+	public HapticPattern repeated(int repetitions)
+	{
+		if (repetitions < 1)
+		{
+			throw new IllegalArgumentException("A haptic pattern must play at least once");
+		}
+		if (repetitions == 1)
+		{
+			return this;
+		}
+
+		List<Step> repeatedSteps = new ArrayList<>(steps.size() * repetitions);
+		for (int repetition = 0; repetition < repetitions; repetition++)
+		{
+			repeatedSteps.addAll(steps);
+		}
+		return new HapticPattern(repeatedSteps);
+	}
+
 	public static final class Step
 	{
 		private final double intensity;

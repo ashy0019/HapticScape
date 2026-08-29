@@ -11,14 +11,16 @@ import java.util.StringJoiner;
 /**
  * Immutable collection of custom patterns.
  *
- * <p>The v3 format stores a monotonically increasing next id as well as the
- * current entries. IDs are therefore not recycled after deletion, which keeps
- * saved pattern assignments unambiguous.</p>
+ * <p>The v4 format stores a monotonically increasing next id as well as each
+ * pattern's curve, beat duration, and beat count. IDs are therefore not
+ * recycled after deletion, which keeps saved pattern assignments
+ * unambiguous.</p>
  */
 public final class CustomPatternLibrary
 {
 	public static final int MAXIMUM_PATTERN_COUNT = 100;
 
+	private static final String VERSION_FOUR_PREFIX = "v4|";
 	private static final String VERSION_THREE_PREFIX = "v3|";
 	private static final String VERSION_TWO_PREFIX = "v2|";
 	private static final int MAXIMUM_NAME_LENGTH = 18;
@@ -45,7 +47,9 @@ public final class CustomPatternLibrary
 			copy.add(new CustomPatternEntry(
 				entry.getId(),
 				sanitizeName(entry.getName(), entry.getId()),
-				entry.getPattern()
+				entry.getPattern(),
+				entry.getBeatDurationMillis(),
+				entry.getBeatCount()
 			));
 			greatestId = Math.max(greatestId, entry.getId());
 		}
@@ -74,9 +78,13 @@ public final class CustomPatternLibrary
 		}
 
 		String value = configuredValue.trim();
+		if (value.startsWith(VERSION_FOUR_PREFIX))
+		{
+			return parseVersionFour(value);
+		}
 		if (value.startsWith(VERSION_THREE_PREFIX))
 		{
-			return parseVersionThree(value);
+			return migrateVersionThree(value);
 		}
 		if (value.startsWith(VERSION_TWO_PREFIX))
 		{
@@ -133,7 +141,9 @@ public final class CustomPatternLibrary
 		updated.add(new CustomPatternEntry(
 			nextPatternId,
 			defaultName(nextDefaultNameNumber()),
-			CustomPattern.silent()
+			CustomPattern.silent(),
+			CustomPatternEntry.DEFAULT_BEAT_DURATION_MILLIS,
+			CustomPatternEntry.DEFAULT_BEAT_COUNT
 		));
 		return new CustomPatternLibrary(updated, nextPatternId + 1);
 	}
@@ -141,6 +151,19 @@ public final class CustomPatternLibrary
 	public CustomPatternLibrary withPattern(int id, CustomPattern pattern)
 	{
 		return replace(id, entry -> entry.withPattern(pattern));
+	}
+
+	public CustomPatternLibrary withPattern(
+		int id,
+		CustomPattern pattern,
+		int beatDurationMillis,
+		int beatCount)
+	{
+		return replace(
+			id,
+			entry -> entry.withPattern(pattern)
+				.withPlayback(beatDurationMillis, beatCount)
+		);
 	}
 
 	public CustomPatternLibrary withName(int id, String name)
@@ -168,10 +191,12 @@ public final class CustomPatternLibrary
 			entries.add(
 				entry.getId()
 					+ "=" + entry.getName()
+					+ "," + entry.getBeatDurationMillis()
+					+ "," + entry.getBeatCount()
 					+ "," + entry.getPattern().toConfigValue()
 			);
 		}
-		return VERSION_THREE_PREFIX + nextPatternId + "|" + entries;
+		return VERSION_FOUR_PREFIX + nextPatternId + "|" + entries;
 	}
 
 	private CustomPatternLibrary replace(int id, EntryUpdate update)
@@ -189,9 +214,22 @@ public final class CustomPatternLibrary
 		return this;
 	}
 
-	private static CustomPatternLibrary parseVersionThree(String value)
+	private static CustomPatternLibrary parseVersionFour(String value)
 	{
-		String body = value.substring(VERSION_THREE_PREFIX.length());
+		return parseVersionWithNextId(value, VERSION_FOUR_PREFIX, true);
+	}
+
+	private static CustomPatternLibrary migrateVersionThree(String value)
+	{
+		return parseVersionWithNextId(value, VERSION_THREE_PREFIX, false);
+	}
+
+	private static CustomPatternLibrary parseVersionWithNextId(
+		String value,
+		String prefix,
+		boolean includesPlayback)
+	{
+		String body = value.substring(prefix.length());
 		String[] sections = body.split("\\|", 2);
 		if (sections.length != 2)
 		{
@@ -201,7 +239,11 @@ public final class CustomPatternLibrary
 		try
 		{
 			int configuredNextId = Integer.parseInt(sections[0]);
-			List<CustomPatternEntry> parsed = parseEntries(sections[1], false);
+			List<CustomPatternEntry> parsed = parseEntries(
+				sections[1],
+				false,
+				includesPlayback
+			);
 			if (parsed.isEmpty())
 			{
 				return defaults();
@@ -221,7 +263,7 @@ public final class CustomPatternLibrary
 	private static CustomPatternLibrary migrateVersionTwo(String value)
 	{
 		String entries = value.substring(VERSION_TWO_PREFIX.length());
-		List<CustomPatternEntry> parsed = parseEntries(entries, true);
+		List<CustomPatternEntry> parsed = parseEntries(entries, true, false);
 		if (parsed.isEmpty())
 		{
 			return defaults();
@@ -233,7 +275,10 @@ public final class CustomPatternLibrary
 		return new CustomPatternLibrary(parsed, greatestId + 1);
 	}
 
-	private static List<CustomPatternEntry> parseEntries(String entries, boolean legacySlots)
+	private static List<CustomPatternEntry> parseEntries(
+		String entries,
+		boolean legacySlots,
+		boolean includesPlayback)
 	{
 		List<CustomPatternEntry> parsed = new ArrayList<>();
 		Set<Integer> ids = new HashSet<>();
@@ -249,8 +294,8 @@ public final class CustomPatternLibrary
 			{
 				continue;
 			}
-			String[] valueFields = entryFields[1].split(",", 2);
-			if (valueFields.length != 2)
+			String[] valueFields = entryFields[1].split(",", includesPlayback ? 4 : 2);
+			if (valueFields.length != (includesPlayback ? 4 : 2))
 			{
 				continue;
 			}
@@ -265,10 +310,19 @@ public final class CustomPatternLibrary
 					continue;
 				}
 				String name = migrateLegacyName(valueFields[0], id, legacySlots);
+				int beatDurationMillis = includesPlayback
+					? Integer.parseInt(valueFields[1])
+					: CustomPatternEntry.DEFAULT_BEAT_DURATION_MILLIS;
+				int beatCount = includesPlayback
+					? Integer.parseInt(valueFields[2])
+					: CustomPatternEntry.DEFAULT_BEAT_COUNT;
+				String patternValue = valueFields[includesPlayback ? 3 : 1];
 				parsed.add(new CustomPatternEntry(
 					id,
 					sanitizeName(name, id),
-					CustomPattern.fromConfigValue(valueFields[1])
+					CustomPattern.fromConfigValue(patternValue),
+					beatDurationMillis,
+					beatCount
 				));
 			}
 			catch (IllegalArgumentException ignored)
@@ -324,7 +378,13 @@ public final class CustomPatternLibrary
 
 	private static CustomPatternEntry blankEntry(int id)
 	{
-		return new CustomPatternEntry(id, defaultName(id), CustomPattern.silent());
+		return new CustomPatternEntry(
+			id,
+			defaultName(id),
+			CustomPattern.silent(),
+			CustomPatternEntry.DEFAULT_BEAT_DURATION_MILLIS,
+			CustomPatternEntry.DEFAULT_BEAT_COUNT
+		);
 	}
 
 	private int nextDefaultNameNumber()

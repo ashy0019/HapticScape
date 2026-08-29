@@ -31,15 +31,41 @@ public class HapticPatternSelectionTest
 	{
 		CustomPatternLibrary library = CustomPatternLibrary.defaults()
 			.addBlankPattern()
-			.withPattern(2, new CustomPattern(100, 0));
+			.withPattern(2, new CustomPattern(100, 0), 100, 3);
 		HapticPattern pattern = HapticPatternSelection.custom(2).createPattern(
 			library,
 			0.5,
-			Duration.ofMillis(100)
+			Duration.ofMillis(999)
 		);
+		long durationMillis = pattern.getSteps().stream()
+			.map(HapticPattern.Step::getDuration)
+			.mapToLong(Duration::toMillis)
+			.sum();
 
+		assertEquals(6, pattern.getSteps().size());
 		assertEquals(0.5, pattern.getSteps().get(0).getIntensity(), 0.0001);
 		assertEquals(0.0, pattern.getSteps().get(1).getIntensity(), 0.0001);
+		assertEquals(0.5, pattern.getSteps().get(2).getIntensity(), 0.0001);
+		assertEquals(300, durationMillis);
+	}
+
+	@Test
+	public void customPatternSupportsSeventyTwoBeats()
+	{
+		CustomPatternLibrary library = CustomPatternLibrary.defaults()
+			.withPattern(1, new CustomPattern(100, 0), 50, 72);
+
+		HapticPattern pattern = HapticPatternSelection.custom(1).createPattern(
+			library,
+			0.25,
+			Duration.ofMillis(500)
+		);
+
+		assertEquals(72, pattern.getSteps().size());
+		assertEquals(3_600, pattern.getSteps().stream()
+			.map(HapticPattern.Step::getDuration)
+			.mapToLong(Duration::toMillis)
+			.sum());
 	}
 
 	@Test
