@@ -12,6 +12,8 @@ import com.ashy0019.hapticscape.music.MusicResponse;
 import com.ashy0019.hapticscape.music.MusicSyncService;
 import com.ashy0019.hapticscape.music.MusicSyncSettings;
 import com.ashy0019.hapticscape.music.WasapiLoopbackCapture;
+import com.ashy0019.hapticscape.rogue.RogueFeedbackEvent;
+import com.ashy0019.hapticscape.rogue.feedback.CasinoFeedbackMapper;
 import com.ashy0019.hapticscape.ui.HapticScapePanel;
 import com.ashy0019.hapticscape.ui.Level99CelebrationOverlay;
 import com.ashy0019.hapticscape.update.UpdateCheckService;
@@ -76,6 +78,8 @@ public class HapticScapePlugin extends Plugin
 {
 	private static final String LEVEL_99_CHEER_RESOURCE = "/level99-cheer.wav";
 	private static final float LEVEL_99_CHEER_GAIN_DB = -4.0f;
+	private static final String ROGUE_UNLOCK_STING_RESOURCE = "/rogue/rogue-unlock.wav";
+	private static final float ROGUE_UNLOCK_STING_GAIN_DB = -4.0f;
 	private static final int VENOM_THRESHOLD = 1_000_000;
 
 	private final XpTracker xpTracker = new XpTracker();
@@ -177,6 +181,8 @@ public class HapticScapePlugin extends Plugin
 			clickerService::click,
 			updatePreferencesStore,
 			updateCheckService,
+			this::dispatchRogueFeedback,
+			this::playRogueUnlockStingAsync,
 			intifaceService::stopAll
 		);
 		intifaceService.setConnectionListener(panel::updateConnection);
@@ -935,6 +941,51 @@ public class HapticScapePlugin extends Plugin
 			HapticEventType.MANUAL_PREVIEW,
 			pattern.createPattern(1.0)
 		));
+	}
+
+	private void playRogueUnlockStingAsync()
+	{
+		CompletableFuture.runAsync(this::playRogueUnlockSting);
+	}
+
+	private void playRogueUnlockSting()
+	{
+		try
+		{
+			audioPlayer.play(
+				HapticScapePlugin.class,
+				ROGUE_UNLOCK_STING_RESOURCE,
+				ROGUE_UNLOCK_STING_GAIN_DB
+			);
+		}
+		catch (Exception e)
+		{
+			log.warn("Unable to play Rogue Mode unlock sting", e);
+		}
+	}
+
+	private void dispatchRogueFeedback(RogueFeedbackEvent event)
+	{
+		if (event == null)
+		{
+			return;
+		}
+
+		if (event.shouldClick() && clickerService != null)
+		{
+			clickerService.click();
+		}
+
+		if (intifaceService == null)
+		{
+			return;
+		}
+
+		HapticScapePanel currentPanel = panel;
+		double scale = currentPanel == null
+			? 1.0
+			: currentPanel.getIntensityPercent() / 100.0;
+		intifaceService.play(CasinoFeedbackMapper.toRequest(event, scale));
 	}
 
 	private void sendConfiguredPattern(

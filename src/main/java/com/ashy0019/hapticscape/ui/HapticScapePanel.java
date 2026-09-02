@@ -19,12 +19,21 @@ import com.ashy0019.hapticscape.device.ConnectionState;
 import com.ashy0019.hapticscape.device.DeviceInfo;
 import com.ashy0019.hapticscape.music.MusicSyncSettings;
 import com.ashy0019.hapticscape.music.MusicSyncSnapshot;
+import com.ashy0019.hapticscape.rogue.KonamiCodeDetector;
+import com.ashy0019.hapticscape.rogue.RogueFeedbackEvent;
+import com.ashy0019.hapticscape.rogue.ui.RogueLauncherPanel;
+import com.ashy0019.hapticscape.rogue.ui.RoguePanel;
 import com.ashy0019.hapticscape.update.UpdateCheckService;
 import com.ashy0019.hapticscape.update.UpdatePreferencesStore;
 import java.awt.BorderLayout;
+import java.awt.CardLayout;
 import java.awt.Dimension;
 import java.awt.GridLayout;
+import java.awt.KeyEventDispatcher;
+import java.awt.KeyboardFocusManager;
+import java.awt.Window;
 import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.concurrent.TimeUnit;
@@ -47,6 +56,7 @@ import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
+import javax.swing.text.JTextComponent;
 import net.runelite.api.Skill;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.ui.PluginPanel;
@@ -55,8 +65,19 @@ public final class HapticScapePanel extends PluginPanel
 {
 	private static final int DEVELOPER_UNLOCK_CLICKS = 9;
 	private static final long DEVELOPER_UNLOCK_WINDOW_NANOS = TimeUnit.SECONDS.toNanos(4);
+	private static final String ROGUE_UNLOCKED_KEY = "rogueUnlocked";
+	private static final String ROGUE_UNLOCK_STING_PLAYED_KEY = "rogueUnlockStingPlayed";
+	private static final String NORMAL_CARD = "normal";
+	private static final String ROGUE_CARD = "rogue";
 
 	private final ConfigManager configManager;
+	private final Consumer<RogueFeedbackEvent> rogueFeedbackAction;
+	private final Runnable rogueUnlockSoundAction;
+	private final KonamiCodeDetector konamiCodeDetector = new KonamiCodeDetector();
+	private final KeyEventDispatcher rogueKeyDispatcher;
+	private final JTabbedPane tabs;
+	private final CardLayout contentLayout = new CardLayout();
+	private final JPanel contentHost = new JPanel(contentLayout);
 	private final JLabel statusLabel = new JLabel("Disconnected", SwingConstants.CENTER);
 	private final DefaultListModel<DeviceInfo> deviceModel = new DefaultListModel<>();
 	private final JButton connectButton = new JButton("Connect");
@@ -64,6 +85,7 @@ public final class HapticScapePanel extends PluginPanel
 	private final JButton testButton = new JButton("Test pattern");
 	private final JButton testLevelUpButton = new JButton("Test level-up");
 	private final JButton previewLevel99Button = new JButton("Test 99");
+	private final JButton resetRogueDiscoveryButton = new JButton("Reset Rogue");
 	private final JButton stopButton = new JButton("Stop now");
 	private final JButton updatesButton = new JButton("Updates");
 	private final JCheckBox levelUpCheckBox = new JCheckBox("Level-ups");
@@ -77,6 +99,7 @@ public final class HapticScapePanel extends PluginPanel
 	private final JComboBox<HapticPatternSelection> levelUpPatternComboBox;
 	private final JComboBox<HapticPatternSelection> milestonePatternComboBox;
 	private final JPanel level99Row = new JPanel(new BorderLayout(8, 0));
+	private final JPanel developerControlsRow = new JPanel(new GridLayout(1, 2, 6, 0));
 	private final SkillsPanel skillsPanel;
 	private final ProfilesPanel profilesPanel;
 	private final AlertsPanel alertsPanel;
@@ -84,6 +107,10 @@ public final class HapticScapePanel extends PluginPanel
 	private final MusicPanel musicPanel;
 	private final ClickerPanel clickerPanel;
 	private final UpdatesPanel updatesPanel;
+	private final RoguePanel roguePanel;
+	private final RogueLauncherPanel rogueLauncher;
+	private boolean rogueModeUnlocked;
+	private boolean rogueViewActive;
 	private final Timer developerStatusTimer;
 
 	private volatile int intensityPercent;
@@ -119,11 +146,15 @@ public final class HapticScapePanel extends PluginPanel
 		Runnable testClickAction,
 		UpdatePreferencesStore updatePreferencesStore,
 		UpdateCheckService updateCheckService,
+		Consumer<RogueFeedbackEvent> rogueFeedbackAction,
+		Runnable rogueUnlockSoundAction,
 		Runnable stopAction)
 	{
 		super(false);
 		this.configManager = configManager;
-		setLayout(new BorderLayout(0, 8));
+		this.rogueFeedbackAction = rogueFeedbackAction;
+		this.rogueUnlockSoundAction = rogueUnlockSoundAction;
+		setLayout(new BorderLayout(0, 6));
 		setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
 		statusLabel.setBorder(BorderFactory.createEmptyBorder(4, 2, 4, 2));
@@ -202,7 +233,11 @@ public final class HapticScapePanel extends PluginPanel
 			"Preview the Level 99 ceremony using the skill selected on Profiles"
 		);
 		previewLevel99Button.setMargin(new java.awt.Insets(2, 6, 2, 6));
-		previewLevel99Button.setVisible(false);
+		resetRogueDiscoveryButton.setMargin(new java.awt.Insets(2, 6, 2, 6));
+		resetRogueDiscoveryButton.setToolTipText(
+			"Forget Rogue discovery and the unlock sting so the Konami code can be tested again"
+		);
+		developerControlsRow.setVisible(false);
 
 		configureGlobalListeners();
 		JPanel settingsPanel = createGlobalSettingsPanel();
@@ -241,11 +276,13 @@ public final class HapticScapePanel extends PluginPanel
 			testClickAction
 		);
 		updatesPanel = new UpdatesPanel(updatePreferencesStore, updateCheckService);
+		roguePanel = new RoguePanel(configManager, rogueFeedbackAction);
+		rogueLauncher = new RogueLauncherPanel(this::toggleRogueView);
 
-		JTabbedPane tabs = new JTabbedPane(JTabbedPane.TOP, JTabbedPane.SCROLL_TAB_LAYOUT);
+		tabs = new JTabbedPane(JTabbedPane.TOP, JTabbedPane.SCROLL_TAB_LAYOUT);
 		tabs.putClientProperty(
 			"FlatLaf.style",
-			"tabInsets: 2,1,2,1; tabHeight: 22; tabAreaAlignment: center"
+			"tabInsets: 2,1,2,1; tabHeight: 26; tabAreaAlignment: center"
 		);
 		PanelUi.addCompactTab(tabs, "Skills", skillsPanel);
 		PanelUi.addCompactTab(tabs, "XP", profilesPanel);
@@ -253,19 +290,16 @@ public final class HapticScapePanel extends PluginPanel
 		PanelUi.addCompactTab(tabs, "Forge", customPatternsPanel);
 		PanelUi.addCompactTab(tabs, "Music", musicPanel);
 		PanelUi.addCompactTab(tabs, "Click", clickerPanel);
-
 		JPanel topPanel = new JPanel();
 		topPanel.setLayout(new BoxLayout(topPanel, BoxLayout.Y_AXIS));
 		PanelUi.addVerticalComponent(topPanel, statusLabel);
 		PanelUi.addVerticalComponent(topPanel, settingsPanel);
 		PanelUi.addVerticalComponent(topPanel, tabs);
-		add(topPanel, BorderLayout.NORTH);
 
 		JList<DeviceInfo> deviceList = new JList<>(deviceModel);
 		JScrollPane scrollPane = new JScrollPane(deviceList);
 		scrollPane.setPreferredSize(new Dimension(0, 140));
 		scrollPane.setBorder(BorderFactory.createTitledBorder("Devices"));
-		add(scrollPane, BorderLayout.CENTER);
 
 		connectButton.addActionListener(event ->
 		{
@@ -277,6 +311,7 @@ public final class HapticScapePanel extends PluginPanel
 		testButton.addActionListener(event -> testAction.run());
 		testLevelUpButton.addActionListener(event -> testLevelUpAction.run());
 		previewLevel99Button.addActionListener(event -> previewLevel99Action.run());
+		resetRogueDiscoveryButton.addActionListener(event -> resetRogueDiscovery());
 		stopButton.addActionListener(event ->
 		{
 			musicPanel.disableMusicSync();
@@ -298,8 +333,27 @@ public final class HapticScapePanel extends PluginPanel
 		buttons.setLayout(new BoxLayout(buttons, BoxLayout.Y_AXIS));
 		PanelUi.addVerticalComponent(buttons, primaryButtons);
 		PanelUi.addVerticalComponent(buttons, updatesButton);
-		add(buttons, BorderLayout.SOUTH);
+
+		JPanel normalView = new JPanel(new BorderLayout(0, 8));
+		normalView.add(topPanel, BorderLayout.NORTH);
+		normalView.add(scrollPane, BorderLayout.CENTER);
+		normalView.add(buttons, BorderLayout.SOUTH);
+
+		contentHost.add(normalView, NORMAL_CARD);
+		contentHost.add(roguePanel, ROGUE_CARD);
+		add(rogueLauncher, BorderLayout.NORTH);
+		add(contentHost, BorderLayout.CENTER);
+		contentLayout.show(contentHost, NORMAL_CARD);
+
+		if (Boolean.parseBoolean(configManager.getConfiguration(HapticScapeConfig.GROUP, ROGUE_UNLOCKED_KEY)))
+		{
+			ensureRogueAccess(false, false);
+		}
+
 		applyState(ConnectionSnapshot.disconnected());
+		rogueKeyDispatcher = this::handleRogueKeyEvent;
+		KeyboardFocusManager.getCurrentKeyboardFocusManager()
+			.addKeyEventDispatcher(rogueKeyDispatcher);
 	}
 
 	public int getIntensityPercent()
@@ -604,8 +658,11 @@ public final class HapticScapePanel extends PluginPanel
 		PanelUi.addVerticalComponent(settings, milestoneRow);
 
 		level99Row.add(level99CheckBox, BorderLayout.CENTER);
-		level99Row.add(previewLevel99Button, BorderLayout.EAST);
 		PanelUi.addVerticalComponent(settings, level99Row);
+
+		developerControlsRow.add(previewLevel99Button);
+		developerControlsRow.add(resetRogueDiscoveryButton);
+		PanelUi.addVerticalComponent(settings, developerControlsRow);
 		return settings;
 	}
 
@@ -675,7 +732,147 @@ public final class HapticScapePanel extends PluginPanel
 	public void close()
 	{
 		developerStatusTimer.stop();
+		KeyboardFocusManager.getCurrentKeyboardFocusManager()
+			.removeKeyEventDispatcher(rogueKeyDispatcher);
+		roguePanel.close();
+		rogueLauncher.close();
 		customPatternsPanel.close();
+	}
+
+	private boolean handleRogueKeyEvent(KeyEvent event)
+	{
+		if (event.getID() != KeyEvent.KEY_PRESSED || event.isConsumed())
+		{
+			return false;
+		}
+
+		Window panelWindow = SwingUtilities.getWindowAncestor(this);
+		if (panelWindow == null
+			|| KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow() != panelWindow)
+		{
+			return false;
+		}
+
+		if (KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner() instanceof JTextComponent)
+		{
+			konamiCodeDetector.reset();
+			return false;
+		}
+
+		if (konamiCodeDetector.acceptKeyCode(event.getKeyCode()))
+		{
+			SwingUtilities.invokeLater(() -> unlockRogueMode(true));
+		}
+		return false;
+	}
+
+	private void unlockRogueMode(boolean celebrate)
+	{
+		boolean firstUnlock = !rogueModeUnlocked;
+		boolean unlockStingPlayed = Boolean.parseBoolean(configManager.getConfiguration(
+			HapticScapeConfig.GROUP,
+			ROGUE_UNLOCK_STING_PLAYED_KEY
+		));
+		if (!unlockStingPlayed && rogueUnlockSoundAction != null)
+		{
+			rogueUnlockSoundAction.run();
+			configManager.setConfiguration(
+				HapticScapeConfig.GROUP,
+				ROGUE_UNLOCK_STING_PLAYED_KEY,
+				true
+			);
+		}
+		ensureRogueAccess(true, firstUnlock);
+		configManager.setConfiguration(HapticScapeConfig.GROUP, ROGUE_UNLOCKED_KEY, true);
+		rogueLauncher.celebrate();
+		roguePanel.reveal();
+		if (celebrate && rogueFeedbackAction != null)
+		{
+			rogueFeedbackAction.accept(RogueFeedbackEvent.UNLOCK);
+		}
+		statusLabel.setText(firstUnlock ? "Rogue Mode unlocked" : "Rogue Mode summoned");
+		developerStatusTimer.restart();
+	}
+
+	private void ensureRogueAccess(boolean showRogue, boolean animateEmergence)
+	{
+		if (!rogueModeUnlocked)
+		{
+			rogueModeUnlocked = true;
+			rogueLauncher.showUnlocked(animateEmergence);
+		}
+		else if (!rogueLauncher.isVisible())
+		{
+			rogueLauncher.showUnlocked(false);
+		}
+
+		if (showRogue)
+		{
+			showRogueView();
+		}
+	}
+
+	private void toggleRogueView()
+	{
+		if (!rogueModeUnlocked)
+		{
+			return;
+		}
+		if (rogueViewActive)
+		{
+			showNormalView();
+		}
+		else
+		{
+			showRogueView();
+		}
+	}
+
+	private void showRogueView()
+	{
+		rogueViewActive = true;
+		contentLayout.show(contentHost, ROGUE_CARD);
+		rogueLauncher.setActive(true);
+		contentHost.revalidate();
+		contentHost.repaint();
+	}
+
+	private void showNormalView()
+	{
+		rogueViewActive = false;
+		contentLayout.show(contentHost, NORMAL_CARD);
+		rogueLauncher.setActive(false);
+		contentHost.revalidate();
+		contentHost.repaint();
+	}
+
+	private void resetRogueDiscovery()
+	{
+		showNormalView();
+		rogueModeUnlocked = false;
+		konamiCodeDetector.reset();
+		rogueLauncher.resetLocked();
+		configManager.setConfiguration(HapticScapeConfig.GROUP, ROGUE_UNLOCKED_KEY, false);
+		configManager.setConfiguration(
+			HapticScapeConfig.GROUP,
+			ROGUE_UNLOCK_STING_PLAYED_KEY,
+			false
+		);
+		statusLabel.setText("Rogue discovery reset - enter the Konami code again");
+		developerStatusTimer.restart();
+	}
+
+	private void refreshDeveloperControlsLayout()
+	{
+		developerControlsRow.revalidate();
+		java.awt.Container parent = developerControlsRow.getParent();
+		if (parent instanceof JPanel)
+		{
+			JPanel settingsPanel = (JPanel) parent;
+			Dimension preferredSize = settingsPanel.getPreferredSize();
+			settingsPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, preferredSize.height));
+			settingsPanel.revalidate();
+		}
 	}
 
 	private void handleDeveloperUnlockClick(MouseEvent event)
@@ -704,8 +901,8 @@ public final class HapticScapePanel extends PluginPanel
 		}
 		developerUnlockClickCount = 0;
 		developerControlsUnlocked = !developerControlsUnlocked;
-		previewLevel99Button.setVisible(developerControlsUnlocked);
-		level99Row.revalidate();
+		developerControlsRow.setVisible(developerControlsUnlocked);
+		refreshDeveloperControlsLayout();
 		revalidate();
 		repaint();
 		statusLabel.setText(developerControlsUnlocked

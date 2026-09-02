@@ -21,6 +21,10 @@ public enum HapticEventType
 	TRADE_REQUEST(HapticPriority.DIRECT, PlaybackPolicy.INTERRUPT_LOWER_OR_QUEUE, Duration.ofSeconds(5)),
 
 	MANUAL_PREVIEW(HapticPriority.MANUAL, PlaybackPolicy.INTERRUPT_LOWER, Duration.ZERO),
+	ROGUE_UNLOCK(HapticPriority.MANUAL, PlaybackPolicy.INTERRUPT_LOWER, Duration.ZERO),
+	BLACKJACK_ACTION(HapticPriority.GAMEPLAY, PlaybackPolicy.INTERRUPT_LOWER_OR_QUEUE, Duration.ofSeconds(1)),
+	BLACKJACK_RESULT(HapticPriority.DIRECT, PlaybackPolicy.INTERRUPT_LOWER_OR_QUEUE, Duration.ofSeconds(2)),
+	BLACKJACK_NATURAL(HapticPriority.MANUAL, PlaybackPolicy.INTERRUPT_LOWER, Duration.ZERO),
 	LEVEL_99(HapticPriority.CEREMONY, PlaybackPolicy.INTERRUPT_LOWER, Duration.ZERO),
 
 	LOW_HITPOINTS(HapticPriority.URGENT, PlaybackPolicy.INTERRUPT_LOWER, Duration.ZERO),
