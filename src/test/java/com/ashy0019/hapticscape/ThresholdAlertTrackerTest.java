@@ -29,4 +29,23 @@ public class ThresholdAlertTrackerTest
 		assertFalse(tracker.update(AlertCategory.LOW_PRAYER, 20, 10));
 		assertTrue(tracker.update(AlertCategory.LOW_PRAYER, 10, 10));
 	}
+
+	@Test
+	public void specialAttackFiresWhenCrossingUpwardAndRearmsBelowThreshold()
+	{
+		ThresholdAlertTracker tracker = new ThresholdAlertTracker();
+		tracker.seed(AlertCategory.SPECIAL_ATTACK_READY, 60);
+
+		assertFalse(tracker.update(AlertCategory.SPECIAL_ATTACK_READY, 70, 75));
+		assertTrue(tracker.update(AlertCategory.SPECIAL_ATTACK_READY, 75, 75));
+		assertFalse(tracker.update(AlertCategory.SPECIAL_ATTACK_READY, 100, 75));
+		assertFalse(tracker.update(AlertCategory.SPECIAL_ATTACK_READY, 50, 75));
+		assertTrue(tracker.update(AlertCategory.SPECIAL_ATTACK_READY, 80, 75));
+	}
+
+	@Test(expected = IllegalArgumentException.class)
+	public void nonCrossingCategoryCannotUseThresholdTracker()
+	{
+		new ThresholdAlertTracker().seed(AlertCategory.VALUABLE_DROP, 100_000);
+	}
 }

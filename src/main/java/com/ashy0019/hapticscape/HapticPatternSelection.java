@@ -21,6 +21,8 @@ public final class HapticPatternSelection
 		builtIn("TRIPLE", "Triple pulse", HapticPatternPreset.TRIPLE);
 	public static final HapticPatternSelection ASCENDING =
 		builtIn("ASCENDING", "Ascending", HapticPatternPreset.ASCENDING);
+	public static final HapticPatternSelection DESCENDING =
+		builtIn("DESCENDING", "Descending", HapticPatternPreset.DESCENDING);
 
 	private static final String CUSTOM_PREFIX = "CUSTOM:";
 	private static final List<HapticPatternSelection> BUILT_INS;
@@ -32,6 +34,7 @@ public final class HapticPatternSelection
 		builtIns.add(DOUBLE);
 		builtIns.add(TRIPLE);
 		builtIns.add(ASCENDING);
+		builtIns.add(DESCENDING);
 		BUILT_INS = Collections.unmodifiableList(builtIns);
 	}
 

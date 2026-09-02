@@ -30,13 +30,22 @@ RuneLite, Jagex, or the Intiface project.
   pattern.
 - Use separate feedback for ordinary level-ups.
 - Choose a dedicated pattern for level milestones from 10 through 90.
-- Route direct messages, trade requests, low hitpoints, and low prayer to
-  separate haptic profiles, with generic RuneLite notifications as the fallback.
+- Celebrate a real level 99 with a dedicated haptic ceremony, cheer, and
+  confetti overlay.
+- Give direct messages, trade requests, low hitpoints, low prayer, valuable
+  drops, a full inventory, poison or venom, a ready special attack, and player
+  death separate haptic profiles.
+- Set category-specific hitpoints, prayer, loot-value, and special-energy
+  trigger values independently from the haptic response.
+- Keep a fixed Generic profile for unclassified RuneLite notifications and let
+  individual alert types inherit that profile or use their own.
+
 ### Haptic controls
 
 - Adjust intensity from 0% to 100%.
 - Set built-in pattern duration from 50 ms to 10 seconds.
-- Choose from Single, Double, Triple, and Ascending built-in patterns.
+- Choose from Single, Double, Triple, Ascending, and Descending built-in
+  patterns.
 - Preview global XP, level-up, skill-profile, and alert feedback without
   waiting for an in-game event.
 - Stop every connected device immediately with **Stop now**.
@@ -71,7 +80,7 @@ the remaining controls:
 |---|---|
 | **Skills** | Enable all skills, disable all skills, or toggle skills individually. |
 | **Profiles** | Override the global XP settings for one selected skill. |
-| **Alerts** | Configure generic, direct-message, trade, low-hitpoints, and low-prayer feedback. |
+| **Alerts** | Configure the Generic catch-all and separate gameplay alert profiles and triggers. |
 | **Custom** | Create, preview, name, save, and manage custom patterns. |
 
 The bottom of the panel contains the connection controls, global test button,
@@ -193,7 +202,7 @@ From PowerShell in the repository root:
 To specify a release version:
 
 ```powershell
-.\package-windows.ps1 -Version 1.0.0
+.\package-windows.ps1 -Version 1.4.0
 ```
 
 The script:
@@ -204,10 +213,10 @@ The script:
 4. Adds the required license files and friend setup guide.
 5. Creates a distributable ZIP in `build\distribution`.
 
-For version 1.0.0 on a 64-bit Windows computer, the output is:
+For version 1.4.0 on a 64-bit Windows computer, the output is:
 
 ```text
-build\distribution\HapticScape-Windows-x64-1.0.0.zip
+build\distribution\HapticScape-Windows-x64-1.4.0.zip
 ```
 
 Test the unpacked launcher before publishing or sharing the ZIP:

@@ -12,6 +12,7 @@ import java.awt.image.BufferedImage;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.Duration;
+import java.util.Collection;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
@@ -19,19 +20,30 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.Actor;
 import net.runelite.api.Client;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.GameState;
+import net.runelite.api.ItemContainer;
 import net.runelite.api.Skill;
+import net.runelite.api.events.ActorDeath;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.events.StatChanged;
+import net.runelite.api.events.VarbitChanged;
+import net.runelite.api.gameval.InventoryID;
+import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.client.audio.AudioPlayer;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.chat.ChatMessageManager;
 import net.runelite.client.chat.QueuedMessage;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.NotificationFired;
+import net.runelite.client.events.NpcLootReceived;
+import net.runelite.client.events.PlayerLootReceived;
+import net.runelite.client.game.ItemManager;
+import net.runelite.client.game.ItemStack;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.ClientToolbar;
@@ -52,6 +64,7 @@ public class HapticScapePlugin extends Plugin
 {
 	private static final String LEVEL_99_CHEER_RESOURCE = "/level99-cheer.wav";
 	private static final float LEVEL_99_CHEER_GAIN_DB = -4.0f;
+	private static final int VENOM_THRESHOLD = 1_000_000;
 
 	private final XpTracker xpTracker = new XpTracker();
 	private final ThresholdAlertTracker thresholdAlertTracker = new ThresholdAlertTracker();
@@ -63,6 +76,9 @@ public class HapticScapePlugin extends Plugin
 	private NavigationButton navigationButton;
 	private Level99CelebrationOverlay level99CelebrationOverlay;
 	private ScheduledExecutorService alertScheduler;
+	private boolean inventoryFullKnown;
+	private boolean inventoryFull;
+	private int poisonState = -1;
 
 	@Inject
 	private Client client;
@@ -89,6 +105,9 @@ public class HapticScapePlugin extends Plugin
 	private ChatMessageManager chatMessageManager;
 
 	@Inject
+	private ItemManager itemManager;
+
+	@Inject
 	private OkHttpClient httpClient;
 
 	@Inject
@@ -98,7 +117,7 @@ public class HapticScapePlugin extends Plugin
 	protected void startUp()
 	{
 		xpTracker.reset();
-		thresholdAlertTracker.reset();
+		resetAlertDetectors();
 		alertDeduplicator.reset();
 		alertScheduler = Executors.newSingleThreadScheduledExecutor(task ->
 		{
@@ -123,6 +142,7 @@ public class HapticScapePlugin extends Plugin
 			this::sendTestLevelUpPattern,
 			this::previewLevel99Ceremony,
 			this::sendTestSkillProfile,
+			this::sendTestGenericNotificationPattern,
 			this::sendTestAlert,
 			this::sendPatternForgePreview,
 			intifaceService::stopAll
@@ -130,7 +150,7 @@ public class HapticScapePlugin extends Plugin
 		intifaceService.setConnectionListener(panel::updateConnection);
 		if (client.getGameState() == GameState.LOGGED_IN)
 		{
-			seedThresholdAlerts();
+			seedAlertDetectors();
 		}
 
 		navigationButton = NavigationButton.builder()
@@ -148,7 +168,7 @@ public class HapticScapePlugin extends Plugin
 	protected void shutDown()
 	{
 		xpTracker.reset();
-		thresholdAlertTracker.reset();
+		resetAlertDetectors();
 		alertDeduplicator.reset();
 		level99CelebrationController.reset();
 		if (level99CelebrationOverlay != null)
@@ -192,14 +212,14 @@ public class HapticScapePlugin extends Plugin
 		if (gameState == GameState.LOGGED_IN)
 		{
 			seedCurrentXp();
-			seedThresholdAlerts();
+			seedAlertDetectors();
 		}
 		else if (gameState == GameState.LOGIN_SCREEN
 			|| gameState == GameState.HOPPING
 			|| gameState == GameState.CONNECTION_LOST)
 		{
 			xpTracker.reset();
-			thresholdAlertTracker.reset();
+			resetAlertDetectors();
 			alertDeduplicator.reset();
 			level99CelebrationController.reset();
 		}
@@ -253,6 +273,87 @@ public class HapticScapePlugin extends Plugin
 	}
 
 	@Subscribe
+	public void onItemContainerChanged(ItemContainerChanged event)
+	{
+		if (client.getGameState() != GameState.LOGGED_IN
+			|| event.getContainerId() != InventoryID.INV)
+		{
+			return;
+		}
+
+		ItemContainer inventory = event.getItemContainer();
+		boolean full = inventory.size() > 0 && inventory.count() >= inventory.size();
+		if (inventoryFullKnown && !inventoryFull && full)
+		{
+			dispatchSpecificAlert(AlertCategory.INVENTORY_FULL);
+		}
+		inventoryFullKnown = true;
+		inventoryFull = full;
+	}
+
+	@Subscribe
+	public void onVarbitChanged(VarbitChanged event)
+	{
+		if (client.getGameState() != GameState.LOGGED_IN)
+		{
+			return;
+		}
+
+		if (event.getVarpId() == VarPlayerID.POISON)
+		{
+			int currentPoisonState = classifyPoisonState(event.getValue());
+			boolean newlyAffected = poisonState == 0 && currentPoisonState > 0;
+			boolean newlyEnvenomed = poisonState == 1 && currentPoisonState == 2;
+			if (poisonState >= 0 && (newlyAffected || newlyEnvenomed))
+			{
+				dispatchSpecificAlert(AlertCategory.POISONED_OR_VENOMED);
+			}
+			poisonState = currentPoisonState;
+		}
+		else if (event.getVarpId() == VarPlayerID.SA_ENERGY)
+		{
+			int energyPercent = clamp(event.getValue() / 10, 0, 100);
+			HapticScapePanel currentPanel = panel;
+			if (currentPanel == null)
+			{
+				return;
+			}
+			int readyAt = currentPanel.getAlertTriggerSettings()
+				.get(AlertCategory.SPECIAL_ATTACK_READY);
+			if (thresholdAlertTracker.update(
+				AlertCategory.SPECIAL_ATTACK_READY,
+				energyPercent,
+				readyAt
+			))
+			{
+				dispatchSpecificAlert(AlertCategory.SPECIAL_ATTACK_READY);
+			}
+		}
+	}
+
+	@Subscribe
+	public void onNpcLootReceived(NpcLootReceived event)
+	{
+		handleValuableLoot(event.getItems());
+	}
+
+	@Subscribe
+	public void onPlayerLootReceived(PlayerLootReceived event)
+	{
+		handleValuableLoot(event.getItems());
+	}
+
+	@Subscribe
+	public void onActorDeath(ActorDeath event)
+	{
+		Actor localPlayer = client.getLocalPlayer();
+		if (localPlayer != null && event.getActor() == localPlayer)
+		{
+			dispatchSpecificAlert(AlertCategory.PLAYER_DEATH);
+		}
+	}
+
+	@Subscribe
 	public void onNotificationFired(NotificationFired event)
 	{
 		HapticScapePanel currentPanel = panel;
@@ -287,7 +388,7 @@ public class HapticScapePlugin extends Plugin
 						System.nanoTime()
 					))
 					{
-						dispatchAlert(AlertCategory.GENERIC_NOTIFICATION);
+						dispatchGenericAlert();
 					}
 				},
 				AlertDeduplicator.GENERIC_DELAY_MILLIS,
@@ -308,7 +409,7 @@ public class HapticScapePlugin extends Plugin
 		}
 	}
 
-	private void seedThresholdAlerts()
+	private void seedAlertDetectors()
 	{
 		thresholdAlertTracker.seed(
 			AlertCategory.LOW_HITPOINTS,
@@ -318,6 +419,29 @@ public class HapticScapePlugin extends Plugin
 			AlertCategory.LOW_PRAYER,
 			client.getBoostedSkillLevel(Skill.PRAYER)
 		);
+		thresholdAlertTracker.seed(
+			AlertCategory.SPECIAL_ATTACK_READY,
+			clamp(
+				client.getVarpValue(VarPlayerID.SA_ENERGY) / 10,
+				0,
+				100
+			)
+		);
+
+		poisonState = classifyPoisonState(client.getVarpValue(VarPlayerID.POISON));
+		ItemContainer inventory = client.getItemContainer(InventoryID.INV);
+		inventoryFullKnown = inventory != null;
+		inventoryFull = inventory != null
+			&& inventory.size() > 0
+			&& inventory.count() >= inventory.size();
+	}
+
+	private void resetAlertDetectors()
+	{
+		thresholdAlertTracker.reset();
+		inventoryFullKnown = false;
+		inventoryFull = false;
+		poisonState = -1;
 	}
 
 	private void handleThresholdAlert(StatChanged event)
@@ -341,7 +465,7 @@ public class HapticScapePlugin extends Plugin
 		{
 			return;
 		}
-		int threshold = currentPanel.getAlertProfiles().get(category).getThreshold();
+		int threshold = currentPanel.getAlertTriggerSettings().get(category);
 		if (thresholdAlertTracker.update(category, event.getBoostedLevel(), threshold))
 		{
 			dispatchSpecificAlert(category);
@@ -352,6 +476,28 @@ public class HapticScapePlugin extends Plugin
 	{
 		alertDeduplicator.recordSpecificAlert(System.nanoTime());
 		dispatchAlert(category);
+	}
+
+	private void dispatchGenericAlert()
+	{
+		HapticScapePanel currentPanel = panel;
+		if (currentPanel == null)
+		{
+			return;
+		}
+		NotificationFeedbackSettings settings =
+			currentPanel.getNotificationFeedbackSettings();
+		if (!settings.isEnabled())
+		{
+			return;
+		}
+		log.debug("Generic notification haptic requested");
+		sendPattern(
+			settings.getPatternSelection(),
+			"ALERT_GENERIC_NOTIFICATION",
+			settings.getIntensityPercent(),
+			settings.getDurationMillis()
+		);
 	}
 
 	private void dispatchAlert(AlertCategory category)
@@ -373,6 +519,41 @@ public class HapticScapePlugin extends Plugin
 					playback.getDurationMillis()
 				);
 			});
+	}
+
+	private void handleValuableLoot(Collection<ItemStack> items)
+	{
+		HapticScapePanel currentPanel = panel;
+		if (currentPanel == null
+			|| items == null
+			|| client.getGameState() != GameState.LOGGED_IN)
+		{
+			return;
+		}
+
+		long minimumValue = currentPanel.getAlertTriggerSettings()
+			.get(AlertCategory.VALUABLE_DROP);
+		long totalValue = 0;
+		for (ItemStack item : items)
+		{
+			int unitPrice = Math.max(0, itemManager.getItemPrice(item.getId()));
+			int quantity = Math.max(0, item.getQuantity());
+			totalValue += (long) unitPrice * quantity;
+			if (totalValue >= minimumValue)
+			{
+				dispatchSpecificAlert(AlertCategory.VALUABLE_DROP);
+				return;
+			}
+		}
+	}
+
+	private static int classifyPoisonState(int poisonValue)
+	{
+		if (poisonValue <= 0)
+		{
+			return 0;
+		}
+		return poisonValue >= VENOM_THRESHOLD ? 2 : 1;
 	}
 
 	private void handleFeedbackTrigger(
@@ -542,6 +723,25 @@ public class HapticScapePlugin extends Plugin
 		);
 	}
 
+	private void sendTestGenericNotificationPattern()
+	{
+		HapticScapePanel currentPanel = panel;
+		if (currentPanel == null)
+		{
+			return;
+		}
+
+		NotificationFeedbackSettings settings =
+			currentPanel.getNotificationFeedbackSettings();
+		log.debug("Sending test generic notification pattern");
+		sendPattern(
+			settings.getPatternSelection(),
+			"TEST_ALERT_GENERIC_NOTIFICATION",
+			settings.getIntensityPercent(),
+			settings.getDurationMillis()
+		);
+	}
+
 	private void sendTestAlert(AlertCategory category)
 	{
 		HapticScapePanel currentPanel = panel;
@@ -550,17 +750,8 @@ public class HapticScapePlugin extends Plugin
 			return;
 		}
 
-		NotificationFeedbackSettings configured =
-			currentPanel.getNotificationFeedbackSettings();
-		NotificationFeedbackSettings previewSettings = new NotificationFeedbackSettings(
-			true,
-			configured.isRespectRuneLiteFocus(),
-			configured.getIntensityPercent(),
-			configured.getDurationMillis(),
-			configured.getPatternSelection()
-		);
 		currentPanel.getAlertProfiles()
-			.resolve(category, previewSettings)
+			.resolve(category, currentPanel.getNotificationFeedbackSettings())
 			.ifPresent(playback -> sendPattern(
 				playback.getPatternSelection(),
 				"TEST_ALERT_" + category.name(),
@@ -643,6 +834,11 @@ public class HapticScapePlugin extends Plugin
 		);
 		BufferedImage scaled = ImageUtil.resizeImage(source, 16, 16, true);
 		return ImageUtil.resizeCanvas(scaled, 16, 16);
+	}
+
+	private static int clamp(int value, int minimum, int maximum)
+	{
+		return Math.max(minimum, Math.min(maximum, value));
 	}
 
 	@Provides

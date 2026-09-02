@@ -4,21 +4,16 @@ import java.util.Objects;
 
 public final class AlertProfile
 {
-	public static final int MINIMUM_THRESHOLD = 1;
-	public static final int MAXIMUM_THRESHOLD = 200;
-
 	private final AlertBehavior behavior;
 	private final int intensityPercent;
 	private final int durationMillis;
 	private final HapticPatternSelection patternSelection;
-	private final int threshold;
 
 	public AlertProfile(
 		AlertBehavior behavior,
 		int intensityPercent,
 		int durationMillis,
-		HapticPatternSelection patternSelection,
-		int threshold)
+		HapticPatternSelection patternSelection)
 	{
 		this.behavior = Objects.requireNonNull(behavior, "behavior");
 		this.intensityPercent = requireRange(
@@ -34,12 +29,6 @@ public final class AlertProfile
 			"duration"
 		);
 		this.patternSelection = Objects.requireNonNull(patternSelection, "patternSelection");
-		this.threshold = requireRange(
-			threshold,
-			MINIMUM_THRESHOLD,
-			MAXIMUM_THRESHOLD,
-			"threshold"
-		);
 	}
 
 	public AlertBehavior getBehavior()
@@ -62,19 +51,13 @@ public final class AlertProfile
 		return patternSelection;
 	}
 
-	public int getThreshold()
-	{
-		return threshold;
-	}
-
 	AlertProfile withPattern(HapticPatternSelection updatedPattern)
 	{
 		return new AlertProfile(
 			behavior,
 			intensityPercent,
 			durationMillis,
-			updatedPattern,
-			threshold
+			updatedPattern
 		);
 	}
 

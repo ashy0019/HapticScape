@@ -2,6 +2,7 @@ package com.ashy0019.hapticscape.ui;
 
 import com.ashy0019.hapticscape.AlertCategory;
 import com.ashy0019.hapticscape.AlertProfiles;
+import com.ashy0019.hapticscape.AlertTriggerSettings;
 import com.ashy0019.hapticscape.CustomPatternEntry;
 import com.ashy0019.hapticscape.CustomPatternLibrary;
 import com.ashy0019.hapticscape.HapticPatternSelection;
@@ -98,7 +99,8 @@ public final class HapticScapePanel extends PluginPanel
 		Runnable testLevelUpAction,
 		Runnable previewLevel99Action,
 		Runnable testSkillProfileAction,
-		Consumer<AlertCategory> testAlertAction,
+		Runnable testGenericAlertAction,
+		Consumer<AlertCategory> testSpecificAlertAction,
 		Consumer<CustomPatternEntry> patternForgePreviewAction,
 		Runnable stopAction)
 	{
@@ -202,7 +204,8 @@ public final class HapticScapePanel extends PluginPanel
 			config,
 			configManager,
 			() -> customPatterns,
-			testAlertAction
+			testGenericAlertAction,
+			testSpecificAlertAction
 		);
 		customPatternsPanel = new CustomPatternsPanel(
 			customPatterns,
@@ -335,6 +338,11 @@ public final class HapticScapePanel extends PluginPanel
 	public AlertProfiles getAlertProfiles()
 	{
 		return alertsPanel.getAlertProfiles();
+	}
+
+	public AlertTriggerSettings getAlertTriggerSettings()
+	{
+		return alertsPanel.getTriggerSettings();
 	}
 
 	private void configureGlobalListeners()

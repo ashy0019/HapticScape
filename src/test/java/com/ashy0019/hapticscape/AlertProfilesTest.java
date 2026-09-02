@@ -1,6 +1,5 @@
 package com.ashy0019.hapticscape;
 
-import java.util.Optional;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -51,8 +50,7 @@ public class AlertProfilesTest
 			AlertBehavior.CUSTOM,
 			77,
 			900,
-			HapticPatternSelection.TRIPLE,
-			12
+			HapticPatternSelection.TRIPLE
 		);
 		AlertPlayback playback = AlertProfiles.defaults()
 			.withProfile(AlertCategory.LOW_PRAYER, custom)
@@ -65,7 +63,7 @@ public class AlertProfilesTest
 	}
 
 	@Test
-	public void disabledMasterSwitchSuppressesEveryCategory()
+	public void useGenericInheritsProfileEvenWhenCatchAllIsDisabled()
 	{
 		NotificationFeedbackSettings disabled = new NotificationFeedbackSettings(
 			false,
@@ -75,21 +73,22 @@ public class AlertProfilesTest
 			HapticPatternSelection.DOUBLE
 		);
 
-		for (AlertCategory category : AlertCategory.values())
-		{
-			assertEquals(Optional.empty(), AlertProfiles.defaults().resolve(category, disabled));
-		}
+		AlertPlayback playback = AlertProfiles.defaults()
+			.resolve(AlertCategory.DIRECT_MESSAGE, disabled)
+			.get();
+
+		assertEquals(50, playback.getIntensityPercent());
+		assertEquals(HapticPatternSelection.DOUBLE, playback.getPatternSelection());
 	}
 
 	@Test
-	public void profilesRoundTripWithBehaviorThresholdAndCustomPattern()
+	public void profilesRoundTripWithBehaviorAndCustomPattern()
 	{
 		AlertProfile original = new AlertProfile(
 			AlertBehavior.CUSTOM,
 			63,
 			1_250,
-			HapticPatternSelection.custom(42),
-			17
+			HapticPatternSelection.custom(42)
 		);
 		AlertProfiles restored = AlertProfiles.fromConfigValue(
 			AlertProfiles.defaults()
@@ -102,7 +101,33 @@ public class AlertProfilesTest
 		assertEquals(63, profile.getIntensityPercent());
 		assertEquals(1_250, profile.getDurationMillis());
 		assertEquals(HapticPatternSelection.custom(42), profile.getPatternSelection());
-		assertEquals(17, profile.getThreshold());
+		assertTrue(restored.toConfigValue().startsWith("v2|"));
+	}
+
+	@Test
+	public void legacyProfilesStillLoadTheirOutputSettings()
+	{
+		AlertProfiles profiles = AlertProfiles.fromConfigValue(
+			"v1|LOW_HITPOINTS,CUSTOM,63,1250,TRIPLE,17"
+		);
+		AlertProfile profile = profiles.get(AlertCategory.LOW_HITPOINTS);
+
+		assertEquals(AlertBehavior.CUSTOM, profile.getBehavior());
+		assertEquals(63, profile.getIntensityPercent());
+		assertEquals(1_250, profile.getDurationMillis());
+		assertEquals(HapticPatternSelection.TRIPLE, profile.getPatternSelection());
+	}
+
+	@Test
+	public void newCategoriesAreOffByDefault()
+	{
+		AlertProfiles profiles = AlertProfiles.defaults();
+
+		assertEquals(AlertBehavior.OFF, profiles.get(AlertCategory.VALUABLE_DROP).getBehavior());
+		assertEquals(AlertBehavior.OFF, profiles.get(AlertCategory.INVENTORY_FULL).getBehavior());
+		assertEquals(AlertBehavior.OFF, profiles.get(AlertCategory.POISONED_OR_VENOMED).getBehavior());
+		assertEquals(AlertBehavior.OFF, profiles.get(AlertCategory.SPECIAL_ATTACK_READY).getBehavior());
+		assertEquals(AlertBehavior.OFF, profiles.get(AlertCategory.PLAYER_DEATH).getBehavior());
 	}
 
 	@Test

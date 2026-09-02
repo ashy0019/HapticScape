@@ -4,6 +4,8 @@ import com.ashy0019.hapticscape.AlertBehavior;
 import com.ashy0019.hapticscape.AlertCategory;
 import com.ashy0019.hapticscape.AlertProfile;
 import com.ashy0019.hapticscape.AlertProfiles;
+import com.ashy0019.hapticscape.AlertTriggerParameter;
+import com.ashy0019.hapticscape.AlertTriggerSettings;
 import com.ashy0019.hapticscape.CustomPatternLibrary;
 import com.ashy0019.hapticscape.HapticPatternSelection;
 import com.ashy0019.hapticscape.HapticScapeConfig;
@@ -28,34 +30,39 @@ final class AlertsPanel extends JPanel
 {
 	private final ConfigManager configManager;
 	private final Supplier<CustomPatternLibrary> customPatternsSupplier;
-	private final JCheckBox enabledCheckBox = new JCheckBox("Alert haptics");
+
+	private final JCheckBox genericEnabledCheckBox =
+		new JCheckBox("Generic RuneLite notifications");
 	private final JCheckBox respectFocusCheckBox = new JCheckBox("Respect RuneLite focus");
+	private final JSlider genericIntensitySlider;
+	private final JLabel genericIntensityValueLabel = new JLabel();
+	private final JComboBox<HapticPatternSelection> genericPatternComboBox;
+	private final JSpinner genericDurationSpinner;
+	private final JButton testGenericButton = new JButton("Test generic");
+
 	private final JComboBox<AlertCategory> categoryComboBox =
 		new JComboBox<>(AlertCategory.values());
 	private final JComboBox<AlertBehavior> behaviorComboBox =
 		new JComboBox<>(AlertBehavior.values());
-	private final JPanel behaviorRow = new JPanel(new BorderLayout(8, 0));
-	private final JPanel thresholdRow = new JPanel(new BorderLayout(8, 0));
-	private final JSpinner thresholdSpinner = new JSpinner(new SpinnerNumberModel(
-		20,
-		AlertProfile.MINIMUM_THRESHOLD,
-		AlertProfile.MAXIMUM_THRESHOLD,
-		1
-	));
-	private final JSlider intensitySlider;
-	private final JLabel intensityValueLabel = new JLabel();
-	private final JComboBox<HapticPatternSelection> patternComboBox;
-	private final JSpinner durationSpinner;
-	private final JButton testButton = new JButton("Test alert");
+	private final JPanel triggerRow = new JPanel(new BorderLayout(8, 0));
+	private final JLabel triggerLabel = new JLabel();
+	private final JSpinner triggerSpinner = new JSpinner();
+	private final JSlider specificIntensitySlider;
+	private final JLabel specificIntensityValueLabel = new JLabel();
+	private final JComboBox<HapticPatternSelection> specificPatternComboBox;
+	private final JSpinner specificDurationSpinner;
+	private final JButton testSpecificButton = new JButton("Test alert");
 
-	private volatile boolean enabled;
+	private volatile boolean genericEnabled;
 	private volatile boolean respectFocus;
 	private volatile int genericIntensityPercent;
 	private volatile int genericDurationMillis;
 	private volatile HapticPatternSelection genericPattern;
 	private volatile AlertProfiles alertProfiles;
-	private volatile AlertCategory selectedCategory = AlertCategory.GENERIC_NOTIFICATION;
-	private boolean updatingControls;
+	private volatile AlertTriggerSettings triggerSettings;
+	private volatile AlertCategory selectedCategory = AlertCategory.DIRECT_MESSAGE;
+	private boolean updatingGenericControls;
+	private boolean updatingSpecificControls;
 	private boolean updatingPatternChoices;
 	private boolean connected;
 
@@ -63,11 +70,12 @@ final class AlertsPanel extends JPanel
 		HapticScapeConfig config,
 		ConfigManager configManager,
 		Supplier<CustomPatternLibrary> customPatternsSupplier,
-		Consumer<AlertCategory> testAction)
+		Runnable testGenericAction,
+		Consumer<AlertCategory> testSpecificAction)
 	{
 		this.configManager = configManager;
 		this.customPatternsSupplier = customPatternsSupplier;
-		enabled = config.notificationFeedbackEnabled();
+		genericEnabled = config.notificationFeedbackEnabled();
 		respectFocus = config.notificationRespectFocus();
 		genericIntensityPercent = clamp(
 			config.notificationIntensityPercent(),
@@ -82,123 +90,55 @@ final class AlertsPanel extends JPanel
 		genericPattern = HapticPatternSelection.fromConfigValue(
 			config.notificationPatternPreset()
 		).resolveAgainst(customPatternsSupplier.get());
-		alertProfiles = AlertProfiles.fromConfigValue(config.alertProfiles())
+
+		String configuredProfiles = config.alertProfiles();
+		alertProfiles = AlertProfiles.fromConfigValue(configuredProfiles)
 			.replaceMissingCustomPatterns(customPatternsSupplier.get());
+		triggerSettings = AlertTriggerSettings.fromConfigValues(
+			config.alertTriggerSettings(),
+			configuredProfiles
+		);
 
 		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
 		setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
-		enabledCheckBox.setSelected(enabled);
-		enabledCheckBox.setToolTipText("Enable generic and categorized alert feedback");
-		respectFocusCheckBox.setSelected(respectFocus);
-		respectFocusCheckBox.setToolTipText(
-			"Honor RuneLite focus suppression for generic RuneLite notifications"
-		);
 
-		intensitySlider = new JSlider(
+		genericIntensitySlider = new JSlider(
 			NotificationFeedbackSettings.MINIMUM_INTENSITY_PERCENT,
 			NotificationFeedbackSettings.MAXIMUM_INTENSITY_PERCENT,
 			genericIntensityPercent
 		);
-		intensityValueLabel.setText(genericIntensityPercent + "%");
-		patternComboBox = PanelUi.createPatternComboBox(customPatternsSupplier);
-		durationSpinner = new JSpinner(new SpinnerNumberModel(
+		genericPatternComboBox = PanelUi.createPatternComboBox(customPatternsSupplier);
+		genericPatternComboBox.setSelectedItem(genericPattern);
+		genericDurationSpinner = new JSpinner(new SpinnerNumberModel(
 			genericDurationMillis,
 			NotificationFeedbackSettings.MINIMUM_DURATION_MILLIS,
 			NotificationFeedbackSettings.MAXIMUM_DURATION_MILLIS,
 			50
 		));
-		PanelUi.setFixedWidth(durationSpinner, PanelUi.NUMERIC_CONTROL_WIDTH);
-		PanelUi.setFixedWidth(thresholdSpinner, PanelUi.NUMERIC_CONTROL_WIDTH);
+		PanelUi.setFixedWidth(genericDurationSpinner, PanelUi.NUMERIC_CONTROL_WIDTH);
 
-		PanelUi.addVerticalComponent(this, enabledCheckBox);
-		PanelUi.addVerticalComponent(this, respectFocusCheckBox);
+		AlertProfile initialProfile = alertProfiles.get(selectedCategory);
+		specificIntensitySlider = new JSlider(
+			NotificationFeedbackSettings.MINIMUM_INTENSITY_PERCENT,
+			NotificationFeedbackSettings.MAXIMUM_INTENSITY_PERCENT,
+			initialProfile.getIntensityPercent()
+		);
+		specificPatternComboBox = PanelUi.createPatternComboBox(customPatternsSupplier);
+		specificDurationSpinner = new JSpinner(new SpinnerNumberModel(
+			initialProfile.getDurationMillis(),
+			NotificationFeedbackSettings.MINIMUM_DURATION_MILLIS,
+			NotificationFeedbackSettings.MAXIMUM_DURATION_MILLIS,
+			50
+		));
+		PanelUi.setFixedWidth(specificDurationSpinner, PanelUi.NUMERIC_CONTROL_WIDTH);
+		PanelUi.setFixedWidth(triggerSpinner, PanelUi.NUMERIC_CONTROL_WIDTH);
+
+		add(createGenericPanel());
 		add(Box.createVerticalStrut(6));
+		add(createSpecificPanel());
+		configureListeners(testGenericAction, testSpecificAction);
 
-		JPanel categoryRow = new JPanel(new BorderLayout(8, 0));
-		categoryRow.add(new JLabel("Alert type"), BorderLayout.CENTER);
-		categoryRow.add(categoryComboBox, BorderLayout.EAST);
-		PanelUi.setFixedWidth(categoryComboBox, 140);
-		PanelUi.addVerticalComponent(this, categoryRow);
-
-		behaviorRow.add(new JLabel("Behavior"), BorderLayout.CENTER);
-		behaviorRow.add(behaviorComboBox, BorderLayout.EAST);
-		PanelUi.setFixedWidth(behaviorComboBox, PanelUi.SELECTOR_CONTROL_WIDTH);
-		PanelUi.addVerticalComponent(this, behaviorRow);
-
-		thresholdRow.add(new JLabel("Trigger at or below"), BorderLayout.CENTER);
-		thresholdRow.add(thresholdSpinner, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(this, thresholdRow);
-		add(Box.createVerticalStrut(6));
-
-		JPanel intensityHeader = new JPanel(new BorderLayout());
-		intensityHeader.add(new JLabel("Intensity"), BorderLayout.WEST);
-		intensityHeader.add(intensityValueLabel, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(this, intensityHeader);
-		PanelUi.addVerticalComponent(this, intensitySlider);
-
-		JPanel patternRow = new JPanel(new BorderLayout(8, 0));
-		patternRow.add(new JLabel("Pattern"), BorderLayout.CENTER);
-		patternRow.add(patternComboBox, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(this, patternRow);
-
-		JPanel durationRow = new JPanel(new BorderLayout(8, 0));
-		durationRow.add(new JLabel(PanelUi.DURATION_LABEL), BorderLayout.CENTER);
-		durationRow.add(durationSpinner, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(this, durationRow);
-
-		JPanel testRow = new JPanel(new BorderLayout());
-		testRow.add(testButton, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(this, testRow);
-
-		enabledCheckBox.addActionListener(event ->
-		{
-			enabled = enabledCheckBox.isSelected();
-			configManager.setConfiguration(
-				HapticScapeConfig.GROUP,
-				HapticScapeConfig.NOTIFICATION_FEEDBACK_ENABLED_KEY,
-				enabled
-			);
-			updateControlState();
-		});
-		respectFocusCheckBox.addActionListener(event ->
-		{
-			respectFocus = respectFocusCheckBox.isSelected();
-			configManager.setConfiguration(
-				HapticScapeConfig.GROUP,
-				HapticScapeConfig.NOTIFICATION_RESPECT_FOCUS_KEY,
-				respectFocus
-			);
-		});
-		categoryComboBox.addActionListener(event ->
-		{
-			AlertCategory category = (AlertCategory) categoryComboBox.getSelectedItem();
-			if (category != null)
-			{
-				selectedCategory = category;
-				loadSelectedCategory();
-			}
-		});
-		behaviorComboBox.addActionListener(event ->
-		{
-			updateSelectedProfile();
-			updateControlState();
-		});
-		thresholdSpinner.addChangeListener(event -> updateSelectedProfile());
-		intensitySlider.addChangeListener(event ->
-		{
-			intensityValueLabel.setText(intensitySlider.getValue() + "%");
-			if (!intensitySlider.getValueIsAdjusting())
-			{
-				updateSelectedProfile();
-			}
-		});
-		patternComboBox.addActionListener(event ->
-		{
-			updateSelectedProfile();
-			updateControlState();
-		});
-		durationSpinner.addChangeListener(event -> updateSelectedProfile());
-		testButton.addActionListener(event -> testAction.accept(selectedCategory));
+		persistMigratedSettings(configuredProfiles, config.alertTriggerSettings());
 		loadSelectedCategory();
 		setConnected(false);
 	}
@@ -206,7 +146,7 @@ final class AlertsPanel extends JPanel
 	NotificationFeedbackSettings getGenericSettings()
 	{
 		return new NotificationFeedbackSettings(
-			enabled,
+			genericEnabled,
 			respectFocus,
 			genericIntensityPercent,
 			genericDurationMillis,
@@ -217,6 +157,11 @@ final class AlertsPanel extends JPanel
 	AlertProfiles getAlertProfiles()
 	{
 		return alertProfiles;
+	}
+
+	AlertTriggerSettings getTriggerSettings()
+	{
+		return triggerSettings;
 	}
 
 	AlertCategory getSelectedCategory()
@@ -242,130 +187,326 @@ final class AlertsPanel extends JPanel
 		updatingPatternChoices = true;
 		try
 		{
-			HapticPatternSelection selected = selectedCategory == AlertCategory.GENERIC_NOTIFICATION
-				? genericPattern
-				: alertProfiles.get(selectedCategory).getPatternSelection();
-			PanelUi.setPatternChoices(patternComboBox, selected, library);
+			PanelUi.setPatternChoices(genericPatternComboBox, genericPattern, library);
+			PanelUi.setPatternChoices(
+				specificPatternComboBox,
+				alertProfiles.get(selectedCategory).getPatternSelection(),
+				library
+			);
 		}
 		finally
 		{
 			updatingPatternChoices = false;
 		}
 		loadSelectedCategory();
+		updateGenericControlState();
 	}
 
 	void setConnected(boolean connected)
 	{
 		this.connected = connected;
-		updateControlState();
+		updateGenericControlState();
+		updateSpecificControlState();
+	}
+
+	private JPanel createGenericPanel()
+	{
+		JPanel panel = new JPanel();
+		panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+		panel.setBorder(BorderFactory.createTitledBorder("Generic"));
+
+		genericEnabledCheckBox.setSelected(genericEnabled);
+		genericEnabledCheckBox.setToolTipText(
+			"Play the Generic profile for unclassified RuneLite notifications"
+		);
+		respectFocusCheckBox.setSelected(respectFocus);
+		respectFocusCheckBox.setToolTipText(
+			"Honor RuneLite focus suppression for generic notifications"
+		);
+		genericIntensityValueLabel.setText(genericIntensityPercent + "%");
+
+		PanelUi.addVerticalComponent(panel, genericEnabledCheckBox);
+		PanelUi.addVerticalComponent(panel, respectFocusCheckBox);
+
+		JPanel intensityHeader = new JPanel(new BorderLayout());
+		intensityHeader.add(new JLabel("Intensity"), BorderLayout.WEST);
+		intensityHeader.add(genericIntensityValueLabel, BorderLayout.EAST);
+		PanelUi.addVerticalComponent(panel, intensityHeader);
+		PanelUi.addVerticalComponent(panel, genericIntensitySlider);
+
+		JPanel patternRow = new JPanel(new BorderLayout(8, 0));
+		patternRow.add(new JLabel("Pattern"), BorderLayout.CENTER);
+		patternRow.add(genericPatternComboBox, BorderLayout.EAST);
+		PanelUi.addVerticalComponent(panel, patternRow);
+
+		JPanel durationRow = new JPanel(new BorderLayout(8, 0));
+		durationRow.add(new JLabel(PanelUi.DURATION_LABEL), BorderLayout.CENTER);
+		durationRow.add(genericDurationSpinner, BorderLayout.EAST);
+		PanelUi.addVerticalComponent(panel, durationRow);
+
+		JPanel testRow = new JPanel(new BorderLayout());
+		testRow.add(testGenericButton, BorderLayout.EAST);
+		PanelUi.addVerticalComponent(panel, testRow);
+		return panel;
+	}
+
+	private JPanel createSpecificPanel()
+	{
+		JPanel panel = new JPanel();
+		panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+		panel.setBorder(BorderFactory.createTitledBorder("Specific alerts"));
+
+		JPanel categoryRow = new JPanel(new BorderLayout());
+		categoryComboBox.setToolTipText("Select the alert type to customize");
+		categoryRow.add(categoryComboBox, BorderLayout.CENTER);
+		PanelUi.addVerticalComponent(panel, categoryRow);
+
+		JPanel behaviorRow = new JPanel(new BorderLayout(8, 0));
+		behaviorRow.add(new JLabel("Behavior"), BorderLayout.CENTER);
+		behaviorRow.add(behaviorComboBox, BorderLayout.EAST);
+		PanelUi.setFixedWidth(behaviorComboBox, PanelUi.SELECTOR_CONTROL_WIDTH);
+		PanelUi.addVerticalComponent(panel, behaviorRow);
+
+		triggerRow.add(triggerLabel, BorderLayout.CENTER);
+		triggerRow.add(triggerSpinner, BorderLayout.EAST);
+		PanelUi.addVerticalComponent(panel, triggerRow);
+
+		JPanel intensityHeader = new JPanel(new BorderLayout());
+		intensityHeader.add(new JLabel("Intensity"), BorderLayout.WEST);
+		intensityHeader.add(specificIntensityValueLabel, BorderLayout.EAST);
+		PanelUi.addVerticalComponent(panel, intensityHeader);
+		PanelUi.addVerticalComponent(panel, specificIntensitySlider);
+
+		JPanel patternRow = new JPanel(new BorderLayout(8, 0));
+		patternRow.add(new JLabel("Pattern"), BorderLayout.CENTER);
+		patternRow.add(specificPatternComboBox, BorderLayout.EAST);
+		PanelUi.addVerticalComponent(panel, patternRow);
+
+		JPanel durationRow = new JPanel(new BorderLayout(8, 0));
+		durationRow.add(new JLabel(PanelUi.DURATION_LABEL), BorderLayout.CENTER);
+		durationRow.add(specificDurationSpinner, BorderLayout.EAST);
+		PanelUi.addVerticalComponent(panel, durationRow);
+
+		JPanel testRow = new JPanel(new BorderLayout());
+		testRow.add(testSpecificButton, BorderLayout.EAST);
+		PanelUi.addVerticalComponent(panel, testRow);
+		return panel;
+	}
+
+	private void configureListeners(
+		Runnable testGenericAction,
+		Consumer<AlertCategory> testSpecificAction)
+	{
+		genericEnabledCheckBox.addActionListener(event ->
+		{
+			genericEnabled = genericEnabledCheckBox.isSelected();
+			configManager.setConfiguration(
+				HapticScapeConfig.GROUP,
+				HapticScapeConfig.NOTIFICATION_FEEDBACK_ENABLED_KEY,
+				genericEnabled
+			);
+		});
+		respectFocusCheckBox.addActionListener(event ->
+		{
+			respectFocus = respectFocusCheckBox.isSelected();
+			configManager.setConfiguration(
+				HapticScapeConfig.GROUP,
+				HapticScapeConfig.NOTIFICATION_RESPECT_FOCUS_KEY,
+				respectFocus
+			);
+		});
+		genericIntensitySlider.addChangeListener(event ->
+		{
+			genericIntensityValueLabel.setText(genericIntensitySlider.getValue() + "%");
+			if (!genericIntensitySlider.getValueIsAdjusting() && !updatingGenericControls)
+			{
+				genericIntensityPercent = genericIntensitySlider.getValue();
+				configManager.setConfiguration(
+					HapticScapeConfig.GROUP,
+					HapticScapeConfig.NOTIFICATION_INTENSITY_PERCENT_KEY,
+					genericIntensityPercent
+				);
+			}
+		});
+		genericPatternComboBox.addActionListener(event ->
+		{
+			if (updatingGenericControls || updatingPatternChoices)
+			{
+				return;
+			}
+			HapticPatternSelection selected =
+				(HapticPatternSelection) genericPatternComboBox.getSelectedItem();
+			if (selected != null)
+			{
+				genericPattern = selected;
+				persistGenericPattern();
+				updateGenericControlState();
+			}
+		});
+		genericDurationSpinner.addChangeListener(event ->
+		{
+			if (!updatingGenericControls)
+			{
+				genericDurationMillis = ((Number) genericDurationSpinner.getValue()).intValue();
+				configManager.setConfiguration(
+					HapticScapeConfig.GROUP,
+					HapticScapeConfig.NOTIFICATION_DURATION_MILLIS_KEY,
+					genericDurationMillis
+				);
+			}
+		});
+		testGenericButton.addActionListener(event -> testGenericAction.run());
+
+		categoryComboBox.addActionListener(event ->
+		{
+			AlertCategory category = (AlertCategory) categoryComboBox.getSelectedItem();
+			if (category != null)
+			{
+				selectedCategory = category;
+				loadSelectedCategory();
+			}
+		});
+		behaviorComboBox.addActionListener(event ->
+		{
+			updateSelectedProfile();
+			updateSpecificControlState();
+		});
+		triggerSpinner.addChangeListener(event -> updateSelectedTrigger());
+		specificIntensitySlider.addChangeListener(event ->
+		{
+			specificIntensityValueLabel.setText(specificIntensitySlider.getValue() + "%");
+			if (!specificIntensitySlider.getValueIsAdjusting())
+			{
+				updateSelectedProfile();
+			}
+		});
+		specificPatternComboBox.addActionListener(event ->
+		{
+			updateSelectedProfile();
+			updateSpecificControlState();
+		});
+		specificDurationSpinner.addChangeListener(event -> updateSelectedProfile());
+		testSpecificButton.addActionListener(event ->
+			testSpecificAction.accept(selectedCategory));
 	}
 
 	private void loadSelectedCategory()
 	{
-		updatingControls = true;
+		AlertProfile profile = alertProfiles.get(selectedCategory);
+		updatingSpecificControls = true;
 		try
 		{
-			boolean generic = selectedCategory == AlertCategory.GENERIC_NOTIFICATION;
-			behaviorRow.setVisible(!generic);
-			thresholdRow.setVisible(selectedCategory.isThresholdBased());
-			if (generic)
+			behaviorComboBox.setSelectedItem(profile.getBehavior());
+			specificIntensitySlider.setValue(profile.getIntensityPercent());
+			specificIntensityValueLabel.setText(profile.getIntensityPercent() + "%");
+			specificPatternComboBox.setSelectedItem(profile.getPatternSelection());
+			specificDurationSpinner.setValue(profile.getDurationMillis());
+
+			boolean hasTrigger = selectedCategory.hasTriggerParameter();
+			triggerRow.setVisible(hasTrigger);
+			if (hasTrigger)
 			{
-				intensitySlider.setValue(genericIntensityPercent);
-				intensityValueLabel.setText(genericIntensityPercent + "%");
-				patternComboBox.setSelectedItem(genericPattern);
-				durationSpinner.setValue(genericDurationMillis);
+				AlertTriggerParameter parameter = selectedCategory.getTriggerParameter();
+				triggerLabel.setText(parameter.getLabel());
+				triggerSpinner.setModel(new SpinnerNumberModel(
+					triggerSettings.get(selectedCategory),
+					parameter.getMinimum(),
+					parameter.getMaximum(),
+					parameter.getStep()
+				));
 			}
-			else
-			{
-				AlertProfile profile = alertProfiles.get(selectedCategory);
-				behaviorComboBox.setSelectedItem(profile.getBehavior());
-				thresholdSpinner.setValue(profile.getThreshold());
-				intensitySlider.setValue(profile.getIntensityPercent());
-				intensityValueLabel.setText(profile.getIntensityPercent() + "%");
-				patternComboBox.setSelectedItem(profile.getPatternSelection());
-				durationSpinner.setValue(profile.getDurationMillis());
-			}
-			testButton.setText("Test " + selectedCategory.getDisplayName().toLowerCase());
+			testSpecificButton.setText(
+				"Test " + selectedCategory.getDisplayName().toLowerCase()
+			);
 		}
 		finally
 		{
-			updatingControls = false;
+			updatingSpecificControls = false;
 		}
-		updateControlState();
+		updateSpecificControlState();
 		revalidate();
 		repaint();
 	}
 
 	private void updateSelectedProfile()
 	{
-		if (updatingControls || updatingPatternChoices)
+		if (updatingSpecificControls || updatingPatternChoices)
 		{
 			return;
 		}
-		HapticPatternSelection pattern =
-			(HapticPatternSelection) patternComboBox.getSelectedItem();
-		if (pattern == null)
-		{
-			return;
-		}
-
-		if (selectedCategory == AlertCategory.GENERIC_NOTIFICATION)
-		{
-			genericIntensityPercent = intensitySlider.getValue();
-			genericDurationMillis = ((Number) durationSpinner.getValue()).intValue();
-			genericPattern = pattern;
-			configManager.setConfiguration(
-				HapticScapeConfig.GROUP,
-				HapticScapeConfig.NOTIFICATION_INTENSITY_PERCENT_KEY,
-				genericIntensityPercent
-			);
-			configManager.setConfiguration(
-				HapticScapeConfig.GROUP,
-				HapticScapeConfig.NOTIFICATION_DURATION_MILLIS_KEY,
-				genericDurationMillis
-			);
-			persistGenericPattern();
-			return;
-		}
-
 		AlertBehavior behavior = (AlertBehavior) behaviorComboBox.getSelectedItem();
-		if (behavior == null)
+		HapticPatternSelection pattern =
+			(HapticPatternSelection) specificPatternComboBox.getSelectedItem();
+		if (behavior == null || pattern == null)
 		{
 			return;
 		}
+
 		alertProfiles = alertProfiles.withProfile(
 			selectedCategory,
 			new AlertProfile(
 				behavior,
-				intensitySlider.getValue(),
-				((Number) durationSpinner.getValue()).intValue(),
-				pattern,
-				((Number) thresholdSpinner.getValue()).intValue()
+				specificIntensitySlider.getValue(),
+				((Number) specificDurationSpinner.getValue()).intValue(),
+				pattern
 			)
 		);
 		persistProfiles();
 	}
 
-	private void updateControlState()
+	private void updateSelectedTrigger()
 	{
-		boolean generic = selectedCategory == AlertCategory.GENERIC_NOTIFICATION;
-		AlertBehavior behavior = generic
-			? AlertBehavior.CUSTOM
-			: (AlertBehavior) behaviorComboBox.getSelectedItem();
+		if (updatingSpecificControls || !selectedCategory.hasTriggerParameter())
+		{
+			return;
+		}
+		triggerSettings = triggerSettings.withValue(
+			selectedCategory,
+			((Number) triggerSpinner.getValue()).intValue()
+		);
+		persistTriggerSettings();
+	}
+
+	private void updateGenericControlState()
+	{
+		HapticPatternSelection pattern =
+			(HapticPatternSelection) genericPatternComboBox.getSelectedItem();
+		boolean externallyScaled = pattern == null || !pattern.isCustom();
+		genericPatternComboBox.setEnabled(true);
+		genericIntensitySlider.setEnabled(externallyScaled);
+		genericIntensityValueLabel.setEnabled(externallyScaled);
+		genericDurationSpinner.setEnabled(externallyScaled);
+		testGenericButton.setEnabled(connected);
+	}
+
+	private void updateSpecificControlState()
+	{
+		AlertBehavior behavior = (AlertBehavior) behaviorComboBox.getSelectedItem();
 		boolean customConfiguration = behavior == AlertBehavior.CUSTOM;
 		HapticPatternSelection pattern =
-			(HapticPatternSelection) patternComboBox.getSelectedItem();
+			(HapticPatternSelection) specificPatternComboBox.getSelectedItem();
 		boolean externallyScaled = pattern == null || !pattern.isCustom();
 
-		categoryComboBox.setEnabled(true);
-		respectFocusCheckBox.setEnabled(true);
-		behaviorComboBox.setEnabled(!generic);
-		thresholdSpinner.setEnabled(selectedCategory.isThresholdBased());
-		patternComboBox.setEnabled(customConfiguration);
-		intensitySlider.setEnabled(customConfiguration && externallyScaled);
-		intensityValueLabel.setEnabled(customConfiguration && externallyScaled);
-		durationSpinner.setEnabled(customConfiguration && externallyScaled);
-		testButton.setEnabled(connected && behavior != AlertBehavior.OFF);
+		triggerSpinner.setEnabled(selectedCategory.hasTriggerParameter());
+		specificPatternComboBox.setEnabled(customConfiguration);
+		specificIntensitySlider.setEnabled(customConfiguration && externallyScaled);
+		specificIntensityValueLabel.setEnabled(customConfiguration && externallyScaled);
+		specificDurationSpinner.setEnabled(customConfiguration && externallyScaled);
+		testSpecificButton.setEnabled(connected && behavior != AlertBehavior.OFF);
+	}
+
+	private void persistMigratedSettings(
+		String configuredProfiles,
+		String configuredTriggers)
+	{
+		if (!alertProfiles.toConfigValue().equals(configuredProfiles))
+		{
+			persistProfiles();
+		}
+		if (!triggerSettings.toConfigValue().equals(configuredTriggers))
+		{
+			persistTriggerSettings();
+		}
 	}
 
 	private void persistGenericPattern()
@@ -383,6 +524,15 @@ final class AlertsPanel extends JPanel
 			HapticScapeConfig.GROUP,
 			HapticScapeConfig.ALERT_PROFILES_KEY,
 			alertProfiles.toConfigValue()
+		);
+	}
+
+	private void persistTriggerSettings()
+	{
+		configManager.setConfiguration(
+			HapticScapeConfig.GROUP,
+			HapticScapeConfig.ALERT_TRIGGER_SETTINGS_KEY,
+			triggerSettings.toConfigValue()
 		);
 	}
 
