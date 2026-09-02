@@ -1,148 +1,160 @@
 # HapticScape
 
-HapticScape turns Old School RuneScape events into configurable haptic feedback.
-It connects RuneLite to devices managed by
-[Intiface Central](https://intiface.com/) and gives each player control over
-what triggers feedback, how strong it feels, how long it lasts, and what
-pattern it follows.
+HapticScape turns Old School RuneScape events and Windows audio into
+configurable haptic feedback. It connects RuneLite to devices managed by
+[Intiface Central](https://intiface.com/) and gives you control over what
+triggers feedback, how it feels, and which devices receive it.
 
 HapticScape is an unofficial RuneLite integration. It is not endorsed by
 RuneLite, Jagex, or the Intiface project.
 
 ## Features
-<table>
-<tr>
-<td rowspan="3" valign="top"><a href="https://github.com/user-attachments/assets/afccc02a-d017-4780-a7a4-6b12f6f4edb7"><img src="https://github.com/user-attachments/assets/afccc02a-d017-4780-a7a4-6b12f6f4edb7" width="180" alt="HapticScape main panel"></a></td>
-<td valign="top"><a href="https://github.com/user-attachments/assets/0ebc2624-0bf8-4cbe-9881-74faf7187de9"><img src="https://github.com/user-attachments/assets/0ebc2624-0bf8-4cbe-9881-74faf7187de9" width="180" alt="HapticScape skill profiles"></a></td>
-</tr>
-<tr>
-<td valign="top"><a href="https://github.com/user-attachments/assets/ba565485-ab23-4a56-9c72-c26366a8a78a"><img src="https://github.com/user-attachments/assets/ba565485-ab23-4a56-9c72-c26366a8a78a" width="180" alt="HapticScape alerts"></a></td>
-</tr>
-<td valign="top"><a href="https://github.com/user-attachments/assets/25834e1d-2e60-4c2b-adf2-3aee17961a2f"><img src="https://github.com/user-attachments/assets/25834e1d-2e60-4c2b-adf2-3aee17961a2f" width="180" alt="HapticScape graph"></a></td>
-</tr>
-</table>
 
-### RuneScape feedback
+### XP and skill feedback
 
-- Trigger feedback when a single XP gain reaches a configurable threshold.
-- Enable or disable XP feedback for each RuneScape skill.
-- Give individual skills their own XP threshold, intensity, duration, and
-  pattern.
-- Use separate feedback for ordinary level-ups.
-- Choose a dedicated pattern for level milestones from 10 through 90.
-- Celebrate a real level 99 with a dedicated haptic ceremony, cheer, and
-  confetti overlay.
-- Give direct messages, trade requests, low hitpoints, low prayer, valuable
-  drops, a full inventory, poison or venom, a ready special attack, and player
-  death separate haptic profiles.
-- Set category-specific hitpoints, prayer, loot-value, and special-energy
-  trigger values independently from the haptic response.
-- Keep a fixed Generic profile for unclassified RuneLite notifications and let
-  individual alert types inherit that profile or use their own.
+- Trigger a haptic response when one XP gain reaches your chosen threshold.
+- Enable or disable feedback for each of the 24 skills.
+- Use global intensity, duration, and pattern settings for a simple setup.
+- Give individual skills their own threshold, intensity, duration, and pattern.
+- Configure separate feedback for ordinary level-ups.
+- Assign a dedicated pattern to level milestones from 10 through 90.
+- Preview global XP, level-up, and per-skill feedback from the side panel.
 
-### Haptic controls
+### Semantic alerts
+
+HapticScape can distinguish useful events instead of treating every RuneLite
+notification the same way:
+
+- Direct messages
+- Trade requests
+- Low hitpoints
+- Low prayer
+- Valuable drops
+- Full inventory
+- Poison or venom
+- Special attack ready
+- Player death
+
+Each alert can be disabled, inherit the Generic profile, or use its own
+pattern, intensity, and duration. Relevant categories also provide their own
+trigger settings, including hitpoints, prayer, loot value, and special-attack
+energy thresholds.
+
+The Generic profile remains the fallback for ordinary RuneLite notifications
+that do not match a more specific category. When both a specific event and a
+generic notification describe the same occurrence, HapticScape prioritizes
+the specific profile to avoid duplicate feedback.
+
+### Haptic controls and built-in patterns
 
 - Adjust intensity from 0% to 100%.
 - Set built-in pattern duration from 50 ms to 10 seconds.
-- Choose from Single, Double, Triple, Ascending, and Descending built-in
-  patterns.
-- Preview global XP, level-up, skill-profile, and alert feedback without
-  waiting for an in-game event.
+- Choose Single, Double, Triple, Ascending, or Descending feedback.
+- Test profiles without waiting for the corresponding in-game event.
 - Stop every connected device immediately with **Stop now**.
-
-### Music sync (Windows)
-
-- Turn the Windows system audio mix into continuous haptic feedback using a
-  local FFT-based analyzer.
-- Choose Smooth, Rhythmic, or Punchy response styles.
-- Adjust sensitivity plus independent minimum and maximum intensity limits.
-- Let the actual Windows audio level scale the detected beat automatically.
-- Respect the Windows master-volume slider and mute state.
-- Watch the current mapped output on a live meter.
-- Let XP feedback, alerts, custom patterns, and the Level 99 ceremony
-  temporarily override music sync, then resume automatically.
-- Turn music sync off automatically when **Stop now** is pressed.
 
 ### Custom Pattern Forge
 
+Pattern Forge lets you create reusable feedback without writing code:
+
 - Draw an intensity curve directly with the mouse.
-- Set the length of one drawn beat from 50 ms to 10 seconds.
-- Repeat that beat anywhere from 1 to 72 times.
-- Reuse the custom pattern's own intensity curve, beat length, and repetition
-  count without profile intensity or duration rescaling it.
-- Undo edits, clear the canvas, and save changes.
-- Add, rename, and delete custom patterns.
-- Keep up to 100 custom patterns at once.
+- Set one beat to any length from 50 ms to 10 seconds.
+- Repeat the beat from 1 to 72 times.
+- Undo edits, clear the canvas, preview the result, and save it.
+- Add, rename, and delete up to 100 custom patterns.
 - Assign custom patterns anywhere a built-in pattern can be selected.
-- Preserve existing pattern assignments when a custom pattern is renamed.
-- Safely return deleted assignments to Single pulse.
 
-### Connection experience
+A custom pattern keeps its own curve, beat length, and repetition count. Those
+values are not rescaled by a skill or alert profile's intensity and duration
+controls. Renaming a custom pattern preserves its existing assignments, while
+deleting one safely returns those assignments to Single pulse.
 
-- Connect to and disconnect from Intiface without restarting RuneLite.
-- Display discovered devices and their vibration support.
-- Recover cleanly after Intiface is stopped or loses the connection.
+### Music sync on Windows
 
-### Client updates (Windows)
+Music sync converts the current Windows audio output into continuous haptic
+feedback using a local FFT-based analyzer.
 
-- Check the latest stable GitHub Release before launching the bundled client.
-- Choose prompted updates, automatic installation, silent automatic updates,
-  or no startup update checks.
-- Dismiss an update temporarily or skip only one specific version.
-- Verify every downloaded bundle against its published SHA-256 checksum.
-- Stage and validate replacements before changing the installed bundle.
-- Restore the previous bundle when installation cannot be completed.
+- Choose Smooth, Rhythmic, or Punchy response styles.
+- Adjust sensitivity and independent minimum and maximum output levels.
+- Watch the mapped haptic output on a live meter.
+- Let actual system audio volume scale the response automatically.
+- Respect the Windows master-volume slider and mute state.
+- Allow XP feedback, alerts, and custom patterns to interrupt music sync and
+  resume it automatically afterward.
+- Disable music sync immediately when **Stop now** is pressed.
 
-## The HapticScape panel
+Because Music sync listens to the Windows output device, audio from other
+applications using that device can influence the response too.
 
-The main Feedback section controls the default XP response, ordinary level-up
-feedback, milestone feedback, and the Level 99 celebration. Five tabs provide
-the remaining controls:
+### Intiface connection and device controls
 
-| Tab | Purpose |
+- Connect to or disconnect from Intiface without restarting RuneLite.
+- Display discovered devices and whether they support vibration.
+- Send a configurable test pattern.
+- Recover cleanly when Intiface stops or the connection is lost.
+- Reconnect after restarting Intiface without relaunching the client.
+
+### Windows client updates
+
+The Windows launcher can check stable GitHub Releases before starting the
+client. Update installation and update notifications are separate choices, so
+you can choose prompted updates, silent automatic updates, notifications only,
+or no startup checks at all.
+
+- Check for an update manually at any time.
+- Install now, postpone the update, or skip one particular version.
+- Verify the downloaded ZIP against its published SHA-256 checksum.
+- Stage and validate the new bundle before replacing the installed version.
+- Restore the previous bundle if installation cannot be completed.
+- Launch the currently installed client when GitHub is unavailable.
+
+Version 1.6.0 is the first updater-enabled bundle and must be installed
+manually. Compatible releases published after it can be installed by the
+launcher.
+
+## Panel guide
+
+The Feedback section contains the global XP controls plus level-up and
+milestone settings. The tabs organize the more detailed features:
+
+| Tab | What it controls |
 |---|---|
-| **Skills** | Enable all skills, disable all skills, or toggle skills individually. |
-| **XP** | Override the global XP settings for one selected skill. |
-| **Alerts** | Configure the Generic catch-all and separate gameplay alert profiles and triggers. |
-| **Forge** | Create, preview, name, save, and manage custom patterns. |
-| **Music** | Enable Windows system-audio sync and tune its response and output limits. |
+| **Skills** | Enable all skills, disable all skills, or toggle them individually. |
+| **XP** | Select a skill and inherit or override the global XP settings. |
+| **Alerts** | Configure the Generic fallback and individual gameplay alert profiles. |
+| **Forge** | Draw, preview, save, rename, and manage custom patterns. |
+| **Music** | Enable Windows audio sync and tune its response. |
 
-The bottom of the panel contains the connection controls, global test button,
-emergency stop, update settings, and the list of devices reported by Intiface.
-
-Select **Updates** with the bottom controls to manage automatic
-installation and update notifications independently or check GitHub manually.
-The default is to notify before installing; automatic installation is opt-in.
+The bottom of the panel contains the Intiface connection controls, global test
+button, emergency stop, update controls, and connected-device list.
 
 ## Requirements
 
-- A supported Old School RuneScape account and RuneLite setup.
+- RuneLite and a supported Old School RuneScape account.
 - [Intiface Central](https://intiface.com/) installed and running.
-- Supported Intiface device.
-- Bluetooth, USB, serial, or another connection method supported by the device
-  and Intiface.
+- A device supported by Intiface.
+- Bluetooth, USB, serial, or another connection method required by that
+  device.
 
-For device-specific setup, use the official
-[Intiface Central quickstart](https://intiface.com/docs/intiface-central/quickstart/).
+See the official
+[Intiface Central quickstart](https://intiface.com/docs/intiface-central/quickstart/)
+for device-specific setup.
 
-## Connecting for the first time
+## Quick start
 
-1. Install and open Intiface Central.
-2. Configure the appropriate device manager in Intiface.
-3. Start the Intiface engine/server.
-4. Scan for and connect your device in Intiface.
-5. Confirm that the device responds to Intiface's own test controls.
-6. Launch the HapticScape RuneLite build.
-7. Open the HapticScape side panel and select **Connect**.
-8. Leave the server address at `ws://localhost:12345` unless Intiface is
-   running elsewhere.
-9. Select **Test pattern** and adjust the intensity and duration to a
-   comfortable level.
+1. Open Intiface Central.
+2. Start its engine/server.
+3. Scan for and connect your device in Intiface.
+4. Confirm the device responds to Intiface's test controls.
+5. Launch the HapticScape RuneLite build.
+6. Open the HapticScape side panel and select **Connect**.
+7. Keep `ws://localhost:12345` as the server address unless Intiface runs on
+   another computer or port.
+8. Select **Test pattern** and choose a comfortable intensity and duration.
 
-Different devices have different minimum usable intensities. If a device is
-silent at low percentages but begins responding above a particular value,
-raise HapticScape's intensity—or Music sync's Minimum setting—above that
-device's physical threshold.
+Different devices have different minimum usable intensities. If yours is
+silent at low percentages, raise the intensity—or Music sync's Minimum
+setting—above the device's physical threshold.
 
 ## Running from source
 
@@ -155,7 +167,7 @@ system-wide Gradle installation is not required.
 - A Java 11 JDK
 - Intiface Central
 
-Clone the repository:
+Clone the repository and enter it:
 
 ```powershell
 git clone https://github.com/ashy0019/HapticScape.git
@@ -178,8 +190,8 @@ On macOS or Linux, use `./gradlew` instead of `.\gradlew.bat`.
 
 ### Jagex Accounts
 
-Developers using a Jagex Account may need to create their own local RuneLite
-credentials by following RuneLite's
+Developers using a Jagex Account may need to create local RuneLite credentials
+by following RuneLite's
 [Using Jagex Accounts development guide](https://github.com/runelite/runelite/wiki/Using-Jagex-Accounts).
 
 Never commit, upload, package, or share
@@ -200,16 +212,16 @@ The runnable client is written to:
 build\libs\hapticscape-client.jar
 ```
 
-It can be launched manually with Java 11:
+Launch it manually with Java 11:
 
 ```powershell
 java -ea -jar .\build\libs\hapticscape-client.jar --developer-mode --debug
 ```
 
-This is an unofficial development client containing HapticScape; it is not an
+This is an unofficial development client containing HapticScape, not an
 official RuneLite distribution.
 
-## Building the private Windows bundle
+## Building the Windows bundle
 
 The Windows packager creates a small `HapticScape.exe` launcher and bundles it
 with the client JAR. It does not package Intiface or account credentials.
@@ -225,25 +237,15 @@ with the client JAR. It does not package Intiface or account credentials.
 From PowerShell in the repository root:
 
 ```powershell
-.\package-windows.ps1
-```
-
-To specify a release version:
-
-```powershell
 .\package-windows.ps1 -Version 1.6.0
 ```
 
-The script:
+The script runs the Java and native updater tests, builds the client JAR,
+compiles the Windows launcher and update helper, gathers required licenses and
+release metadata, then creates a distributable ZIP and checksum in
+`build\distribution`.
 
-1. Runs the tests.
-2. Builds `hapticscape-client.jar`.
-3. Compiles and runs the native updater tests.
-4. Compiles the native Windows launcher and update helper.
-5. Adds release metadata, required licenses, and the friend setup guide.
-6. Creates a distributable ZIP and SHA-256 file in `build\distribution`.
-
-For version 1.6.0 on a 64-bit Windows computer, the output is:
+For a 64-bit version 1.6.0 build, the output is:
 
 ```text
 build\distribution\HapticScape-Windows-x64-1.6.0.zip
@@ -257,32 +259,40 @@ build\windows-package\HapticScape\HapticScape.exe
 ```
 
 Distribute the complete ZIP, not `HapticScape.exe` by itself. The launcher
-expects the accompanying `app` directory to be present. Windows may show a
-SmartScreen warning because private builds are not code-signed.
+requires the accompanying `app` directory. Windows may display a SmartScreen
+warning because private builds are not code-signed.
+
+## Publishing an updater-compatible release
+
+1. Run `.\package-windows.ps1 -Version X.Y.Z`.
+2. Tag that exact commit as `vX.Y.Z`.
+3. Create a GitHub Release from the tag.
+4. Upload both the generated ZIP and its matching `.zip.sha256` file.
+
+The asset names, Git tag, embedded version, and architecture must agree.
+Drafts and prereleases are not offered through the stable update channel.
+Update preferences are stored in
+`.runelite\hapticscape\updater-settings.json`, outside the replaceable client
+bundle.
 
 ## Privacy and networking
 
-The default address, `ws://localhost:12345`, keeps the HapticScape-to-Intiface
-connection on the same computer. HapticScape sends the Intiface handshake and
-device commands required to play the selected feedback.
+The default Intiface address, `ws://localhost:12345`, keeps the connection on
+the same computer. HapticScape sends only the protocol handshake and device
+commands needed to play your configured feedback. It does not send account
+names, chat messages, passwords, other-player information, or RuneLite
+notification text to Intiface.
 
-HapticScape does not send RuneScape account names, chat messages, passwords,
-or information about other players to Intiface. RuneLite notification text is
-not sent to Intiface; an accepted notification only triggers the configured
-pattern.
-
-On Windows, Music sync listens to the current system output mix. Audio is
-analyzed in a small in-memory rolling window and is never recorded, saved, or
-transmitted. Because Windows loopback captures the output device, other
-applications playing through the same device can also influence Music sync.
+Music sync analyzes a small rolling window of the current Windows output mix
+in memory. Audio is never recorded, saved, or transmitted by HapticScape.
 
 When update checks are enabled, the Windows launcher requests public release
-metadata from GitHub. HapticScape does not include account, character, chat,
-device, or gameplay data in that request. Disable both automatic updates and
-update notifications to prevent startup update requests. A manual **Check
-now** still performs a user-requested GitHub check.
+metadata from GitHub. It does not add account, character, chat, device, or
+gameplay data to that request. Disable both automatic updates and update
+notifications to prevent startup update requests. Selecting **Check now**
+still performs a user-requested GitHub check.
 
-If you configure a non-local server address, the operator of that server can
+If you configure a non-local Intiface address, that server's operator can
 receive your IP address and haptic command traffic. Only connect to remote
 servers you trust.
 
@@ -291,54 +301,34 @@ servers you trust.
 ### HapticScape stays on Connecting
 
 - Confirm Intiface Central is open and its engine/server is running.
-- Confirm the server address and port match Intiface.
+- Confirm the configured server address and port match Intiface.
 - Use `ws://localhost:12345` when both applications run on the same computer.
 - Disconnect and reconnect after restarting Intiface.
 
 ### The device does not appear
 
 - Scan for the device inside Intiface Central first.
-- Confirm the device works with Intiface's own test controls.
-- Close manufacturer applications or other software that may already control
-  the device.
-- Check Intiface's documentation for the device's Bluetooth, USB, or serial
-  requirements.
+- Confirm it works with Intiface's own test controls.
+- Close manufacturer applications or other software that may control it.
+- Check Intiface's documentation for its Bluetooth, USB, or serial needs.
 
-### The device appears but does not move
+### The device appears but does not respond
 
-- Confirm Intiface reports vibration/scalar support for the device.
+- Confirm Intiface reports vibration or scalar support for the device.
 - Increase intensity; some devices ignore low values.
-- Try **Stop now**, reconnect, and send another test pattern.
+- Select **Stop now**, reconnect, and send another test pattern.
 - Test a built-in Single pulse before troubleshooting a custom curve.
 
 ### The Windows launcher cannot find Java
 
-Install the official RuneLite launcher first. The HapticScape launcher looks
-for RuneLite's bundled Java runtime, then checks `JAVA_HOME` and `PATH`.
-
-## Releases and updates
-
-Version 1.6.0 is the first updater-enabled bundle and must be installed
-manually. Later Windows bundles can update through stable GitHub Releases.
-
-To publish an updater-compatible release:
-
-1. Run `.\package-windows.ps1 -Version X.Y.Z`.
-2. Tag that exact commit as `vX.Y.Z`.
-3. Create a GitHub Release from the tag.
-4. Upload both the generated ZIP and matching `.zip.sha256` file.
-
-The asset names, tag, embedded release version, and architecture must agree.
-Drafts and prereleases are not offered through the stable update channel.
-Update preferences are stored in
-`.runelite\hapticscape\updater-settings.json`, outside the replaceable client
-bundle.
+Install the official RuneLite launcher first. HapticScape looks for RuneLite's
+bundled Java runtime, then checks `JAVA_HOME` and `PATH`.
 
 ## License and acknowledgements
 
-HapticScape is distributed under the license in [LICENSE](LICENSE). Private
-client bundles also include RuneLite's license in their `app\licenses`
-directory.
+HapticScape is distributed under the terms in [LICENSE](LICENSE). Windows
+bundles include applicable third-party notices and RuneLite's license in their
+`app\licenses` directory.
 
 RuneLite is a third-party client for Old School RuneScape. Intiface Central is
 an independent open-source project built on the Buttplug framework. All names
