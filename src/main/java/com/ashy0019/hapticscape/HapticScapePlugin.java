@@ -290,20 +290,32 @@ public class HapticScapePlugin extends Plugin
 
 		XpChange change = xpTracker.update(event.getSkill(), event.getXp());
 		HapticScapePanel currentPanel = panel;
-		if (currentPanel == null || !currentPanel.isSkillEnabled(change.getSkill()))
+		if (currentPanel == null)
 		{
 			return;
 		}
 
 		XpFeedbackSettings skillXpSettings = currentPanel.getXpFeedbackSettings(change.getSkill());
-		XpFeedbackTrigger trigger = XpFeedbackTrigger.classify(
+		XpOutputDecision decision = XpOutputDecision.classify(
 			change,
-			skillXpSettings.getMinimumXpGain(),
+			currentPanel.isHapticSkillEnabled(change.getSkill()),
+			skillXpSettings,
 			currentPanel.isLevelUpFeedbackEnabled(),
 			currentPanel.isMilestoneFeedbackEnabled(),
-			currentPanel.isLevel99CelebrationEnabled()
+			currentPanel.isLevel99CelebrationEnabled(),
+			currentPanel.isClickSkillEnabled(change.getSkill()),
+			currentPanel.getClickerXpSettings()
 		);
-		handleFeedbackTrigger(change, trigger, currentPanel, skillXpSettings);
+		if (decision.shouldClick() && clickerService != null)
+		{
+			clickerService.click();
+		}
+		handleFeedbackTrigger(
+			change,
+			decision.getHapticTrigger(),
+			currentPanel,
+			skillXpSettings
+		);
 	}
 
 	@Subscribe

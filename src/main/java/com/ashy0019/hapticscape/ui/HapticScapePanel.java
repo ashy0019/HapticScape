@@ -12,6 +12,7 @@ import com.ashy0019.hapticscape.SkillFeedbackProfiles;
 import com.ashy0019.hapticscape.SkillSelection;
 import com.ashy0019.hapticscape.XpFeedbackSettings;
 import com.ashy0019.hapticscape.clicker.ClickerSettings;
+import com.ashy0019.hapticscape.clicker.ClickerXpSettings;
 import com.ashy0019.hapticscape.device.ConnectionSnapshot;
 import com.ashy0019.hapticscape.device.ConnectionState;
 import com.ashy0019.hapticscape.device.DeviceInfo;
@@ -207,6 +208,7 @@ public final class HapticScapePanel extends PluginPanel
 
 		skillsPanel = new SkillsPanel(
 			SkillSelection.fromConfigValue(config.disabledSkills()),
+			SkillSelection.fromConfigValue(config.clickerDisabledSkills()),
 			configManager
 		);
 		profilesPanel = new ProfilesPanel(
@@ -366,7 +368,17 @@ public final class HapticScapePanel extends PluginPanel
 
 	public boolean isSkillEnabled(Skill skill)
 	{
-		return skillsPanel.isSkillEnabled(skill);
+		return isHapticSkillEnabled(skill);
+	}
+
+	public boolean isHapticSkillEnabled(Skill skill)
+	{
+		return skillsPanel.isHapticSkillEnabled(skill);
+	}
+
+	public boolean isClickSkillEnabled(Skill skill)
+	{
+		return skillsPanel.isClickSkillEnabled(skill);
 	}
 
 	public CustomPatternLibrary getCustomPatterns()
@@ -397,6 +409,11 @@ public final class HapticScapePanel extends PluginPanel
 	public ClickerSettings getClickerSettings()
 	{
 		return clickerPanel.getSettings();
+	}
+
+	public ClickerXpSettings getClickerXpSettings()
+	{
+		return clickerPanel.getXpSettings();
 	}
 
 	public void updateMusicSync(MusicSyncSnapshot snapshot)

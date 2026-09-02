@@ -2,6 +2,7 @@ package com.ashy0019.hapticscape.ui;
 
 import com.ashy0019.hapticscape.HapticScapeConfig;
 import com.ashy0019.hapticscape.clicker.ClickerSettings;
+import com.ashy0019.hapticscape.clicker.ClickerXpSettings;
 import java.awt.BorderLayout;
 import java.util.function.Consumer;
 import javax.swing.BorderFactory;
@@ -11,6 +12,8 @@ import javax.swing.JCheckBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JSlider;
+import javax.swing.JSpinner;
+import javax.swing.SpinnerNumberModel;
 import net.runelite.client.config.ConfigManager;
 
 final class ClickerPanel extends JPanel
@@ -23,7 +26,18 @@ final class ClickerPanel extends JPanel
 		ClickerSettings.MAXIMUM_VOLUME_PERCENT
 	);
 	private final JLabel volumeValue = new JLabel();
+	private final JSpinner minimumXpSpinner = new JSpinner(new SpinnerNumberModel(
+		ClickerXpSettings.MINIMUM_XP_GAIN,
+		ClickerXpSettings.MINIMUM_XP_GAIN,
+		ClickerXpSettings.MAXIMUM_XP_GAIN,
+		1
+	));
+	private final JCheckBox levelUpCheckBox = new JCheckBox("Always click level-ups");
+	private final JCheckBox milestoneCheckBox = new JCheckBox("Always click milestones");
+	private final JCheckBox level99CheckBox = new JCheckBox("Always click level 99");
 	private final JButton testButton = new JButton("Test click");
+	private volatile ClickerSettings settings;
+	private volatile ClickerXpSettings xpSettings;
 
 	ClickerPanel(
 		HapticScapeConfig config,
@@ -36,16 +50,53 @@ final class ClickerPanel extends JPanel
 		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
 		setBorder(BorderFactory.createEmptyBorder(5, 4, 4, 4));
 
-		enabledCheckBox.setSelected(config.clickerEnabled());
+		settings = new ClickerSettings(
+			config.clickerEnabled(),
+			config.clickerVolumePercent()
+		);
+		xpSettings = new ClickerXpSettings(
+			config.clickerMinimumXpGain(),
+			config.clickerLevelUpEnabled(),
+			config.clickerMilestoneEnabled(),
+			config.clickerLevel99Enabled()
+		);
+		enabledCheckBox.setSelected(settings.isEnabled());
 		volumeSlider.setValue(clamp(
-			config.clickerVolumePercent(),
+			settings.getVolumePercent(),
 			ClickerSettings.MINIMUM_VOLUME_PERCENT,
 			ClickerSettings.MAXIMUM_VOLUME_PERCENT
 		));
+		minimumXpSpinner.setValue(clamp(
+			xpSettings.getMinimumXpGain(),
+			ClickerXpSettings.MINIMUM_XP_GAIN,
+			ClickerXpSettings.MAXIMUM_XP_GAIN
+		));
+		PanelUi.setFixedWidth(minimumXpSpinner, PanelUi.NUMERIC_CONTROL_WIDTH);
+		levelUpCheckBox.setSelected(xpSettings.isLevelUpEnabled());
+		milestoneCheckBox.setSelected(xpSettings.isMilestoneEnabled());
+		level99CheckBox.setSelected(xpSettings.isLevel99Enabled());
+		levelUpCheckBox.setToolTipText("Click even when a level-up XP gain is below the threshold");
+		milestoneCheckBox.setToolTipText("Give decade milestones priority over ordinary level-ups");
+		level99CheckBox.setToolTipText("Click once when a skill reaches level 99");
 
 		PanelUi.addVerticalComponent(this, enabledCheckBox);
 		PanelUi.addVerticalComponent(this, row("Volume", volumeValue));
 		PanelUi.addVerticalComponent(this, volumeSlider);
+
+		JPanel xpSettings = new JPanel();
+		xpSettings.setLayout(new BoxLayout(xpSettings, BoxLayout.Y_AXIS));
+		xpSettings.setBorder(BorderFactory.createTitledBorder("XP clicks"));
+		JLabel skillHint = new JLabel("Select skills under Skills → Clicker.");
+		skillHint.setToolTipText("The Skills tab stores separate Haptics and Clicker selections");
+		PanelUi.addVerticalComponent(xpSettings, skillHint);
+		PanelUi.addVerticalComponent(
+			xpSettings,
+			row("Minimum XP gain", minimumXpSpinner)
+		);
+		PanelUi.addVerticalComponent(xpSettings, levelUpCheckBox);
+		PanelUi.addVerticalComponent(xpSettings, milestoneCheckBox);
+		PanelUi.addVerticalComponent(xpSettings, level99CheckBox);
+		PanelUi.addVerticalComponent(this, xpSettings);
 		PanelUi.addVerticalComponent(this, testButton);
 
 		JLabel description = new JLabel("Works without Intiface or a connected device.");
@@ -59,10 +110,12 @@ final class ClickerPanel extends JPanel
 
 	ClickerSettings getSettings()
 	{
-		return new ClickerSettings(
-			enabledCheckBox.isSelected(),
-			volumeSlider.getValue()
-		);
+		return settings;
+	}
+
+	ClickerXpSettings getXpSettings()
+	{
+		return xpSettings;
 	}
 
 	private void configureListeners(Runnable testAction)
@@ -85,6 +138,38 @@ final class ClickerPanel extends JPanel
 				fireSettings();
 			}
 		});
+		minimumXpSpinner.addChangeListener(event ->
+		{
+			persist(
+				HapticScapeConfig.CLICKER_MINIMUM_XP_GAIN_KEY,
+				((Number) minimumXpSpinner.getValue()).intValue()
+			);
+			refreshXpSettings();
+		});
+		levelUpCheckBox.addActionListener(event ->
+		{
+			persist(
+				HapticScapeConfig.CLICKER_LEVEL_UP_ENABLED_KEY,
+				levelUpCheckBox.isSelected()
+			);
+			refreshXpSettings();
+		});
+		milestoneCheckBox.addActionListener(event ->
+		{
+			persist(
+				HapticScapeConfig.CLICKER_MILESTONE_ENABLED_KEY,
+				milestoneCheckBox.isSelected()
+			);
+			refreshXpSettings();
+		});
+		level99CheckBox.addActionListener(event ->
+		{
+			persist(
+				HapticScapeConfig.CLICKER_LEVEL_99_ENABLED_KEY,
+				level99CheckBox.isSelected()
+			);
+			refreshXpSettings();
+		});
 		testButton.addActionListener(event -> testAction.run());
 	}
 
@@ -97,13 +182,31 @@ final class ClickerPanel extends JPanel
 	{
 		boolean enabled = enabledCheckBox.isSelected();
 		volumeSlider.setEnabled(enabled);
+		minimumXpSpinner.setEnabled(enabled);
+		levelUpCheckBox.setEnabled(enabled);
+		milestoneCheckBox.setEnabled(enabled);
+		level99CheckBox.setEnabled(enabled);
 		testButton.setEnabled(enabled && volumeSlider.getValue() > 0);
 	}
 
 	private void fireSettings()
 	{
-		settingsListener.accept(getSettings());
+		settings = new ClickerSettings(
+			enabledCheckBox.isSelected(),
+			volumeSlider.getValue()
+		);
+		settingsListener.accept(settings);
 		refreshEnabledState();
+	}
+
+	private void refreshXpSettings()
+	{
+		xpSettings = new ClickerXpSettings(
+			((Number) minimumXpSpinner.getValue()).intValue(),
+			levelUpCheckBox.isSelected(),
+			milestoneCheckBox.isSelected(),
+			level99CheckBox.isSelected()
+		);
 	}
 
 	private void persist(String key, Object value)

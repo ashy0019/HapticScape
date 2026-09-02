@@ -35,6 +35,11 @@ public interface HapticScapeConfig extends Config
 	String MUSIC_MAXIMUM_INTENSITY_PERCENT_KEY = "musicMaximumIntensityPercent";
 	String CLICKER_ENABLED_KEY = "clickerEnabled";
 	String CLICKER_VOLUME_PERCENT_KEY = "clickerVolumePercent";
+	String CLICKER_MINIMUM_XP_GAIN_KEY = "clickerMinimumXpGain";
+	String CLICKER_DISABLED_SKILLS_KEY = "clickerDisabledSkills";
+	String CLICKER_LEVEL_UP_ENABLED_KEY = "clickerLevelUpEnabled";
+	String CLICKER_MILESTONE_ENABLED_KEY = "clickerMilestoneEnabled";
+	String CLICKER_LEVEL_99_ENABLED_KEY = "clickerLevel99Enabled";
 
 	@ConfigItem(
 		keyName = "intifaceServer",
@@ -367,5 +372,66 @@ public interface HapticScapeConfig extends Config
 	default int clickerVolumePercent()
 	{
 		return 70;
+	}
+
+	@Range(min = 1, max = 200_000_000)
+	@ConfigItem(
+		keyName = CLICKER_MINIMUM_XP_GAIN_KEY,
+		name = "Clicker minimum XP gain",
+		description = "Minimum XP gained by one stat change before a click is triggered",
+		position = 27,
+		hidden = true
+	)
+	default int clickerMinimumXpGain()
+	{
+		return 1;
+	}
+
+	@ConfigItem(
+		keyName = CLICKER_DISABLED_SKILLS_KEY,
+		name = "Clicker disabled skills",
+		description = "Skill identifiers which do not trigger clicker feedback",
+		position = 28,
+		hidden = true
+	)
+	default String clickerDisabledSkills()
+	{
+		return SkillSelection.allEnabled().withAllEnabled(false).toConfigValue();
+	}
+
+	@ConfigItem(
+		keyName = CLICKER_LEVEL_UP_ENABLED_KEY,
+		name = "Clicker level-ups",
+		description = "Click once when a real skill level increases",
+		position = 29,
+		hidden = true
+	)
+	default boolean clickerLevelUpEnabled()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = CLICKER_MILESTONE_ENABLED_KEY,
+		name = "Clicker milestones",
+		description = "Click once for skill levels 10 through 90",
+		position = 30,
+		hidden = true
+	)
+	default boolean clickerMilestoneEnabled()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = CLICKER_LEVEL_99_ENABLED_KEY,
+		name = "Clicker level 99",
+		description = "Click once when a skill reaches level 99",
+		position = 31,
+		hidden = true
+	)
+	default boolean clickerLevel99Enabled()
+	{
+		return true;
 	}
 }
