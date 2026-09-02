@@ -28,6 +28,20 @@ public final class Level99CelebrationOverlay extends Overlay
 	private static final int CONFETTI_COUNT = 99;
 	private static final Color GOLD = new Color(255, 174, 0);
 	private static final Color LIGHT_GOLD = new Color(255, 225, 128);
+	private static final Color[] MARQUEE_COLORS =
+{
+    new Color(255, 70, 70),    // red
+    new Color(255, 170, 50),   // orange
+    new Color(255, 235, 70),   // yellow
+    new Color(80, 225, 110),   // green
+    new Color(65, 180, 255),   // blue
+    new Color(175, 90, 255),   // purple
+    new Color(255, 90, 190)    // pink
+};
+
+private static final long MARQUEE_STEP_NANOS = 90_000_000L;
+private static final int MARQUEE_OFFSET = 11;
+private static final int MARQUEE_SPACING = 22;
 	private static final Color[] CONFETTI_COLORS =
 	{
 		new Color(255, 174, 0),
@@ -71,6 +85,13 @@ public final class Level99CelebrationOverlay extends Overlay
 			g.setComposite(AlphaComposite.SrcOver);
 
 			float pulse = (float) snapshot.getPulseIntensity();
+
+			drawMarqueeLights(
+					g,
+					snapshot.getElapsedNanos(),
+					pulse
+			);
+
 			int backgroundAlpha = 205 + Math.round(25 * pulse);
 			g.setColor(new Color(20, 14, 8, backgroundAlpha));
 			g.fillRoundRect(CARD_X, CARD_Y, CARD_WIDTH, CARD_HEIGHT, 22, 22);
@@ -88,6 +109,7 @@ public final class Level99CelebrationOverlay extends Overlay
 			drawConfetti(g, snapshot.getElapsedNanos());
 
 			Font base = graphics.getFont();
+
 			drawCentered(g, "LEVEL 99", base.deriveFont(Font.BOLD, 32f), LIGHT_GOLD, 60);
 			drawCentered(
 				g,
@@ -115,6 +137,153 @@ public final class Level99CelebrationOverlay extends Overlay
 			g.dispose();
 		}
 		return new Dimension(WIDTH, HEIGHT);
+	}
+
+	private static void drawMarqueeLights(
+		Graphics2D graphics,
+		long elapsedNanos,
+		float pulse)
+	{
+		int left = CARD_X - MARQUEE_OFFSET;
+		int right = CARD_X + CARD_WIDTH + MARQUEE_OFFSET;
+		int top = CARD_Y - MARQUEE_OFFSET;
+		int bottom = CARD_Y + CARD_HEIGHT + MARQUEE_OFFSET;
+
+		int colorPhase = (int) (
+			(elapsedNanos / MARQUEE_STEP_NANOS)
+				% MARQUEE_COLORS.length
+		);
+
+		int chasePhase = (int) (
+			(elapsedNanos / MARQUEE_STEP_NANOS)
+				% 5
+		);
+
+		int index = 0;
+
+		// Top edge: left to right.
+		for (int x = left + 14; x <= right - 14; x += MARQUEE_SPACING)
+		{
+			drawMarqueeBulb(
+				graphics,
+				x,
+				top,
+				index++,
+				colorPhase,
+				chasePhase,
+				pulse
+			);
+		}
+
+		// Right edge: top to bottom.
+		for (int y = top + MARQUEE_SPACING;
+			y <= bottom - MARQUEE_SPACING;
+			y += MARQUEE_SPACING)
+		{
+			drawMarqueeBulb(
+				graphics,
+				right,
+				y,
+				index++,
+				colorPhase,
+				chasePhase,
+				pulse
+			);
+		}
+
+		// Bottom edge: right to left.
+		for (int x = right - 14; x >= left + 14; x -= MARQUEE_SPACING)
+		{
+			drawMarqueeBulb(
+				graphics,
+				x,
+				bottom,
+				index++,
+				colorPhase,
+				chasePhase,
+				pulse
+			);
+		}
+
+		// Left edge: bottom to top.
+		for (int y = bottom - MARQUEE_SPACING;
+			y >= top + MARQUEE_SPACING;
+			y -= MARQUEE_SPACING)
+		{
+			drawMarqueeBulb(
+				graphics,
+				left,
+				y,
+				index++,
+				colorPhase,
+				chasePhase,
+				pulse
+			);
+		}
+	}
+
+	private static void drawMarqueeBulb(
+		Graphics2D graphics,
+		int x,
+		int y,
+		int index,
+		int colorPhase,
+		int chasePhase,
+		float pulse)
+	{
+		Color color = MARQUEE_COLORS[
+			(index + colorPhase) % MARQUEE_COLORS.length
+		];
+
+		boolean hot = ((index - chasePhase + 100) % 5) == 0;
+		float boundedPulse = Math.max(0.0f, Math.min(1.0f, pulse));
+
+		int glowAlpha =
+			(hot ? 105 : 50)
+				+ Math.round(65.0f * boundedPulse);
+		glowAlpha = Math.min(200, glowAlpha);
+
+		int glowSize =
+			(hot ? 22 : 18)
+				+ Math.round(4.0f * boundedPulse);
+		int glowRadius = glowSize / 2;
+
+		// Colored halo.
+		graphics.setColor(new Color(
+			color.getRed(),
+			color.getGreen(),
+			color.getBlue(),
+			glowAlpha
+		));
+		graphics.fillOval(
+			x - glowRadius,
+			y - glowRadius,
+			glowSize,
+			glowSize
+		);
+
+		// Dark socket.
+		graphics.setColor(new Color(24, 17, 11, 235));
+		graphics.fillOval(x - 7, y - 7, 14, 14);
+
+		// Main colored bulb.
+		int bulbAlpha = hot ? 255 : 215;
+		graphics.setColor(new Color(
+			color.getRed(),
+			color.getGreen(),
+			color.getBlue(),
+			bulbAlpha
+		));
+		graphics.fillOval(x - 5, y - 5, 10, 10);
+
+		// Small white glass highlight.
+		graphics.setColor(new Color(
+			255,
+			255,
+			255,
+			hot ? 235 : 155
+		));
+		graphics.fillOval(x - 3, y - 4, 4, 4);
 	}
 
 	private static void drawCentered(
