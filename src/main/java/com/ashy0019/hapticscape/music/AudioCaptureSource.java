@@ -6,7 +6,7 @@ public interface AudioCaptureSource extends AutoCloseable
 	{
 		void onStarted(String description);
 
-		void onSamples(float[] monoSamples, int sampleRate);
+		void onSamples(float[] monoSamples, int sampleRate, double outputVolume);
 
 		void onError(String message, Throwable error);
 	}

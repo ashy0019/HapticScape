@@ -37,4 +37,54 @@ public class MusicSignalAnalyzerTest
 		assertTrue(levels.stream().anyMatch(level -> level > 0.05));
 		assertTrue(levels.stream().allMatch(level -> level >= 0.0 && level <= 1.0));
 	}
+
+	@Test
+	public void actualVolumeMakesQuietMusicWeaker()
+	{
+		double loud = peakBassLevel(0.40);
+		double quiet = peakBassLevel(0.02);
+
+		assertTrue(loud > quiet * 3.0);
+	}
+
+	@Test
+	public void windowsMasterVolumeScalesDetectedBeat()
+	{
+		double fullVolume = peakBassLevel(0.40, 1.0);
+		double quarterVolume = peakBassLevel(0.40, 0.25);
+
+		assertTrue(fullVolume > quarterVolume * 3.0);
+	}
+
+	@Test
+	public void windowsMuteImmediatelyProducesZero()
+	{
+		List<Double> levels = new ArrayList<>();
+		MusicSignalAnalyzer analyzer = new MusicSignalAnalyzer(levels::add);
+		analyzer.setOutputVolume(0.0);
+
+		analyzer.accept(new float[512], 48_000);
+
+		assertTrue(levels.stream().allMatch(level -> level == 0.0));
+	}
+
+	private static double peakBassLevel(double amplitude)
+	{
+		return peakBassLevel(amplitude, 1.0);
+	}
+
+	private static double peakBassLevel(double amplitude, double outputVolume)
+	{
+		List<Double> levels = new ArrayList<>();
+		MusicSignalAnalyzer analyzer = new MusicSignalAnalyzer(levels::add);
+		analyzer.setOutputVolume(outputVolume);
+		float[] bass = new float[8_192];
+		for (int index = 0; index < bass.length; index++)
+		{
+			bass[index] = (float) (amplitude
+				* Math.sin(2.0 * Math.PI * 110.0 * index / 48_000));
+		}
+		analyzer.accept(bass, 48_000);
+		return levels.stream().mapToDouble(Double::doubleValue).max().orElse(0.0);
+	}
 }

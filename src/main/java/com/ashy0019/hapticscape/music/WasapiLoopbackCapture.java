@@ -8,6 +8,7 @@ import com.sun.jna.platform.win32.WTypes;
 import com.sun.jna.platform.win32.WinNT.HRESULT;
 import com.sun.jna.platform.win32.COM.COMUtils;
 import com.sun.jna.platform.win32.COM.Unknown;
+import com.sun.jna.ptr.FloatByReference;
 import com.sun.jna.ptr.IntByReference;
 import com.sun.jna.ptr.PointerByReference;
 import java.util.Objects;
@@ -24,6 +25,8 @@ public final class WasapiLoopbackCapture implements AudioCaptureSource
 		new GUID("{1CB9AD4C-DBFA-4C32-B178-C2F568A703B2}");
 	private static final GUID IID_AUDIO_CAPTURE_CLIENT =
 		new GUID("{C8ADBD64-E71E-48A0-A4DE-185C395CD317}");
+	private static final GUID IID_AUDIO_ENDPOINT_VOLUME =
+		new GUID("{5CDF2C82-841E-4546-9722-0CF74078229A}");
 
 	private static final int E_RENDER = 0;
 	private static final int E_CONSOLE = 0;
@@ -34,6 +37,7 @@ public final class WasapiLoopbackCapture implements AudioCaptureSource
 	private static final int WAVE_FORMAT_PCM = 1;
 	private static final int WAVE_FORMAT_IEEE_FLOAT = 3;
 	private static final int WAVE_FORMAT_EXTENSIBLE = 0xFFFE;
+	private static final long VOLUME_POLL_NANOS = 50_000_000L;
 
 	private final AtomicBoolean running = new AtomicBoolean();
 	private volatile Thread captureThread;
@@ -63,6 +67,7 @@ public final class WasapiLoopbackCapture implements AudioCaptureSource
 		MmDevice device = null;
 		AudioClient audioClient = null;
 		AudioCaptureClient captureClient = null;
+		AudioEndpointVolume endpointVolume = null;
 		Pointer mixFormatPointer = null;
 		boolean comInitialized = false;
 		try
@@ -88,6 +93,14 @@ public final class WasapiLoopbackCapture implements AudioCaptureSource
 			check(enumerator.getDefaultAudioEndpoint(E_RENDER, E_CONSOLE, devicePointer));
 			device = new MmDevice(devicePointer.getValue());
 
+			PointerByReference endpointVolumePointer = new PointerByReference();
+			check(device.activate(
+				IID_AUDIO_ENDPOINT_VOLUME,
+				WTypes.CLSCTX_ALL,
+				endpointVolumePointer
+			));
+			endpointVolume = new AudioEndpointVolume(endpointVolumePointer.getValue());
+
 			PointerByReference audioClientPointer = new PointerByReference();
 			check(device.activate(IID_AUDIO_CLIENT, WTypes.CLSCTX_ALL, audioClientPointer));
 			audioClient = new AudioClient(audioClientPointer.getValue());
@@ -111,9 +124,17 @@ public final class WasapiLoopbackCapture implements AudioCaptureSource
 			check(audioClient.startStream());
 			listener.onStarted("Listening to Windows system audio");
 
+			double outputVolume = readOutputVolume(endpointVolume);
+			long nextVolumePoll = System.nanoTime() + VOLUME_POLL_NANOS;
 			while (running.get())
 			{
-				drainPackets(captureClient, format, listener);
+				long now = System.nanoTime();
+				if (now >= nextVolumePoll)
+				{
+					outputVolume = readOutputVolume(endpointVolume);
+					nextVolumePoll = now + VOLUME_POLL_NANOS;
+				}
+				drainPackets(captureClient, format, outputVolume, listener);
 				try
 				{
 					Thread.sleep(5);
@@ -147,6 +168,7 @@ public final class WasapiLoopbackCapture implements AudioCaptureSource
 			}
 			release(captureClient);
 			release(audioClient);
+			release(endpointVolume);
 			release(device);
 			release(enumerator);
 			if (mixFormatPointer != null)
@@ -164,6 +186,7 @@ public final class WasapiLoopbackCapture implements AudioCaptureSource
 	private static void drainPackets(
 		AudioCaptureClient captureClient,
 		AudioFormat format,
+		double outputVolume,
 		Listener listener)
 	{
 		IntByReference nextFrames = new IntByReference();
@@ -182,7 +205,7 @@ public final class WasapiLoopbackCapture implements AudioCaptureSource
 					: format.toMono(data.getValue(), frames);
 				if (mono.length > 0)
 				{
-					listener.onSamples(mono, format.sampleRate);
+					listener.onSamples(mono, format.sampleRate, outputVolume);
 				}
 			}
 			finally
@@ -191,6 +214,19 @@ public final class WasapiLoopbackCapture implements AudioCaptureSource
 			}
 			check(captureClient.getNextPacketSize(nextFrames));
 		}
+	}
+
+	private static double readOutputVolume(AudioEndpointVolume endpointVolume)
+	{
+		IntByReference muted = new IntByReference();
+		check(endpointVolume.getMute(muted));
+		if (muted.getValue() != 0)
+		{
+			return 0.0;
+		}
+		FloatByReference volume = new FloatByReference();
+		check(endpointVolume.getMasterVolumeLevelScalar(volume));
+		return Math.max(0.0, Math.min(1.0, volume.getValue()));
 	}
 
 	@Override
@@ -323,6 +359,28 @@ public final class WasapiLoopbackCapture implements AudioCaptureSource
 		{
 			return (HRESULT) _invokeNativeObject(5, new Object[] {
 				getPointer(), frames
+			}, HRESULT.class);
+		}
+	}
+
+	private static final class AudioEndpointVolume extends Unknown
+	{
+		private AudioEndpointVolume(Pointer pointer)
+		{
+			super(pointer);
+		}
+
+		private HRESULT getMasterVolumeLevelScalar(FloatByReference volume)
+		{
+			return (HRESULT) _invokeNativeObject(9, new Object[] {
+				getPointer(), volume
+			}, HRESULT.class);
+		}
+
+		private HRESULT getMute(IntByReference muted)
+		{
+			return (HRESULT) _invokeNativeObject(15, new Object[] {
+				getPointer(), muted
 			}, HRESULT.class);
 		}
 	}
