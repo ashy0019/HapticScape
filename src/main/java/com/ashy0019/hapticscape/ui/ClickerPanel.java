@@ -3,6 +3,7 @@ package com.ashy0019.hapticscape.ui;
 import com.ashy0019.hapticscape.HapticScapeConfig;
 import com.ashy0019.hapticscape.clicker.ClickerSettings;
 import com.ashy0019.hapticscape.clicker.ClickerXpSettings;
+import com.ashy0019.hapticscape.clicker.ClickerPhraseRules;
 import java.awt.BorderLayout;
 import java.util.function.Consumer;
 import javax.swing.BorderFactory;
@@ -38,6 +39,7 @@ final class ClickerPanel extends JPanel
 	private final JButton testButton = new JButton("Test click");
 	private volatile ClickerSettings settings;
 	private volatile ClickerXpSettings xpSettings;
+	private final ClickerPhraseRulesPanel phraseRulesPanel;
 
 	ClickerPanel(
 		HapticScapeConfig config,
@@ -47,6 +49,7 @@ final class ClickerPanel extends JPanel
 	{
 		this.configManager = configManager;
 		this.settingsListener = settingsListener;
+		phraseRulesPanel = new ClickerPhraseRulesPanel(config, configManager);
 		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
 		setBorder(BorderFactory.createEmptyBorder(5, 4, 4, 4));
 
@@ -97,6 +100,7 @@ final class ClickerPanel extends JPanel
 		PanelUi.addVerticalComponent(xpSettings, milestoneCheckBox);
 		PanelUi.addVerticalComponent(xpSettings, level99CheckBox);
 		PanelUi.addVerticalComponent(this, xpSettings);
+		PanelUi.addVerticalComponent(this, phraseRulesPanel);
 		PanelUi.addVerticalComponent(this, testButton);
 
 		JLabel description = new JLabel("Works without Intiface or a connected device.");
@@ -118,7 +122,11 @@ final class ClickerPanel extends JPanel
 		return xpSettings;
 	}
 
-	private void configureListeners(Runnable testAction)
+
+	ClickerPhraseRules getPhraseRules()
+	{
+		return phraseRulesPanel.getRules();
+	}	private void configureListeners(Runnable testAction)
 	{
 		enabledCheckBox.addActionListener(event ->
 		{
@@ -186,6 +194,7 @@ final class ClickerPanel extends JPanel
 		levelUpCheckBox.setEnabled(enabled);
 		milestoneCheckBox.setEnabled(enabled);
 		level99CheckBox.setEnabled(enabled);
+		phraseRulesPanel.setClickerEnabled(enabled);
 		testButton.setEnabled(enabled && volumeSlider.getValue() > 0);
 	}
 

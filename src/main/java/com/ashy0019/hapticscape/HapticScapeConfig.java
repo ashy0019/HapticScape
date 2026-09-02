@@ -42,6 +42,7 @@ public interface HapticScapeConfig extends Config
 	String CLICKER_LEVEL_99_ENABLED_KEY = "clickerLevel99Enabled";
 	String CLICKER_GENERIC_NOTIFICATION_ENABLED_KEY = "clickerGenericNotificationEnabled";
 	String CLICKER_ALERT_SETTINGS_KEY = "clickerAlertSettings";
+	String CLICKER_PHRASE_RULES_KEY = "clickerPhraseRules";
 
 	@ConfigItem(
 		keyName = "intifaceServer",
@@ -460,4 +461,15 @@ public interface HapticScapeConfig extends Config
 	{
 		return "";
 	}
-}
+
+	@ConfigItem(
+		keyName = CLICKER_PHRASE_RULES_KEY,
+		name = "Clicker phrase rules",
+		description = "Locally evaluated chat-message rules which produce auditory clicks",
+		position = 34,
+		hidden = true
+	)
+	default String clickerPhraseRules()
+	{
+		return "";
+	}}

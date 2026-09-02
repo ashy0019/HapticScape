@@ -13,6 +13,7 @@ import com.ashy0019.hapticscape.SkillSelection;
 import com.ashy0019.hapticscape.XpFeedbackSettings;
 import com.ashy0019.hapticscape.clicker.ClickerSettings;
 import com.ashy0019.hapticscape.clicker.ClickerXpSettings;
+import com.ashy0019.hapticscape.clicker.ClickerPhraseRules;
 import com.ashy0019.hapticscape.device.ConnectionSnapshot;
 import com.ashy0019.hapticscape.device.ConnectionState;
 import com.ashy0019.hapticscape.device.DeviceInfo;
@@ -426,7 +427,11 @@ public final class HapticScapePanel extends PluginPanel
 		return clickerPanel.getXpSettings();
 	}
 
-	public void updateMusicSync(MusicSyncSnapshot snapshot)
+
+	public ClickerPhraseRules getClickerPhraseRules()
+	{
+		return clickerPanel.getPhraseRules();
+	}	public void updateMusicSync(MusicSyncSnapshot snapshot)
 	{
 		musicPanel.updateSnapshot(snapshot);
 	}
