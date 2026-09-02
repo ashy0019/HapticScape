@@ -29,7 +29,10 @@ RuneLite, Jagex, or the Intiface project.
 - Give individual skills their own XP threshold, intensity, duration, and
   pattern.
 - Use separate feedback for ordinary level-ups.
-- Choose a dedicated pattern for level milestones from 10 through 90 as well as a distinct level 99 pattern.
+- Choose a dedicated pattern for level milestones from 10 through 90.
+- Celebrate a real level 99 with a synchronized 99-beat haptic ceremony,
+  crowd cheer,
+  confetti-filled mastery overlay, and RuneLite chat message.
 - Trigger separate feedback for RuneLite notifications.
 
 ### Haptic controls
@@ -64,7 +67,8 @@ RuneLite, Jagex, or the Intiface project.
 ## The HapticScape panel
 
 The main Feedback section controls the default XP response, ordinary level-up
-feedback, and milestone feedback. Four tabs provide the remaining controls:
+feedback, milestone feedback, and the Level 99 celebration. Four tabs provide
+the remaining controls:
 
 | Tab | Purpose |
 |---|---|

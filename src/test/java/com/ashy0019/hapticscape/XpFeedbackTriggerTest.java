@@ -15,7 +15,7 @@ public class XpFeedbackTriggerTest
 
 		assertEquals(
 			XpFeedbackTrigger.XP_GAIN,
-			XpFeedbackTrigger.classify(change, 25, true, true)
+			XpFeedbackTrigger.classify(change, 25, true, true, true)
 		);
 	}
 
@@ -26,7 +26,7 @@ public class XpFeedbackTriggerTest
 
 		assertEquals(
 			XpFeedbackTrigger.NONE,
-			XpFeedbackTrigger.classify(change, 25, true, true)
+			XpFeedbackTrigger.classify(change, 25, true, true, true)
 		);
 	}
 
@@ -37,7 +37,7 @@ public class XpFeedbackTriggerTest
 
 		assertEquals(
 			XpFeedbackTrigger.LEVEL_UP,
-			XpFeedbackTrigger.classify(change, 200_000_000, true, true)
+			XpFeedbackTrigger.classify(change, 200_000_000, true, true, true)
 		);
 	}
 
@@ -48,7 +48,7 @@ public class XpFeedbackTriggerTest
 
 		assertEquals(
 			XpFeedbackTrigger.MILESTONE,
-			XpFeedbackTrigger.classify(change, 1, true, true)
+			XpFeedbackTrigger.classify(change, 1, true, true, true)
 		);
 	}
 
@@ -59,7 +59,52 @@ public class XpFeedbackTriggerTest
 
 		assertEquals(
 			XpFeedbackTrigger.LEVEL_99,
-			XpFeedbackTrigger.classify(change, 1, true, true)
+			XpFeedbackTrigger.classify(change, 1, true, true, true)
+		);
+	}
+
+	@Test
+	public void levelNinetyNineDoesNotDependOnOrdinaryLevelUpOrMilestoneSettings()
+	{
+		XpChange change = changeBetweenLevels(98, 99);
+
+		assertEquals(
+			XpFeedbackTrigger.LEVEL_99,
+			XpFeedbackTrigger.classify(change, 200_000_000, false, false, true)
+		);
+	}
+
+	@Test
+	public void levelNinetyNineTriggerRetainsTheSkillThatActuallyReachedNinetyNine()
+	{
+		XpChange change = changeBetweenLevels(Skill.COOKING, 98, 99);
+
+		assertEquals(Skill.COOKING, change.getSkill());
+		assertEquals(
+			XpFeedbackTrigger.LEVEL_99,
+			XpFeedbackTrigger.classify(change, 1, true, true, true)
+		);
+	}
+
+	@Test
+	public void disablingLevelNinetyNineFallsBackToOrdinaryLevelUp()
+	{
+		XpChange change = changeBetweenLevels(98, 99);
+
+		assertEquals(
+			XpFeedbackTrigger.LEVEL_UP,
+			XpFeedbackTrigger.classify(change, 200_000_000, true, true, false)
+		);
+	}
+
+	@Test
+	public void disablingLevelNinetyNineAndLevelUpsFallsBackToQualifiedXp()
+	{
+		XpChange change = changeBetweenLevels(98, 99);
+
+		assertEquals(
+			XpFeedbackTrigger.XP_GAIN,
+			XpFeedbackTrigger.classify(change, 1, false, true, false)
 		);
 	}
 
@@ -70,7 +115,7 @@ public class XpFeedbackTriggerTest
 
 		assertEquals(
 			XpFeedbackTrigger.LEVEL_UP,
-			XpFeedbackTrigger.classify(change, 1, true, false)
+			XpFeedbackTrigger.classify(change, 1, true, false, true)
 		);
 	}
 
@@ -81,7 +126,7 @@ public class XpFeedbackTriggerTest
 
 		assertEquals(
 			XpFeedbackTrigger.XP_GAIN,
-			XpFeedbackTrigger.classify(change, 1, false, true)
+			XpFeedbackTrigger.classify(change, 1, false, true, false)
 		);
 	}
 
@@ -94,9 +139,16 @@ public class XpFeedbackTriggerTest
 
 	private static XpChange changeBetweenLevels(int previousLevel, int currentLevel)
 	{
-		return changeBetweenXp(
-			Experience.getXpForLevel(previousLevel),
-			Experience.getXpForLevel(currentLevel)
-		);
+		return changeBetweenLevels(Skill.AGILITY, previousLevel, currentLevel);
+	}
+
+	private static XpChange changeBetweenLevels(
+		Skill skill,
+		int previousLevel,
+		int currentLevel)
+	{
+		XpTracker tracker = new XpTracker();
+		tracker.seed(skill, Experience.getXpForLevel(previousLevel));
+		return tracker.update(skill, Experience.getXpForLevel(currentLevel));
 	}
 }

@@ -87,4 +87,22 @@ public class XpTrackerTest
 		assertEquals(99, change.getPreviousLevel());
 		assertEquals(99, change.getCurrentLevel());
 	}
+
+	@Test
+	public void levelNinetyNineCrossingOnlyOccursOnce()
+	{
+		tracker.seed(Skill.AGILITY, Experience.getXpForLevel(98));
+
+		XpChange levelNinetyNine = tracker.update(
+			Skill.AGILITY,
+			Experience.getXpForLevel(99)
+		);
+		XpChange laterXp = tracker.update(
+			Skill.AGILITY,
+			Experience.getXpForLevel(99) + 1_000
+		);
+
+		assertTrue(levelNinetyNine.crossedLevel(99));
+		assertFalse(laterXp.crossedLevel(99));
+	}
 }

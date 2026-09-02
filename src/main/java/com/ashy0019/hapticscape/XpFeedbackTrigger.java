@@ -14,7 +14,8 @@ public enum XpFeedbackTrigger
 		XpChange change,
 		int minimumXpGain,
 		boolean levelUpFeedbackEnabled,
-		boolean milestoneFeedbackEnabled)
+		boolean milestoneFeedbackEnabled,
+		boolean level99CelebrationEnabled)
 	{
 		Objects.requireNonNull(change, "change");
 		if (change.getGainedXp() <= 0)
@@ -22,17 +23,20 @@ public enum XpFeedbackTrigger
 			return NONE;
 		}
 
-		if (levelUpFeedbackEnabled && change.isLevelUp())
+		if (change.isLevelUp())
 		{
-			if (milestoneFeedbackEnabled && change.crossedLevel(99))
+			if (level99CelebrationEnabled && change.crossedLevel(99))
 			{
 				return LEVEL_99;
 			}
-			if (milestoneFeedbackEnabled && change.crossedDecadeMilestone())
+			if (levelUpFeedbackEnabled)
 			{
-				return MILESTONE;
+				if (milestoneFeedbackEnabled && change.crossedDecadeMilestone())
+				{
+					return MILESTONE;
+				}
+				return LEVEL_UP;
 			}
-			return LEVEL_UP;
 		}
 
 		return change.getGainedXp() >= Math.max(1, minimumXpGain) ? XP_GAIN : NONE;

@@ -4,20 +4,27 @@ import com.ashy0019.hapticscape.device.DefaultIntifaceService;
 import com.ashy0019.hapticscape.device.HapticPattern;
 import com.ashy0019.hapticscape.device.IntifaceService;
 import com.ashy0019.hapticscape.ui.HapticScapePanel;
+import com.ashy0019.hapticscape.ui.Level99CelebrationOverlay;
 import com.google.gson.Gson;
 import com.google.inject.Provides;
+import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
+import net.runelite.api.ChatMessageType;
 import net.runelite.api.GameState;
 import net.runelite.api.Skill;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.StatChanged;
+import net.runelite.client.audio.AudioPlayer;
 import net.runelite.client.config.ConfigManager;
+import net.runelite.client.chat.ChatMessageManager;
+import net.runelite.client.chat.QueuedMessage;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.NotificationFired;
 import net.runelite.client.plugins.Plugin;
@@ -25,6 +32,8 @@ import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.ClientUI;
 import net.runelite.client.ui.NavigationButton;
+import net.runelite.client.ui.overlay.OverlayManager;
+import net.runelite.client.util.ColorUtil;
 import net.runelite.client.util.ImageUtil;
 import okhttp3.OkHttpClient;
 
@@ -36,13 +45,22 @@ import okhttp3.OkHttpClient;
 )
 public class HapticScapePlugin extends Plugin
 {
+	private static final String LEVEL_99_CHEER_RESOURCE = "/level99-cheer.wav";
+	private static final float LEVEL_99_CHEER_GAIN_DB = -4.0f;
+
 	private final XpTracker xpTracker = new XpTracker();
+	private final Level99CelebrationController level99CelebrationController =
+		new Level99CelebrationController();
 	private IntifaceService intifaceService;
 	private HapticScapePanel panel;
 	private NavigationButton navigationButton;
+	private Level99CelebrationOverlay level99CelebrationOverlay;
 
 	@Inject
 	private Client client;
+
+	@Inject
+	private AudioPlayer audioPlayer;
 
 	@Inject
 	private HapticScapeConfig config;
@@ -57,6 +75,12 @@ public class HapticScapePlugin extends Plugin
 	private ClientUI clientUI;
 
 	@Inject
+	private OverlayManager overlayManager;
+
+	@Inject
+	private ChatMessageManager chatMessageManager;
+
+	@Inject
 	private OkHttpClient httpClient;
 
 	@Inject
@@ -66,6 +90,12 @@ public class HapticScapePlugin extends Plugin
 	protected void startUp()
 	{
 		xpTracker.reset();
+		level99CelebrationController.reset();
+		level99CelebrationOverlay = new Level99CelebrationOverlay(
+			this,
+			level99CelebrationController
+		);
+		overlayManager.add(level99CelebrationOverlay);
 
 		intifaceService = new DefaultIntifaceService(httpClient, gson);
 		panel = new HapticScapePanel(
@@ -75,6 +105,7 @@ public class HapticScapePlugin extends Plugin
 			intifaceService::disconnect,
 			this::sendTestPattern,
 			this::sendTestLevelUpPattern,
+			this::previewLevel99Ceremony,
 			this::sendTestSkillProfile,
 			this::sendTestNotificationPattern,
 			this::sendPatternForgePreview,
@@ -97,6 +128,12 @@ public class HapticScapePlugin extends Plugin
 	protected void shutDown()
 	{
 		xpTracker.reset();
+		level99CelebrationController.reset();
+		if (level99CelebrationOverlay != null)
+		{
+			overlayManager.remove(level99CelebrationOverlay);
+			level99CelebrationOverlay = null;
+		}
 
 		if (navigationButton != null)
 		{
@@ -133,6 +170,7 @@ public class HapticScapePlugin extends Plugin
 			|| gameState == GameState.CONNECTION_LOST)
 		{
 			xpTracker.reset();
+			level99CelebrationController.reset();
 		}
 	}
 
@@ -156,7 +194,8 @@ public class HapticScapePlugin extends Plugin
 			change,
 			skillXpSettings.getMinimumXpGain(),
 			currentPanel.isLevelUpFeedbackEnabled(),
-			currentPanel.isMilestoneFeedbackEnabled()
+			currentPanel.isMilestoneFeedbackEnabled(),
+			currentPanel.isLevel99CelebrationEnabled()
 		);
 		handleFeedbackTrigger(change, trigger, currentPanel, skillXpSettings);
 	}
@@ -202,6 +241,18 @@ public class HapticScapePlugin extends Plugin
 		HapticScapePanel currentPanel,
 		XpFeedbackSettings skillXpSettings)
 	{
+		if (trigger == XpFeedbackTrigger.LEVEL_99)
+		{
+			log.debug(
+				"Level 99 ceremony for {}: level {} -> {}",
+				change.getSkill(),
+				change.getPreviousLevel(),
+				change.getCurrentLevel()
+			);
+			startLevel99Ceremony(change.getSkill(), true);
+			return;
+		}
+
 		HapticPatternSelection preset;
 		switch (trigger)
 		{
@@ -214,10 +265,8 @@ public class HapticScapePlugin extends Plugin
 			case MILESTONE:
 				preset = currentPanel.getMilestonePatternPreset();
 				break;
-			case LEVEL_99:
-				preset = HapticPatternSelection.ASCENDING;
-				break;
 			case NONE:
+			case LEVEL_99:
 			default:
 				return;
 		}
@@ -282,6 +331,50 @@ public class HapticScapePlugin extends Plugin
 		if (currentPanel != null)
 		{
 			sendConfiguredPattern(currentPanel.getLevelUpPatternPreset(), "TEST_LEVEL_UP");
+		}
+	}
+
+	private void previewLevel99Ceremony()
+	{
+		HapticScapePanel currentPanel = panel;
+		Skill skill = currentPanel == null ? null : currentPanel.getSelectedProfileSkill();
+		startLevel99Ceremony(skill == null ? Skill.ATTACK : skill, false);
+	}
+
+	private void playLevel99Cheer()
+	{
+		try
+		{
+			audioPlayer.play(
+				HapticScapePlugin.class,
+				LEVEL_99_CHEER_RESOURCE,
+				LEVEL_99_CHEER_GAIN_DB
+			);
+		}
+		catch (Exception e)
+		{
+			log.warn("Unable to play Level 99 cheer", e);
+		}
+	}
+
+	private void startLevel99Ceremony(Skill skill, boolean announceInChat)
+	{
+		level99CelebrationController.start(skill);
+		CompletableFuture.runAsync(this::playLevel99Cheer);
+		if (announceInChat)
+		{
+			String coloredMessage = ColorUtil.wrapWithColorTag(
+				Level99Ceremony.CHAT_MESSAGE,
+				new Color(255, 174, 0)
+			);
+			chatMessageManager.queue(QueuedMessage.builder()
+				.type(ChatMessageType.CONSOLE)
+				.runeLiteFormattedMessage(coloredMessage)
+				.build());
+		}
+		if (intifaceService != null)
+		{
+			intifaceService.playPattern(Level99Ceremony.pattern());
 		}
 	}
 

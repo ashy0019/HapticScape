@@ -16,8 +16,12 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GridLayout;
+import java.awt.event.InputEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.EnumMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -39,6 +43,7 @@ import javax.swing.JTabbedPane;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import net.runelite.api.Skill;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.ui.PluginPanel;
@@ -48,6 +53,8 @@ public final class HapticScapePanel extends PluginPanel
 	private static final int NUMERIC_CONTROL_WIDTH = 96;
 	private static final int SELECTOR_CONTROL_WIDTH = 108;
 	private static final String DURATION_LABEL = "Duration (ms)";
+	private static final int DEVELOPER_UNLOCK_CLICKS = 9;
+	private static final long DEVELOPER_UNLOCK_WINDOW_NANOS = TimeUnit.SECONDS.toNanos(4);
 
 	private final JLabel statusLabel = new JLabel("Disconnected", SwingConstants.CENTER);
 	private final DefaultListModel<DeviceInfo> deviceModel = new DefaultListModel<>();
@@ -55,11 +62,14 @@ public final class HapticScapePanel extends PluginPanel
 	private final JButton disconnectButton = new JButton("Disconnect");
 	private final JButton testButton = new JButton("Test pattern");
 	private final JButton testLevelUpButton = new JButton("Test level-up");
+	private final JButton previewLevel99Button = new JButton("Test 99");
 	private final JButton testSkillProfileButton = new JButton("Test selected skill");
 	private final JButton testNotificationButton = new JButton("Preview notification");
 	private final JButton stopButton = new JButton("Stop now");
 	private final JCheckBox levelUpFeedbackCheckBox = new JCheckBox("Level-ups");
 	private final JCheckBox milestoneFeedbackCheckBox = new JCheckBox("Milestones");
+	private final JCheckBox level99CelebrationCheckBox =
+		new JCheckBox("Celebrate level 99");
 	private final JCheckBox notificationFeedbackCheckBox =
 		new JCheckBox("RuneLite notifications");
 	private final JCheckBox notificationRespectFocusCheckBox =
@@ -87,6 +97,8 @@ public final class HapticScapePanel extends PluginPanel
 	private final JComboBox<HapticPatternSelection> notificationPatternPresetComboBox;
 	private final JSpinner notificationDurationSpinner;
 	private final PatternForgePanel patternForgePanel;
+	private final JPanel level99Row = new JPanel(new BorderLayout(8, 0));
+	private final Timer developerStatusTimer;
 	private volatile int intensityPercent;
 	private volatile int minimumXpGain;
 	private volatile int pulseDurationMillis;
@@ -95,6 +107,7 @@ public final class HapticScapePanel extends PluginPanel
 	private volatile HapticPatternSelection milestonePatternPreset;
 	private volatile boolean levelUpFeedbackEnabled;
 	private volatile boolean milestoneFeedbackEnabled;
+	private volatile boolean level99CelebrationEnabled;
 	private volatile SkillSelection skillSelection;
 	private volatile SkillFeedbackProfiles skillFeedbackProfiles;
 	private volatile Skill selectedProfileSkill;
@@ -107,6 +120,10 @@ public final class HapticScapePanel extends PluginPanel
 	private boolean updatingSkillCheckBoxes;
 	private boolean updatingSkillProfileControls;
 	private boolean updatingPatternSelectors;
+	private boolean developerControlsUnlocked;
+	private int developerUnlockClickCount;
+	private long developerUnlockStartedNanos;
+	private ConnectionSnapshot latestConnectionSnapshot = ConnectionSnapshot.disconnected();
 
 	public HapticScapePanel(
 		HapticScapeConfig config,
@@ -115,6 +132,7 @@ public final class HapticScapePanel extends PluginPanel
 		Runnable disconnectAction,
 		Runnable testAction,
 		Runnable testLevelUpAction,
+		Runnable previewLevel99Action,
 		Runnable testSkillProfileAction,
 		Runnable testNotificationAction,
 		Consumer<CustomPatternEntry> patternForgePreviewAction,
@@ -126,6 +144,9 @@ public final class HapticScapePanel extends PluginPanel
 		setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
 		statusLabel.setBorder(BorderFactory.createEmptyBorder(4, 2, 4, 2));
+		developerStatusTimer = new Timer(1600, event ->
+			statusLabel.setText(latestConnectionSnapshot.getMessage()));
+		developerStatusTimer.setRepeats(false);
 
 		intensityPercent = clamp(config.intensityPercent(), 0, 100);
 		minimumXpGain = clamp(
@@ -149,6 +170,7 @@ public final class HapticScapePanel extends PluginPanel
 			.resolveAgainst(customPatterns);
 		levelUpFeedbackEnabled = config.levelUpFeedbackEnabled();
 		milestoneFeedbackEnabled = config.milestoneFeedbackEnabled();
+		level99CelebrationEnabled = config.level99CelebrationEnabled();
 		skillSelection = SkillSelection.fromConfigValue(config.disabledSkills());
 		skillFeedbackProfiles = SkillFeedbackProfiles.fromConfigValue(config.skillFeedbackProfiles())
 			.replaceMissingCustomPatterns(customPatterns);
@@ -184,9 +206,18 @@ public final class HapticScapePanel extends PluginPanel
 		milestonePatternPresetComboBox = createPatternComboBox();
 		milestonePatternPresetComboBox.setSelectedItem(milestonePatternPreset);
 		milestonePatternPresetComboBox.setToolTipText(
-			"Choose the pattern used for levels 10–90; level 99 remains Ascending"
+			"Choose the pattern used for levels 10–90"
+		);
+		level99CelebrationCheckBox.setSelected(level99CelebrationEnabled);
+		level99CelebrationCheckBox.setToolTipText(
+			"Celebrate real skill level 99 with a dedicated mastery ceremony"
 		);
 		testLevelUpButton.setToolTipText("Preview the configured ordinary level-up pattern");
+		previewLevel99Button.setToolTipText(
+			"Preview the Level 99 ceremony using the skill selected on the Profiles tab"
+		);
+		previewLevel99Button.setMargin(new java.awt.Insets(2, 6, 2, 6));
+		previewLevel99Button.setVisible(false);
 		testSkillProfileButton.setToolTipText("Preview the selected skill's effective XP settings");
 		minimumXpGainSpinner = new JSpinner(new SpinnerNumberModel(
 			minimumXpGain,
@@ -378,6 +409,23 @@ public final class HapticScapePanel extends PluginPanel
 				HapticScapeConfig.MILESTONE_FEEDBACK_ENABLED_KEY,
 				milestoneFeedbackEnabled);
 		});
+		level99CelebrationCheckBox.addActionListener(event ->
+		{
+			level99CelebrationEnabled = level99CelebrationCheckBox.isSelected();
+			configManager.setConfiguration(
+				HapticScapeConfig.GROUP,
+				HapticScapeConfig.LEVEL_99_CELEBRATION_ENABLED_KEY,
+				level99CelebrationEnabled
+			);
+		});
+		statusLabel.addMouseListener(new MouseAdapter()
+		{
+			@Override
+			public void mouseClicked(MouseEvent event)
+			{
+				handleDeveloperUnlockClick(event);
+			}
+		});
 
 		skillProfileSkillComboBox.addActionListener(event ->
 		{
@@ -524,6 +572,10 @@ public final class HapticScapePanel extends PluginPanel
 		milestoneRow.add(milestonePatternPresetComboBox, BorderLayout.EAST);
 		addVerticalComponent(settingsPanel, milestoneRow);
 
+		level99Row.add(level99CelebrationCheckBox, BorderLayout.CENTER);
+		level99Row.add(previewLevel99Button, BorderLayout.EAST);
+		addVerticalComponent(settingsPanel, level99Row);
+
 		JPanel enabledSkillsPanel = new JPanel(new BorderLayout(0, 4));
 		enabledSkillsPanel.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
 
@@ -661,6 +713,7 @@ public final class HapticScapePanel extends PluginPanel
 		disconnectButton.addActionListener(event -> disconnectAction.run());
 		testButton.addActionListener(event -> testAction.run());
 		testLevelUpButton.addActionListener(event -> testLevelUpAction.run());
+		previewLevel99Button.addActionListener(event -> previewLevel99Action.run());
 		testSkillProfileButton.addActionListener(event -> testSkillProfileAction.run());
 		testNotificationButton.addActionListener(event -> testNotificationAction.run());
 		stopButton.addActionListener(event -> stopAction.run());
@@ -733,6 +786,11 @@ public final class HapticScapePanel extends PluginPanel
 	public boolean isMilestoneFeedbackEnabled()
 	{
 		return milestoneFeedbackEnabled;
+	}
+
+	public boolean isLevel99CelebrationEnabled()
+	{
+		return level99CelebrationEnabled;
 	}
 
 	public boolean isSkillEnabled(Skill skill)
@@ -1060,7 +1118,46 @@ public final class HapticScapePanel extends PluginPanel
 
 	public void close()
 	{
+		developerStatusTimer.stop();
 		patternForgePanel.close();
+	}
+
+	private void handleDeveloperUnlockClick(MouseEvent event)
+	{
+		if ((event.getModifiersEx() & InputEvent.SHIFT_DOWN_MASK) == 0)
+		{
+			developerUnlockClickCount = 0;
+			return;
+		}
+
+		long now = System.nanoTime();
+		if (developerUnlockClickCount == 0
+			|| now - developerUnlockStartedNanos > DEVELOPER_UNLOCK_WINDOW_NANOS)
+		{
+			developerUnlockStartedNanos = now;
+			developerUnlockClickCount = 1;
+		}
+		else
+		{
+			developerUnlockClickCount++;
+		}
+
+		if (developerUnlockClickCount < DEVELOPER_UNLOCK_CLICKS)
+		{
+			return;
+		}
+
+		developerUnlockClickCount = 0;
+		developerControlsUnlocked = !developerControlsUnlocked;
+		previewLevel99Button.setVisible(developerControlsUnlocked);
+		level99Row.revalidate();
+		revalidate();
+		repaint();
+
+		statusLabel.setText(developerControlsUnlocked
+			? "Developer controls unlocked"
+			: "Developer controls locked");
+		developerStatusTimer.restart();
 	}
 
 	private static int clamp(int value, int minimum, int maximum)
@@ -1091,7 +1188,11 @@ public final class HapticScapePanel extends PluginPanel
 
 	private void applyState(ConnectionSnapshot snapshot)
 	{
-		statusLabel.setText(snapshot.getMessage());
+		latestConnectionSnapshot = snapshot;
+		if (!developerStatusTimer.isRunning())
+		{
+			statusLabel.setText(snapshot.getMessage());
+		}
 
 		deviceModel.clear();
 		for (DeviceInfo device : snapshot.getDevices())
