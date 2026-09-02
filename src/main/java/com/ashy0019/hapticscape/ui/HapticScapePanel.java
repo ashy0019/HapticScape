@@ -150,7 +150,7 @@ public final class HapticScapePanel extends PluginPanel
 		Runnable rogueUnlockSoundAction,
 		Runnable stopAction)
 	{
-		super(false);
+		super();
 		this.configManager = configManager;
 		this.rogueFeedbackAction = rogueFeedbackAction;
 		this.rogueUnlockSoundAction = rogueUnlockSoundAction;
