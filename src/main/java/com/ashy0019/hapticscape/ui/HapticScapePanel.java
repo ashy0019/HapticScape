@@ -242,10 +242,10 @@ public final class HapticScapePanel extends PluginPanel
 		);
 		updatesPanel = new UpdatesPanel(updatePreferencesStore, updateCheckService);
 
-		JTabbedPane tabs = new JTabbedPane(JTabbedPane.TOP, JTabbedPane.WRAP_TAB_LAYOUT);
+		JTabbedPane tabs = new JTabbedPane(JTabbedPane.TOP, JTabbedPane.SCROLL_TAB_LAYOUT);
 		tabs.putClientProperty(
 			"FlatLaf.style",
-			"tabInsets: 2,3,2,3; tabHeight: 22; tabAreaAlignment: center"
+			"tabInsets: 2,1,2,1; tabHeight: 22; tabAreaAlignment: center"
 		);
 		PanelUi.addCompactTab(tabs, "Skills", skillsPanel);
 		PanelUi.addCompactTab(tabs, "XP", profilesPanel);
