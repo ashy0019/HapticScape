@@ -5,6 +5,7 @@ import java.time.Duration;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class HapticPatternSelectionTest
 {
@@ -109,5 +110,22 @@ public class HapticPatternSelectionTest
 			HapticPatternSelection.SINGLE,
 			HapticPatternSelection.custom(99).resolveAgainst(library)
 		);
+	}
+
+	@Test
+	public void descendingPatternIsBuiltInAndFallsInIntensity()
+	{
+		HapticPattern pattern = HapticPatternSelection.DESCENDING.createPattern(
+			CustomPatternLibrary.defaults(),
+			0.8,
+			Duration.ofMillis(1_000)
+		);
+
+		assertTrue(HapticPatternSelection.availableSelections(
+			CustomPatternLibrary.defaults()
+		).contains(HapticPatternSelection.DESCENDING));
+		assertEquals(0.8, pattern.getSteps().get(0).getIntensity(), 0.0001);
+		assertTrue(pattern.getSteps().get(0).getIntensity()
+			> pattern.getSteps().get(pattern.getSteps().size() - 1).getIntensity());
 	}
 }

@@ -17,7 +17,11 @@ public final class ThresholdAlertTracker
 	{
 		requireThresholdCategory(category);
 		Integer previous = previousValues.put(category, currentValue);
-		return previous != null && previous > threshold && currentValue <= threshold;
+		return previous != null && category.getTriggerParameter().crossed(
+			previous,
+			currentValue,
+			threshold
+		);
 	}
 
 	public void reset()
@@ -27,7 +31,9 @@ public final class ThresholdAlertTracker
 
 	private static void requireThresholdCategory(AlertCategory category)
 	{
-		if (category == null || !category.isThresholdBased())
+		if (category == null
+			|| !category.hasTriggerParameter()
+			|| !category.getTriggerParameter().usesCrossingDetection())
 		{
 			throw new IllegalArgumentException("Expected a threshold-based alert category");
 		}

@@ -2,19 +2,23 @@ package com.ashy0019.hapticscape;
 
 public enum AlertCategory
 {
-	GENERIC_NOTIFICATION("Generic notification", false),
-	DIRECT_MESSAGE("Direct message", false),
-	TRADE_REQUEST("Trade request", false),
-	LOW_HITPOINTS("Low hitpoints", true),
-	LOW_PRAYER("Low prayer", true);
+	DIRECT_MESSAGE("Direct message", null),
+	TRADE_REQUEST("Trade request", null),
+	LOW_HITPOINTS("Low hitpoints", AlertTriggerParameter.HITPOINTS),
+	LOW_PRAYER("Low prayer", AlertTriggerParameter.PRAYER),
+	VALUABLE_DROP("Valuable drop", AlertTriggerParameter.LOOT_VALUE),
+	INVENTORY_FULL("Inventory full", null),
+	POISONED_OR_VENOMED("Poisoned / venomed", null),
+	SPECIAL_ATTACK_READY("Special attack ready", AlertTriggerParameter.SPECIAL_ENERGY),
+	PLAYER_DEATH("Player death", null);
 
 	private final String displayName;
-	private final boolean thresholdBased;
+	private final AlertTriggerParameter triggerParameter;
 
-	AlertCategory(String displayName, boolean thresholdBased)
+	AlertCategory(String displayName, AlertTriggerParameter triggerParameter)
 	{
 		this.displayName = displayName;
-		this.thresholdBased = thresholdBased;
+		this.triggerParameter = triggerParameter;
 	}
 
 	public String getDisplayName()
@@ -22,9 +26,18 @@ public enum AlertCategory
 		return displayName;
 	}
 
-	public boolean isThresholdBased()
+	public boolean hasTriggerParameter()
 	{
-		return thresholdBased;
+		return triggerParameter != null;
+	}
+
+	public AlertTriggerParameter getTriggerParameter()
+	{
+		if (triggerParameter == null)
+		{
+			throw new IllegalStateException(name() + " does not have a trigger parameter");
+		}
+		return triggerParameter;
 	}
 
 	@Override

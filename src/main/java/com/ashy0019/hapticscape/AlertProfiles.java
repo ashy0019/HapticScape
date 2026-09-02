@@ -10,7 +10,7 @@ import java.util.StringJoiner;
 
 public final class AlertProfiles
 {
-	private static final String VERSION_PREFIX = "v1|";
+	private static final String VERSION_PREFIX = "v2|";
 
 	private final Map<AlertCategory, AlertProfile> profiles;
 
@@ -26,19 +26,39 @@ public final class AlertProfiles
 		EnumMap<AlertCategory, AlertProfile> defaults = new EnumMap<>(AlertCategory.class);
 		defaults.put(
 			AlertCategory.DIRECT_MESSAGE,
-			new AlertProfile(AlertBehavior.USE_GENERIC, 35, 350, HapticPatternSelection.DOUBLE, 1)
+			new AlertProfile(AlertBehavior.USE_GENERIC, 35, 350, HapticPatternSelection.DOUBLE)
 		);
 		defaults.put(
 			AlertCategory.TRADE_REQUEST,
-			new AlertProfile(AlertBehavior.USE_GENERIC, 45, 600, HapticPatternSelection.TRIPLE, 1)
+			new AlertProfile(AlertBehavior.USE_GENERIC, 45, 600, HapticPatternSelection.TRIPLE)
 		);
 		defaults.put(
 			AlertCategory.LOW_HITPOINTS,
-			new AlertProfile(AlertBehavior.OFF, 75, 900, HapticPatternSelection.TRIPLE, 20)
+			new AlertProfile(AlertBehavior.OFF, 75, 900, HapticPatternSelection.TRIPLE)
 		);
 		defaults.put(
 			AlertCategory.LOW_PRAYER,
-			new AlertProfile(AlertBehavior.OFF, 65, 700, HapticPatternSelection.DOUBLE, 10)
+			new AlertProfile(AlertBehavior.OFF, 65, 700, HapticPatternSelection.DOUBLE)
+		);
+		defaults.put(
+			AlertCategory.VALUABLE_DROP,
+			new AlertProfile(AlertBehavior.OFF, 70, 1_200, HapticPatternSelection.ASCENDING)
+		);
+		defaults.put(
+			AlertCategory.INVENTORY_FULL,
+			new AlertProfile(AlertBehavior.OFF, 45, 500, HapticPatternSelection.DOUBLE)
+		);
+		defaults.put(
+			AlertCategory.POISONED_OR_VENOMED,
+			new AlertProfile(AlertBehavior.OFF, 65, 900, HapticPatternSelection.TRIPLE)
+		);
+		defaults.put(
+			AlertCategory.SPECIAL_ATTACK_READY,
+			new AlertProfile(AlertBehavior.OFF, 55, 700, HapticPatternSelection.ASCENDING)
+		);
+		defaults.put(
+			AlertCategory.PLAYER_DEATH,
+			new AlertProfile(AlertBehavior.OFF, 80, 1_400, HapticPatternSelection.DESCENDING)
 		);
 		return new AlertProfiles(defaults);
 	}
@@ -52,17 +72,18 @@ public final class AlertProfiles
 		}
 
 		String trimmed = configuredValue.trim();
-		if (!trimmed.startsWith(VERSION_PREFIX))
+		boolean legacy = trimmed.startsWith("v1|");
+		if (!legacy && !trimmed.startsWith(VERSION_PREFIX))
 		{
 			return defaults;
 		}
 
 		EnumMap<AlertCategory, AlertProfile> parsed = new EnumMap<>(AlertCategory.class);
 		parsed.putAll(defaults.profiles);
-		for (String entry : trimmed.substring(VERSION_PREFIX.length()).split(";"))
+		for (String entry : trimmed.substring(3).split(";"))
 		{
 			String[] fields = entry.split(",", -1);
-			if (fields.length != 6)
+			if (fields.length != (legacy ? 6 : 5))
 			{
 				continue;
 			}
@@ -72,10 +93,6 @@ public final class AlertProfiles
 				AlertCategory category = AlertCategory.valueOf(
 					fields[0].trim().toUpperCase(Locale.ROOT)
 				);
-				if (category == AlertCategory.GENERIC_NOTIFICATION)
-				{
-					continue;
-				}
 				AlertBehavior behavior = AlertBehavior.valueOf(
 					fields[1].trim().toUpperCase(Locale.ROOT)
 				);
@@ -83,10 +100,9 @@ public final class AlertProfiles
 				int duration = Integer.parseInt(fields[3].trim());
 				HapticPatternSelection pattern =
 					HapticPatternSelection.fromConfigValue(fields[4]);
-				int threshold = Integer.parseInt(fields[5].trim());
 				parsed.put(
 					category,
-					new AlertProfile(behavior, intensity, duration, pattern, threshold)
+					new AlertProfile(behavior, intensity, duration, pattern)
 				);
 			}
 			catch (IllegalArgumentException ignored)
@@ -99,42 +115,30 @@ public final class AlertProfiles
 
 	public AlertProfile get(AlertCategory category)
 	{
-		AlertCategory required = Objects.requireNonNull(category, "category");
-		if (required == AlertCategory.GENERIC_NOTIFICATION)
-		{
-			throw new IllegalArgumentException("The generic profile uses the legacy notification settings");
-		}
-		return profiles.get(required);
+		return profiles.get(Objects.requireNonNull(category, "category"));
 	}
 
 	public AlertProfiles withProfile(AlertCategory category, AlertProfile profile)
 	{
-		if (category == AlertCategory.GENERIC_NOTIFICATION)
-		{
-			throw new IllegalArgumentException("The generic profile is stored separately");
-		}
 		EnumMap<AlertCategory, AlertProfile> updated = new EnumMap<>(AlertCategory.class);
 		updated.putAll(profiles);
-		updated.put(category, Objects.requireNonNull(profile, "profile"));
+		updated.put(
+			Objects.requireNonNull(category, "category"),
+			Objects.requireNonNull(profile, "profile")
+		);
 		return new AlertProfiles(updated);
 	}
 
+	/**
+	 * Resolves a specific semantic alert. Generic notification enablement only
+	 * controls catch-all RuneLite notifications; it does not disable profiles
+	 * which inherit the generic pattern settings.
+	 */
 	public Optional<AlertPlayback> resolve(
 		AlertCategory category,
 		NotificationFeedbackSettings genericSettings)
 	{
-		Objects.requireNonNull(category, "category");
 		Objects.requireNonNull(genericSettings, "genericSettings");
-		if (!genericSettings.isEnabled())
-		{
-			return Optional.empty();
-		}
-
-		if (category == AlertCategory.GENERIC_NOTIFICATION)
-		{
-			return Optional.of(genericPlayback(genericSettings));
-		}
-
 		AlertProfile profile = get(category);
 		switch (profile.getBehavior())
 		{
@@ -176,10 +180,6 @@ public final class AlertProfiles
 		StringJoiner entries = new StringJoiner(";");
 		for (AlertCategory category : AlertCategory.values())
 		{
-			if (category == AlertCategory.GENERIC_NOTIFICATION)
-			{
-				continue;
-			}
 			AlertProfile profile = profiles.get(category);
 			entries.add(
 				category.name()
@@ -187,7 +187,6 @@ public final class AlertProfiles
 					+ "," + profile.getIntensityPercent()
 					+ "," + profile.getDurationMillis()
 					+ "," + profile.getPatternSelection().toConfigValue()
-					+ "," + profile.getThreshold()
 			);
 		}
 		return VERSION_PREFIX + entries;
