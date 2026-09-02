@@ -14,6 +14,14 @@ public interface IntifaceService extends AutoCloseable
 
 	void playPattern(HapticPattern pattern);
 
+	/**
+	 * Updates a continuous, low-priority output such as music visualization.
+	 * Finite patterns temporarily override this value and restore it when done.
+	 */
+	void setLiveIntensity(double intensity);
+
+	void stopLiveOutput();
+
 	void stopAll();
 
 	ConnectionSnapshot getSnapshot();

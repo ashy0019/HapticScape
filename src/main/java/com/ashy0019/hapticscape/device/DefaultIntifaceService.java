@@ -40,6 +40,9 @@ public final class DefaultIntifaceService implements IntifaceService
 	private ScheduledFuture<?> pendingPatternStep;
 	private ScheduledFuture<?> connectionMonitor;
 	private long connectionGeneration;
+	private boolean patternPlaying;
+	private boolean liveOutputActive;
+	private double liveIntensity;
 
 	public DefaultIntifaceService(OkHttpClient httpClient, Gson gson)
 	{
@@ -108,6 +111,19 @@ public final class DefaultIntifaceService implements IntifaceService
 	{
 		Objects.requireNonNull(pattern, "pattern");
 		submit(() -> beginPattern(pattern));
+	}
+
+	@Override
+	public void setLiveIntensity(double intensity)
+	{
+		double safeIntensity = Math.max(0.0, Math.min(1.0, intensity));
+		submit(() -> updateLiveIntensity(safeIntensity));
+	}
+
+	@Override
+	public void stopLiveOutput()
+	{
+		submit(this::stopLiveOutputInternal);
 	}
 
 	@Override
@@ -306,8 +322,10 @@ public final class DefaultIntifaceService implements IntifaceService
 	private void beginPattern(HapticPattern pattern)
 	{
 		cancelPendingPatternStep();
+		patternPlaying = true;
 		if (!hasLiveConnection())
 		{
+			patternPlaying = false;
 			return;
 		}
 		executePatternStep(pattern, 0);
@@ -324,6 +342,7 @@ public final class DefaultIntifaceService implements IntifaceService
 		int submittedCommands = gateway.vibrate(step.getIntensity());
 		if (submittedCommands == 0)
 		{
+			patternPlaying = false;
 			publish(ConnectionState.CONNECTED, "Connected — no vibration-capable devices", gateway.getDevices());
 			return;
 		}
@@ -344,13 +363,70 @@ public final class DefaultIntifaceService implements IntifaceService
 		}
 		else
 		{
-			stopAllInternal(false);
+			patternPlaying = false;
+			restoreLiveOutputOrStop();
+		}
+	}
+
+	private void updateLiveIntensity(double intensity)
+	{
+		liveOutputActive = true;
+		liveIntensity = intensity;
+		if (patternPlaying || !hasLiveConnection())
+		{
+			return;
+		}
+
+		try
+		{
+			gateway.vibrate(liveIntensity);
+		}
+		catch (RuntimeException e)
+		{
+			log.warn("Unable to update live Intiface output", e);
+		}
+	}
+
+	private void stopLiveOutputInternal()
+	{
+		liveOutputActive = false;
+		liveIntensity = 0.0;
+		if (!patternPlaying)
+		{
+			stopConnectedDevices(false);
+		}
+	}
+
+	private void restoreLiveOutputOrStop()
+	{
+		if (!hasLiveConnection())
+		{
+			return;
+		}
+		if (liveOutputActive)
+		{
+			gateway.vibrate(liveIntensity);
+		}
+		else
+		{
+			stopConnectedDevices(false);
 		}
 	}
 
 	private void stopAllInternal(boolean userRequested)
 	{
 		cancelPendingPatternStep();
+		patternPlaying = false;
+		if (userRequested)
+		{
+			liveOutputActive = false;
+			liveIntensity = 0.0;
+		}
+		stopConnectedDevices(userRequested);
+	}
+
+	private void stopConnectedDevices(boolean userRequested)
+	{
 		if (!hasLiveConnection())
 		{
 			return;
@@ -460,6 +536,7 @@ public final class DefaultIntifaceService implements IntifaceService
 		cancelConnectionAttempt();
 		cancelPendingPatternStep();
 		cancelConnectionMonitor();
+		patternPlaying = false;
 
 		IntifaceGateway current = gateway;
 		gateway = null;

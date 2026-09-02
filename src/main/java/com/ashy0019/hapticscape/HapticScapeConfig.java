@@ -28,6 +28,11 @@ public interface HapticScapeConfig extends Config
 	String ALERT_PROFILES_KEY = "alertProfiles";
 	String ALERT_TRIGGER_SETTINGS_KEY = "alertTriggerSettings";
 	String CUSTOM_PATTERNS_KEY = "customPatterns";
+	String MUSIC_SYNC_ENABLED_KEY = "musicSyncEnabled";
+	String MUSIC_RESPONSE_KEY = "musicResponse";
+	String MUSIC_SENSITIVITY_PERCENT_KEY = "musicSensitivityPercent";
+	String MUSIC_MINIMUM_INTENSITY_PERCENT_KEY = "musicMinimumIntensityPercent";
+	String MUSIC_MAXIMUM_INTENSITY_PERCENT_KEY = "musicMaximumIntensityPercent";
 
 	@ConfigItem(
 		keyName = "intifaceServer",
@@ -272,5 +277,68 @@ public interface HapticScapeConfig extends Config
 	default String customPatterns()
 	{
 		return "";
+	}
+
+	@ConfigItem(
+		keyName = MUSIC_SYNC_ENABLED_KEY,
+		name = "Music sync",
+		description = "Drive low-priority haptic feedback from Windows system audio",
+		position = 20,
+		hidden = true
+	)
+	default boolean musicSyncEnabled()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = MUSIC_RESPONSE_KEY,
+		name = "Music response",
+		description = "How music energy is translated into haptic intensity",
+		position = 21,
+		hidden = true
+	)
+	default String musicResponse()
+	{
+		return "RHYTHMIC";
+	}
+
+	@Range(min = 25, max = 200)
+	@ConfigItem(
+		keyName = MUSIC_SENSITIVITY_PERCENT_KEY,
+		name = "Music sensitivity",
+		description = "Sensitivity of the system audio analyzer",
+		position = 22,
+		hidden = true
+	)
+	default int musicSensitivityPercent()
+	{
+		return 100;
+	}
+
+	@Range(min = 0, max = 100)
+	@ConfigItem(
+		keyName = MUSIC_MINIMUM_INTENSITY_PERCENT_KEY,
+		name = "Music minimum intensity",
+		description = "Lowest non-silent music-sync intensity",
+		position = 23,
+		hidden = true
+	)
+	default int musicMinimumIntensityPercent()
+	{
+		return 0;
+	}
+
+	@Range(min = 0, max = 100)
+	@ConfigItem(
+		keyName = MUSIC_MAXIMUM_INTENSITY_PERCENT_KEY,
+		name = "Music maximum intensity",
+		description = "Intensity ceiling for music sync",
+		position = 24,
+		hidden = true
+	)
+	default int musicMaximumIntensityPercent()
+	{
+		return 60;
 	}
 }

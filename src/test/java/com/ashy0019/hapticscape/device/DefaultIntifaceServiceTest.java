@@ -83,6 +83,46 @@ public class DefaultIntifaceServiceTest
 	}
 
 	@Test
+	public void liveOutputResumesAfterPattern() throws Exception
+	{
+		connect();
+		service.setLiveIntensity(0.35);
+		assertEquals(0.35, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+
+		service.playPattern(HapticPattern.single(0.8, Duration.ofMillis(20)));
+		assertEquals(0.8, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+		assertEquals(0.35, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+	}
+
+	@Test
+	public void liveUpdatesDoNotInterruptPattern() throws Exception
+	{
+		connect();
+		service.setLiveIntensity(0.25);
+		assertEquals(0.25, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+
+		service.playPattern(HapticPattern.single(0.9, Duration.ofMillis(80)));
+		assertEquals(0.9, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+		service.setLiveIntensity(0.55);
+
+		assertEquals(0.55, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+	}
+
+	@Test
+	public void stopNowDisablesLiveOutput() throws Exception
+	{
+		connect();
+		service.setLiveIntensity(0.4);
+		assertEquals(0.4, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+
+		service.stopAll();
+		gateway.stopped.get(1, TimeUnit.SECONDS);
+		service.playPattern(HapticPattern.single(0.7, Duration.ofMillis(20)));
+		assertEquals(0.7, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+		assertNull(gateway.vibrationCommands.poll(100, TimeUnit.MILLISECONDS));
+	}
+
+	@Test
 	public void stopNowCancelsRemainingPatternSteps() throws Exception
 	{
 		connect();
