@@ -68,6 +68,10 @@ the specific profile to avoid duplicate feedback.
 - Set built-in pattern duration from 50 ms to 10 seconds.
 - Choose Single, Double, Triple, Ascending, or Descending feedback.
 - Test profiles without waiting for the corresponding in-game event.
+- Prioritize simultaneous feedback so urgent alerts cannot be overwritten by
+  routine XP gains or generic notifications.
+- Coalesce repeated queued events, discard stale feedback, and resume Music
+  sync after finite patterns finish.
 - Stop every connected device immediately with **Stop now**.
 
 ### Custom Pattern Forge

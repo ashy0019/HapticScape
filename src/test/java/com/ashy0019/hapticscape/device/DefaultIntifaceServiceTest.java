@@ -53,11 +53,11 @@ public class DefaultIntifaceServiceTest
 	public void patternRunsEveryStepAndStops() throws Exception
 	{
 		connect();
-		service.playPattern(new HapticPattern(Arrays.asList(
+		service.play(request(HapticEventType.MANUAL_PREVIEW, new HapticPattern(Arrays.asList(
 			new HapticPattern.Step(0.25, Duration.ofMillis(10)),
 			new HapticPattern.Step(0.0, Duration.ofMillis(10)),
 			new HapticPattern.Step(0.75, Duration.ofMillis(10))
-		)));
+		))));
 
 		assertEquals(0.25, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
 		assertEquals(0.0, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
@@ -66,16 +66,19 @@ public class DefaultIntifaceServiceTest
 	}
 
 	@Test
-	public void newPatternReplacesRemainingSteps() throws Exception
+	public void higherPriorityPatternReplacesRemainingSteps() throws Exception
 	{
 		connect();
-		service.playPattern(new HapticPattern(Arrays.asList(
+		service.play(request(HapticEventType.XP_GAIN, new HapticPattern(Arrays.asList(
 			new HapticPattern.Step(0.2, Duration.ofMillis(300)),
 			new HapticPattern.Step(0.4, Duration.ofMillis(10))
-		)));
+		))));
 		assertEquals(0.2, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
 
-		service.playPattern(HapticPattern.single(0.9, Duration.ofMillis(20)));
+		service.play(request(
+			HapticEventType.DIRECT_MESSAGE,
+			HapticPattern.single(0.9, Duration.ofMillis(20))
+		));
 
 		assertEquals(0.9, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
 		gateway.stopped.get(1, TimeUnit.SECONDS);
@@ -89,7 +92,10 @@ public class DefaultIntifaceServiceTest
 		service.setLiveIntensity(0.35);
 		assertEquals(0.35, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
 
-		service.playPattern(HapticPattern.single(0.8, Duration.ofMillis(20)));
+		service.play(request(
+			HapticEventType.MANUAL_PREVIEW,
+			HapticPattern.single(0.8, Duration.ofMillis(20))
+		));
 		assertEquals(0.8, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
 		assertEquals(0.35, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
 	}
@@ -101,7 +107,10 @@ public class DefaultIntifaceServiceTest
 		service.setLiveIntensity(0.25);
 		assertEquals(0.25, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
 
-		service.playPattern(HapticPattern.single(0.9, Duration.ofMillis(80)));
+		service.play(request(
+			HapticEventType.MANUAL_PREVIEW,
+			HapticPattern.single(0.9, Duration.ofMillis(80))
+		));
 		assertEquals(0.9, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
 		service.setLiveIntensity(0.55);
 
@@ -117,7 +126,10 @@ public class DefaultIntifaceServiceTest
 
 		service.stopAll();
 		gateway.stopped.get(1, TimeUnit.SECONDS);
-		service.playPattern(HapticPattern.single(0.7, Duration.ofMillis(20)));
+		service.play(request(
+			HapticEventType.MANUAL_PREVIEW,
+			HapticPattern.single(0.7, Duration.ofMillis(20))
+		));
 		assertEquals(0.7, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
 		assertNull(gateway.vibrationCommands.poll(100, TimeUnit.MILLISECONDS));
 	}
@@ -126,10 +138,10 @@ public class DefaultIntifaceServiceTest
 	public void stopNowCancelsRemainingPatternSteps() throws Exception
 	{
 		connect();
-		service.playPattern(new HapticPattern(Arrays.asList(
+		service.play(request(HapticEventType.MANUAL_PREVIEW, new HapticPattern(Arrays.asList(
 			new HapticPattern.Step(0.4, Duration.ofMillis(250)),
 			new HapticPattern.Step(0.8, Duration.ofMillis(10))
-		)));
+		))));
 		assertEquals(0.4, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
 
 		service.stopAll();
@@ -142,7 +154,7 @@ public class DefaultIntifaceServiceTest
 	public void stopNowCancelsRemainingLevelNinetyNineCeremony() throws Exception
 	{
 		connect();
-		service.playPattern(Level99Ceremony.pattern());
+		service.play(request(HapticEventType.LEVEL_99, Level99Ceremony.pattern()));
 		assertEquals(0.60, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
 
 		service.stopAll();
@@ -150,6 +162,118 @@ public class DefaultIntifaceServiceTest
 		gateway.stopped.get(1, TimeUnit.SECONDS);
 		gateway.vibrationCommands.clear();
 		assertNull(gateway.vibrationCommands.poll(150, TimeUnit.MILLISECONDS));
+	}
+
+	@Test
+	public void routineFeedbackCannotInterruptLevelNinetyNineCeremony() throws Exception
+	{
+		connect();
+		service.play(request(HapticEventType.LEVEL_99, Level99Ceremony.pattern()));
+		assertEquals(0.60, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+
+		service.play(request(
+			HapticEventType.XP_GAIN,
+			HapticPattern.single(0.93, Duration.ofMillis(20))
+		));
+
+		assertEquals(0.0, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+		assertEquals(0.60, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+	}
+
+	@Test
+	public void criticalFeedbackInterruptsLevelNinetyNineCeremony() throws Exception
+	{
+		connect();
+		service.play(request(HapticEventType.LEVEL_99, Level99Ceremony.pattern()));
+		assertEquals(0.60, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+
+		service.play(request(
+			HapticEventType.PLAYER_DEATH,
+			HapticPattern.single(0.93, Duration.ofMillis(20))
+		));
+
+		assertEquals(0.93, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+		gateway.stopped.get(1, TimeUnit.SECONDS);
+		assertNull(gateway.vibrationCommands.poll(100, TimeUnit.MILLISECONDS));
+	}
+
+	@Test
+	public void queuedDirectAlertRunsAfterProtectedPattern() throws Exception
+	{
+		connect();
+		service.play(request(
+			HapticEventType.PLAYER_DEATH,
+			HapticPattern.single(0.95, Duration.ofMillis(80))
+		));
+		assertEquals(0.95, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+
+		service.play(request(
+			HapticEventType.DIRECT_MESSAGE,
+			HapticPattern.single(0.45, Duration.ofMillis(20))
+		));
+
+		assertEquals(0.45, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+		gateway.stopped.get(1, TimeUnit.SECONDS);
+	}
+
+	@Test
+	public void liveOutputResumesAfterQueuedPatternsDrain() throws Exception
+	{
+		connect();
+		service.setLiveIntensity(0.25);
+		assertEquals(0.25, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+		service.play(request(
+			HapticEventType.PLAYER_DEATH,
+			HapticPattern.single(0.95, Duration.ofMillis(80))
+		));
+		assertEquals(0.95, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+		service.play(request(
+			HapticEventType.DIRECT_MESSAGE,
+			HapticPattern.single(0.45, Duration.ofMillis(20))
+		));
+
+		assertEquals(0.45, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+		assertEquals(0.25, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+	}
+
+	@Test
+	public void stopNowClearsQueuedFeedback() throws Exception
+	{
+		connect();
+		service.play(request(
+			HapticEventType.PLAYER_DEATH,
+			HapticPattern.single(0.95, Duration.ofMillis(250))
+		));
+		assertEquals(0.95, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+		service.play(request(
+			HapticEventType.DIRECT_MESSAGE,
+			HapticPattern.single(0.45, Duration.ofMillis(20))
+		));
+
+		service.stopAll();
+
+		gateway.stopped.get(1, TimeUnit.SECONDS);
+		assertNull(gateway.vibrationCommands.poll(300, TimeUnit.MILLISECONDS));
+	}
+
+	@Test
+	public void disconnectClearsQueuedFeedback() throws Exception
+	{
+		connect();
+		service.play(request(
+			HapticEventType.PLAYER_DEATH,
+			HapticPattern.single(0.95, Duration.ofMillis(250))
+		));
+		assertEquals(0.95, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+		service.play(request(
+			HapticEventType.DIRECT_MESSAGE,
+			HapticPattern.single(0.45, Duration.ofMillis(20))
+		));
+
+		service.disconnect();
+
+		gateway.disconnectStarted.get(1, TimeUnit.SECONDS);
+		assertNull(gateway.vibrationCommands.poll(300, TimeUnit.MILLISECONDS));
 	}
 
 	@Test
@@ -181,7 +305,7 @@ public class DefaultIntifaceServiceTest
 	public void levelNinetyNineCeremonyWhileDisconnectedIsIgnored() throws Exception
 	{
 		CompletableFuture<ConnectionSnapshot> closed = awaitState(ConnectionState.CLOSED);
-		service.playPattern(Level99Ceremony.pattern());
+		service.play(request(HapticEventType.LEVEL_99, Level99Ceremony.pattern()));
 
 		service.close();
 
@@ -279,6 +403,11 @@ public class DefaultIntifaceServiceTest
 		CompletableFuture<ConnectionSnapshot> connected = awaitState(ConnectionState.CONNECTED);
 		service.connect(new URI("ws://localhost:12345"));
 		return connected.get(1, TimeUnit.SECONDS);
+	}
+
+	private static HapticRequest request(HapticEventType eventType, HapticPattern pattern)
+	{
+		return new HapticRequest(eventType, pattern);
 	}
 
 	private CompletableFuture<ConnectionSnapshot> awaitState(ConnectionState expected)

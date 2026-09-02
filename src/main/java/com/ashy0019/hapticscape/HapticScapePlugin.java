@@ -1,7 +1,9 @@
 package com.ashy0019.hapticscape;
 
 import com.ashy0019.hapticscape.device.DefaultIntifaceService;
+import com.ashy0019.hapticscape.device.HapticEventType;
 import com.ashy0019.hapticscape.device.HapticPattern;
+import com.ashy0019.hapticscape.device.HapticRequest;
 import com.ashy0019.hapticscape.device.IntifaceService;
 import com.ashy0019.hapticscape.music.MusicResponse;
 import com.ashy0019.hapticscape.music.MusicSyncService;
@@ -530,6 +532,7 @@ public class HapticScapePlugin extends Plugin
 		}
 		log.debug("Generic notification haptic requested");
 		sendPattern(
+			HapticEventType.GENERIC_NOTIFICATION,
 			settings.getPatternSelection(),
 			"ALERT_GENERIC_NOTIFICATION",
 			settings.getIntensityPercent(),
@@ -550,6 +553,7 @@ public class HapticScapePlugin extends Plugin
 			{
 				log.debug("{} haptic requested", category);
 				sendPattern(
+					hapticEventType(category),
 					playback.getPatternSelection(),
 					"ALERT_" + category.name(),
 					playback.getIntensityPercent(),
@@ -640,6 +644,7 @@ public class HapticScapePlugin extends Plugin
 		if (trigger == XpFeedbackTrigger.XP_GAIN)
 		{
 			sendPattern(
+				HapticEventType.XP_GAIN,
 				preset,
 				trigger.name(),
 				skillXpSettings.getIntensityPercent(),
@@ -648,7 +653,13 @@ public class HapticScapePlugin extends Plugin
 		}
 		else
 		{
-			sendConfiguredPattern(preset, trigger.name());
+			sendConfiguredPattern(
+				trigger == XpFeedbackTrigger.MILESTONE
+					? HapticEventType.MILESTONE
+					: HapticEventType.LEVEL_UP,
+				preset,
+				trigger.name()
+			);
 		}
 	}
 
@@ -678,7 +689,11 @@ public class HapticScapePlugin extends Plugin
 		HapticScapePanel currentPanel = panel;
 		if (currentPanel != null)
 		{
-			sendConfiguredPattern(currentPanel.getPatternPreset(), "TEST_XP");
+			sendConfiguredPattern(
+				HapticEventType.MANUAL_PREVIEW,
+				currentPanel.getPatternPreset(),
+				"TEST_XP"
+			);
 		}
 	}
 
@@ -688,7 +703,11 @@ public class HapticScapePlugin extends Plugin
 		HapticScapePanel currentPanel = panel;
 		if (currentPanel != null)
 		{
-			sendConfiguredPattern(currentPanel.getLevelUpPatternPreset(), "TEST_LEVEL_UP");
+			sendConfiguredPattern(
+				HapticEventType.MANUAL_PREVIEW,
+				currentPanel.getLevelUpPatternPreset(),
+				"TEST_LEVEL_UP"
+			);
 		}
 	}
 
@@ -732,7 +751,10 @@ public class HapticScapePlugin extends Plugin
 		}
 		if (intifaceService != null)
 		{
-			intifaceService.playPattern(Level99Ceremony.pattern());
+			intifaceService.play(new HapticRequest(
+				HapticEventType.LEVEL_99,
+				Level99Ceremony.pattern()
+			));
 		}
 	}
 
@@ -753,6 +775,7 @@ public class HapticScapePlugin extends Plugin
 		XpFeedbackSettings settings = currentPanel.getXpFeedbackSettings(skill);
 		log.debug("Sending test XP profile for {}", skill);
 		sendPattern(
+			HapticEventType.MANUAL_PREVIEW,
 			settings.getPatternSelection(),
 			"TEST_SKILL_" + skill.name(),
 			settings.getIntensityPercent(),
@@ -772,6 +795,7 @@ public class HapticScapePlugin extends Plugin
 			currentPanel.getNotificationFeedbackSettings();
 		log.debug("Sending test generic notification pattern");
 		sendPattern(
+			HapticEventType.MANUAL_PREVIEW,
 			settings.getPatternSelection(),
 			"TEST_ALERT_GENERIC_NOTIFICATION",
 			settings.getIntensityPercent(),
@@ -790,6 +814,7 @@ public class HapticScapePlugin extends Plugin
 		currentPanel.getAlertProfiles()
 			.resolve(category, currentPanel.getNotificationFeedbackSettings())
 			.ifPresent(playback -> sendPattern(
+				HapticEventType.MANUAL_PREVIEW,
 				playback.getPatternSelection(),
 				"TEST_ALERT_" + category.name(),
 				playback.getIntensityPercent(),
@@ -810,10 +835,16 @@ public class HapticScapePlugin extends Plugin
 			pattern.getBeatCount(),
 			pattern.getBeatDurationMillis()
 		);
-		intifaceService.playPattern(pattern.createPattern(1.0));
+		intifaceService.play(new HapticRequest(
+			HapticEventType.MANUAL_PREVIEW,
+			pattern.createPattern(1.0)
+		));
 	}
 
-	private void sendConfiguredPattern(HapticPatternSelection preset, String triggerName)
+	private void sendConfiguredPattern(
+		HapticEventType eventType,
+		HapticPatternSelection preset,
+		String triggerName)
 	{
 		HapticScapePanel currentPanel = panel;
 		if (intifaceService == null || currentPanel == null)
@@ -823,10 +854,11 @@ public class HapticScapePlugin extends Plugin
 
 		int intensityPercent = currentPanel.getIntensityPercent();
 		int durationMillis = currentPanel.getPulseDurationMillis();
-		sendPattern(preset, triggerName, intensityPercent, durationMillis);
+		sendPattern(eventType, preset, triggerName, intensityPercent, durationMillis);
 	}
 
 	private void sendPattern(
+		HapticEventType eventType,
 		HapticPatternSelection preset,
 		String triggerName,
 		int intensityPercent,
@@ -860,7 +892,34 @@ public class HapticScapePlugin extends Plugin
 			intensityPercent,
 			playbackDurationMillis
 		);
-		intifaceService.playPattern(pattern);
+		intifaceService.play(new HapticRequest(eventType, pattern));
+	}
+
+	private static HapticEventType hapticEventType(AlertCategory category)
+	{
+		switch (category)
+		{
+			case DIRECT_MESSAGE:
+				return HapticEventType.DIRECT_MESSAGE;
+			case TRADE_REQUEST:
+				return HapticEventType.TRADE_REQUEST;
+			case LOW_HITPOINTS:
+				return HapticEventType.LOW_HITPOINTS;
+			case LOW_PRAYER:
+				return HapticEventType.LOW_PRAYER;
+			case VALUABLE_DROP:
+				return HapticEventType.VALUABLE_DROP;
+			case INVENTORY_FULL:
+				return HapticEventType.INVENTORY_FULL;
+			case POISONED_OR_VENOMED:
+				return HapticEventType.POISONED_OR_VENOMED;
+			case SPECIAL_ATTACK_READY:
+				return HapticEventType.SPECIAL_ATTACK_READY;
+			case PLAYER_DEATH:
+				return HapticEventType.PLAYER_DEATH;
+			default:
+				throw new IllegalArgumentException("Unknown alert category: " + category);
+		}
 	}
 
 	private static BufferedImage loadNavigationIcon()
