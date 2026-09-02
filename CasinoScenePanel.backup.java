@@ -62,29 +62,6 @@ public final class CasinoScenePanel extends JPanel
 	private static final Color LIGHT_TEXT = new Color(247, 240, 215);
 	private static final Color PANEL_DARK = new Color(20, 17, 15);
 	private static final Color PANEL_MID = new Color(45, 36, 30);
-	private static final Font NPC_NAME_FONT = new Font(Font.SANS_SERIF, Font.BOLD, 10);
-	private static final Font NPC_STATUS_FONT = new Font(Font.MONOSPACED, Font.BOLD, 9);
-
-	// Hand-reduced directly from the RuneScape Classic-era green partyhat
-	// reference supplied for the "Buying gf" patron. This 14x14 reduction is
-	// deliberately the same width as his hair silhouette, so the crown hugs
-	// the head while preserving the uneven RSC spikes.
-	private static final String[] GREEN_PARTYHAT_SPRITE = {
-		"     G        ",
-		"    sG  sg    ",
-		"ss  gGs sgs  s",
-		"gg  GGG Ggs sg",
-		"ggssGGGsGgg gg",
-		"ggggGGGGGggsgg",
-		"ggggGggggggggg",
-		"ggggGGgggggggg",
-		"ggggGGgggggggg",
-		"sgggGGGGGggggg",
-		"sgGGGGGGGggggg",
-		" sGGGGGGGggggg",
-		"   sGGGGGggss ",
-		"      sGss    "
-	};
 
 	private final BufferedImage frame = new BufferedImage(
 		LOGICAL_WIDTH,
@@ -351,12 +328,14 @@ public final class CasinoScenePanel extends JPanel
 		}
 		drawTankard(g, 61, 136, 1);
 
-		// Candle sconce on the right wall. The old round shield used to sit
-		// directly behind the "Buying gf" patron's head, making his hat look
-		// visually detached from him, so that background shape is intentionally
-		// left out here.
+		// A tiny candle sconce and old shield make the right side read as an inn.
 		g.setColor(new Color(69, 42, 24));
 		g.fillRect(203, 106, 4, 30);
+		g.setColor(new Color(128, 72, 37));
+		g.fillOval(190, 108, 29, 35);
+		g.setColor(new Color(69, 42, 24));
+		g.drawOval(190, 108, 29, 35);
+		g.drawLine(204, 110, 204, 141);
 		g.setColor(new Color(209, 170, 74));
 		g.fillRect(176, 126, 3, 15);
 		g.setColor(new Color(255, 210, 86));
@@ -364,8 +343,8 @@ public final class CasinoScenePanel extends JPanel
 		g.setColor(new Color(255, 235, 143));
 		g.fillRect(176, 119, 3, 4);
 
-		drawPatron(g, 35, 176, new Color(131, 48, 73), 0.0, false);
-		drawPatron(g, 211, 176, new Color(67, 64, 137), 2.2, true);
+		drawPatron(g, 35, 176, new Color(131, 48, 73), 0.0);
+		drawPatron(g, 205, 176, new Color(67, 64, 137), 2.2);
 		drawDealer(g, 120, 181);
 
 		long phase = (System.nanoTime() / 3_800_000_000L) % 5;
@@ -373,133 +352,22 @@ public final class CasinoScenePanel extends JPanel
 		{
 			g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 9));
 			g.setColor(new Color(255, 225, 75));
-			g.drawString("Buying gf", 170, 116);
+			g.drawString("Buying gf", 160, 116);
 		}
 	}
 
-	private static void drawPatron(
-		Graphics2D g,
-		int x,
-		int y,
-		Color outfit,
-		double phase,
-		boolean greenPartyHat)
+	private static void drawPatron(Graphics2D g, int x, int y, Color outfit, double phase)
 	{
 		int bob = (int) Math.round(Math.sin(System.nanoTime() / 700_000_000.0 + phase));
-		int hairTopY = y - 39 + bob;
-
-		// Draw the back/crown of the partyhat before the patron himself. The
-		// lower edge is then naturally occluded by his hair instead of sitting
-		// on top of the portrait like a pasted sprite.
-		if (greenPartyHat)
-		{
-			drawGreenPartyHatBack(g, x, hairTopY);
-		}
-
 		g.setColor(new Color(204, 157, 120));
 		g.fillRect(x - 6, y - 34 + bob, 12, 12);
 		g.setColor(new Color(60, 34, 29));
-		if (greenPartyHat)
-		{
-			// Round the hair silhouette very slightly under the hat. The ordinary
-			// patrons keep the original square RSC-style block, but a one-pixel
-			// taper here gives the partyhat something skull-shaped to wrap around.
-			g.fillRect(x - 6, hairTopY, 12, 1);
-			g.fillRect(x - 7, hairTopY + 1, 14, 5);
-			g.fillRect(x - 6, hairTopY + 6, 12, 1);
-		}
-		else
-		{
-			g.fillRect(x - 7, hairTopY, 14, 7);
-		}
-
-		if (greenPartyHat)
-		{
-			drawGreenPartyHatFrontBand(g, x, hairTopY);
-		}
-
+		g.fillRect(x - 7, y - 39 + bob, 14, 7);
 		g.setColor(outfit);
 		g.fillRect(x - 10, y - 21 + bob, 20, 27);
 		g.setColor(new Color(33, 28, 26));
 		g.fillRect(x - 9, y + 6 + bob, 7, 13);
 		g.fillRect(x + 2, y + 6 + bob, 7, 13);
-	}
-
-	private static void drawGreenPartyHatBack(Graphics2D g, int centerX, int hairTopY)
-	{
-		Color shadow = new Color(0, 118, 15);
-		Color green = new Color(18, 218, 29);
-		Color highlight = new Color(58, 239, 64);
-		// Keep one fixed horizontal anchor for every row. Re-centering each row
-		// independently rounded the original RSC spikes into a green blob. The
-		// hat is only 17 px wide against a 14 px head, so a fixed 1-2 px
-		// overhang is exactly what makes the paper crown feel fitted rather than
-		// pasted on. Its lower rows disappear behind the patron's hair.
-		int startX = centerX - 7;
-		int startY = hairTopY - 9;
-
-		for (int row = 0; row < GREEN_PARTYHAT_SPRITE.length; row++)
-		{
-			String line = GREEN_PARTYHAT_SPRITE[row];
-
-			for (int column = 0; column < line.length(); column++)
-			{
-				char pixel = line.charAt(column);
-				switch (pixel)
-				{
-					case 's':
-						g.setColor(shadow);
-						break;
-					case 'g':
-						g.setColor(green);
-						break;
-					case 'G':
-						g.setColor(highlight);
-						break;
-					default:
-						continue;
-				}
-				g.fillRect(startX + column, startY + row, 1, 1);
-			}
-		}
-	}
-
-	private static void drawGreenPartyHatFrontBand(Graphics2D g, int centerX, int hairTopY)
-	{
-		// Foreground rim: this is deliberately head-shaped rather than sprite-
-		// shaped. The crown sits behind the hair while this shallow band hooks
-		// over the forehead and drops one pixel at each temple, so the hat reads
-		// as wrapped around the skull.
-		Color deepShadow = new Color(0, 74, 10);
-		Color shadow = new Color(0, 118, 15);
-		Color green = new Color(18, 218, 29);
-		Color highlight = new Color(58, 239, 64);
-
-		// Dark underside, exactly the width of the 14 px hair silhouette.
-		g.setColor(deepShadow);
-		g.fillRect(centerX - 7, hairTopY + 1, 14, 2);
-
-		// Main paper band. The second row is narrower so it curves around the
-		// forehead instead of looking like a flat horizontal sticker.
-		g.setColor(shadow);
-		g.fillRect(centerX - 7, hairTopY, 14, 1);
-		g.fillRect(centerX - 6, hairTopY + 1, 12, 1);
-
-		g.setColor(green);
-		g.fillRect(centerX - 6, hairTopY, 12, 1);
-		g.fillRect(centerX - 5, hairTopY + 1, 10, 1);
-
-		// Temple hooks make the sides visibly wrap behind the head.
-		g.setColor(shadow);
-		g.fillRect(centerX - 7, hairTopY + 1, 1, 3);
-		g.fillRect(centerX + 6, hairTopY + 1, 1, 3);
-		g.setColor(deepShadow);
-		g.fillRect(centerX - 7, hairTopY + 3, 1, 1);
-		g.fillRect(centerX + 6, hairTopY + 3, 1, 1);
-
-		// Small top/front highlight retains the folded-paper look.
-		g.setColor(highlight);
-		g.fillRect(centerX - 3, hairTopY, 4, 1);
 	}
 
 	private static void drawDealer(Graphics2D g, int x, int y)
@@ -630,16 +498,8 @@ public final class CasinoScenePanel extends JPanel
 
 		boolean rightSide = npc.getSeatIndex() == 1 || npc.getSeatIndex() == 3;
 		int direction = rightSide ? 1 : -1;
-		int drift = Math.round((1.0f - presence) * 19.0f) * direction;
+		int drift = Math.round((1.0f - presence) * 17.0f) * direction;
 		int bob = (int) Math.round(Math.sin(System.nanoTime() / 850_000_000.0 + npc.getSeatIndex()) * 0.7);
-
-		// The occupied seat is now primarily a portrait frame. Labels live
-		// outside it so the patron can be substantially larger and the text no
-		// longer competes with the character art.
-		g.setColor(new Color(24, 18, 14));
-		g.fillRect(x + 3, y + 3, 40, 63);
-		g.setColor(new Color(93, 64, 30));
-		g.drawRect(x + 3, y + 3, 39, 62);
 
 		Graphics2D figure = (Graphics2D) g.create();
 		try
@@ -647,7 +507,7 @@ public final class CasinoScenePanel extends JPanel
 			Composite originalComposite = figure.getComposite();
 			figure.setComposite(AlphaComposite.SrcOver.derive(Math.max(0.08f, presence)));
 			figure.translate(drift, bob);
-			drawNpcPortrait(figure, x + 23, y + 3, npc, rightSide);
+			drawNpcPortrait(figure, x + 23, y + 7, npc, rightSide);
 			figure.setComposite(originalComposite);
 		}
 		finally
@@ -655,58 +515,18 @@ public final class CasinoScenePanel extends JPanel
 			figure.dispose();
 		}
 
+		g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 7));
+		g.setColor(new Color(246, 211, 105));
 		String name = npc.getName() == null ? "ROGUE" : npc.getName();
+		drawCenteredInShadowed(g, name, x, 46, y + 57);
+		g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 6));
+		g.setColor(new Color(226, 214, 183));
 		String status = npc.getPhase() == RogueNpcManager.Phase.ARRIVING && presence < 0.55f
 			? "ARRIVING"
 			: (npc.getPhase() == RogueNpcManager.Phase.LEAVING && presence < 0.55f
 				? "LEAVING"
 				: "BET " + npc.getWager());
-
-		// Large, separate plaques flank the portrait. They can spill six pixels
-		// beyond the narrow seat frame while still remaining inside the 240 px
-		// scene, giving seven/eight-character names enough room to breathe.
-		int plaqueX = x - 6;
-		int plaqueWidth = 58;
-		drawNpcPlaque(g, plaqueX, y - 12, plaqueWidth, 12, name, NPC_NAME_FONT,
-			new Color(255, 221, 101));
-		drawNpcPlaque(g, plaqueX, y + 70, plaqueWidth, 12, status, NPC_STATUS_FONT,
-			new Color(240, 232, 202));
-	}
-
-	private static void drawNpcPlaque(
-		Graphics2D g,
-		int x,
-		int y,
-		int width,
-		int height,
-		String text,
-		Font font,
-		Color textColor)
-	{
-		g.setColor(new Color(14, 11, 9, 235));
-		g.fillRoundRect(x, y, width, height, 4, 4);
-		g.setColor(new Color(116, 82, 30));
-		g.drawRoundRect(x, y, width - 1, height - 1, 4, 4);
-
-		Object previousTextHint = g.getRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING);
-		g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
-			RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-		try
-		{
-			g.setFont(font);
-			g.setColor(textColor);
-			FontMetrics metrics = g.getFontMetrics();
-			int textX = x + Math.max(2, (width - metrics.stringWidth(text)) / 2);
-			int textY = y + ((height - metrics.getHeight()) / 2) + metrics.getAscent();
-			g.setColor(new Color(0, 0, 0, 210));
-			g.drawString(text, textX + 1, textY + 1);
-			g.setColor(textColor);
-			g.drawString(text, textX, textY);
-		}
-		finally
-		{
-			g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, previousTextHint);
-		}
+		drawCenteredInShadowed(g, status, x, 46, y + 67);
 	}
 
 	private static void drawNpcPortrait(
@@ -725,92 +545,91 @@ public final class CasinoScenePanel extends JPanel
 			: (npc.getIdleAction() == RogueNpcManager.IdleAction.LOOK_RIGHT ? 1 : 0);
 		int style = npc.getStyle();
 
-		// Larger chair/portrait proportions. The previous 10 px head and 18 px
-		// torso read like an icon; this version fills most of the 46x70 frame and
-		// lets hair, hats, eyes and idle motions survive RuneLite scaling.
+		// Chair back behind the figure.
 		g.setColor(new Color(63, 42, 29));
-		g.fillRect(centerX - 15, topY + 17, 30, 36);
-		g.setColor(new Color(108, 70, 39));
-		g.drawRect(centerX - 14, topY + 18, 28, 34);
-		g.drawLine(centerX - 12, topY + 21, centerX + 12, topY + 21);
+		g.fillRect(centerX - 12, topY + 13, 24, 27);
+		g.setColor(new Color(95, 61, 35));
+		g.drawLine(centerX - 10, topY + 15, centerX + 10, topY + 15);
 
+		// Head and hair/hood. Six silhouettes are enough to make repeat patrons
+		// feel distinct without introducing sprite assets.
 		g.setColor(skin);
-		g.fillRect(centerX - 7 + look, topY + 7, 14, 15);
+		g.fillRect(centerX - 5 + look, topY + 6, 10, 11);
 		g.setColor(hair);
 		switch (style)
 		{
 			case 0: // hooded rogue
-				g.fillRect(centerX - 9, topY + 2, 18, 9);
-				g.fillRect(centerX - 10, topY + 8, 4, 15);
-				g.fillRect(centerX + 6, topY + 8, 4, 15);
+				g.fillRect(centerX - 7, topY + 2, 14, 8);
+				g.fillRect(centerX - 8, topY + 7, 3, 11);
+				g.fillRect(centerX + 5, topY + 7, 3, 11);
 				break;
 			case 1: // mercenary / short cropped hair
-				g.fillRect(centerX - 8, topY + 3, 16, 6);
+				g.fillRect(centerX - 6, topY + 3, 12, 5);
 				g.setColor(accent);
-				g.fillRect(centerX - 11, topY + 23, 5, 7);
-				g.fillRect(centerX + 6, topY + 23, 5, 7);
+				g.fillRect(centerX - 8, topY + 18, 4, 6);
+				g.fillRect(centerX + 4, topY + 18, 4, 6);
 				break;
 			case 2: // merchant cap
-				g.fillRect(centerX - 8, topY + 4, 16, 5);
+				g.fillRect(centerX - 6, topY + 4, 12, 4);
 				g.setColor(accent);
-				g.fillRect(centerX - 10, topY + 1, 19, 5);
-				g.fillRect(centerX + 7, topY + 4, 6, 2);
+				g.fillRect(centerX - 8, topY + 1, 15, 4);
+				g.fillRect(centerX + 5, topY + 3, 5, 2);
 				break;
 			case 3: // miner / scruffy beard
-				g.fillRect(centerX - 8, topY + 3, 16, 6);
-				g.fillRect(centerX - 5, topY + 18, 10, 7);
+				g.fillRect(centerX - 6, topY + 3, 12, 5);
+				g.fillRect(centerX - 4, topY + 14, 8, 6);
 				g.setColor(accent);
-				g.fillRect(centerX - 9, topY + 1, 18, 3);
+				g.fillRect(centerX - 7, topY + 1, 14, 3);
 				break;
 			case 4: // little noble hat and feather
-				g.fillRect(centerX - 8, topY + 4, 16, 5);
+				g.fillRect(centerX - 6, topY + 4, 12, 4);
 				g.setColor(accent);
-				g.fillRect(centerX - 10, topY + 1, 19, 5);
-				g.drawLine(centerX + 6, topY + 1, centerX + 10, topY - 5);
-				g.drawLine(centerX + 10, topY - 5, centerX + 11, topY + 1);
+				g.fillRect(centerX - 8, topY + 1, 15, 4);
+				g.drawLine(centerX + 5, topY + 1, centerX + 8, topY - 4);
+				g.drawLine(centerX + 8, topY - 4, centerX + 9, topY);
 				break;
 			default: // shaggy drifter
-				g.fillRect(centerX - 9, topY + 2, 18, 7);
-				g.fillRect(centerX - 9, topY + 7, 4, 11);
+				g.fillRect(centerX - 7, topY + 2, 14, 6);
+				g.fillRect(centerX - 7, topY + 6, 3, 8);
 				break;
 		}
 
-		// Two-pixel eyes are intentionally more legible than the former single
-		// texels, while still preserving the tiny left/right glance animation.
+		// Eyes follow the tiny LOOK idle action.
 		g.setColor(new Color(41, 31, 27));
-		g.fillRect(centerX - 4 + look, topY + 12, 2, 2);
-		g.fillRect(centerX + 3 + look, topY + 12, 2, 2);
+		g.fillRect(centerX - 3 + look, topY + 10, 1, 1);
+		g.fillRect(centerX + 3 + look, topY + 10, 1, 1);
 
+		// Torso, belt and seated legs.
 		g.setColor(outfit);
-		g.fillRect(centerX - 12, topY + 24, 24, 23);
+		g.fillRect(centerX - 9, topY + 18, 18, 18);
 		g.setColor(accent);
-		g.fillRect(centerX - 12, topY + 35, 24, 4);
+		g.fillRect(centerX - 9, topY + 26, 18, 3);
 		g.setColor(new Color(38, 31, 28));
-		g.fillRect(centerX - 10, topY + 47, 8, 12);
-		g.fillRect(centerX + 2, topY + 47, 8, 12);
+		g.fillRect(centerX - 8, topY + 36, 6, 9);
+		g.fillRect(centerX + 2, topY + 36, 6, 9);
 
 		float action = npc.getActionProgress();
-		int reach = Math.round(action * 8.0f);
+		int reach = Math.round(action * 7.0f);
 		int tableDirection = rightSide ? -1 : 1;
 		g.setColor(skin);
 		if (npc.getIdleAction() == RogueNpcManager.IdleAction.FIDDLE_CHIPS)
 		{
-			int handX = centerX + tableDirection * (12 + reach);
-			g.drawLine(centerX + tableDirection * 9, topY + 30, handX, topY + 35);
-			g.fillRect(handX - 1, topY + 34, 4, 4);
+			int handX = centerX + tableDirection * (9 + reach);
+			g.drawLine(centerX + tableDirection * 7, topY + 23, handX, topY + 27);
+			g.fillRect(handX - 1, topY + 26, 3, 3);
 		}
 		else if (npc.getIdleAction() == RogueNpcManager.IdleAction.SIP)
 		{
-			int lift = Math.round(action * 12.0f);
-			int mugX = centerX + tableDirection * 11;
-			int mugY = topY + 34 - lift;
-			g.drawLine(centerX + tableDirection * 8, topY + 29, mugX, mugY + 5);
-			drawTinyTankard(g, mugX - (rightSide ? 6 : 0), mugY);
+			int lift = Math.round(action * 10.0f);
+			int mugX = centerX + tableDirection * 8;
+			int mugY = topY + 27 - lift;
+			g.drawLine(centerX + tableDirection * 6, topY + 22, mugX, mugY + 4);
+			drawTinyTankard(g, mugX - (rightSide ? 5 : 0), mugY);
 		}
 		else
 		{
-			g.drawLine(centerX - 10, topY + 30, centerX - 14, topY + 39);
-			g.drawLine(centerX + 10, topY + 30, centerX + 14, topY + 39);
+			g.drawLine(centerX - 8, topY + 23, centerX - 11, topY + 30);
+			g.drawLine(centerX + 8, topY + 23, centerX + 11, topY + 30);
 		}
 	}
 
