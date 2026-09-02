@@ -396,6 +396,16 @@ public final class HapticScapePanel extends PluginPanel
 		return alertsPanel.getAlertProfiles();
 	}
 
+	public boolean isGenericNotificationClickEnabled()
+	{
+		return alertsPanel.isGenericClickEnabled();
+	}
+
+	public boolean isAlertClickEnabled(AlertCategory category)
+	{
+		return alertsPanel.isClickEnabled(category);
+	}
+
 	public AlertTriggerSettings getAlertTriggerSettings()
 	{
 		return alertsPanel.getTriggerSettings();

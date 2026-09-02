@@ -430,7 +430,10 @@ public class HapticScapePlugin extends Plugin
 
 		NotificationFeedbackSettings settings =
 			currentPanel.getNotificationFeedbackSettings();
-		if (!settings.shouldPlay(
+		boolean genericClickEnabled = currentPanel.isGenericNotificationClickEnabled();
+		if (!GenericNotificationDecision.shouldDispatch(
+			settings,
+			genericClickEnabled,
 			clientUI.isFocused(),
 			event.getNotification().isSendWhenFocused()))
 		{
@@ -553,6 +556,11 @@ public class HapticScapePlugin extends Plugin
 		}
 		NotificationFeedbackSettings settings =
 			currentPanel.getNotificationFeedbackSettings();
+		if (currentPanel.isGenericNotificationClickEnabled() && clickerService != null)
+		{
+			log.debug("Generic notification click requested");
+			clickerService.click();
+		}
 		if (!settings.isEnabled())
 		{
 			return;
@@ -573,6 +581,11 @@ public class HapticScapePlugin extends Plugin
 		if (currentPanel == null)
 		{
 			return;
+		}
+		if (currentPanel.isAlertClickEnabled(category) && clickerService != null)
+		{
+			log.debug("{} click requested", category);
+			clickerService.click();
 		}
 		currentPanel.getAlertProfiles()
 			.resolve(category, currentPanel.getNotificationFeedbackSettings())
@@ -820,6 +833,14 @@ public class HapticScapePlugin extends Plugin
 
 		NotificationFeedbackSettings settings =
 			currentPanel.getNotificationFeedbackSettings();
+		if (currentPanel.isGenericNotificationClickEnabled() && clickerService != null)
+		{
+			clickerService.click();
+		}
+		if (!settings.isEnabled())
+		{
+			return;
+		}
 		log.debug("Sending test generic notification pattern");
 		sendPattern(
 			HapticEventType.MANUAL_PREVIEW,
@@ -836,6 +857,10 @@ public class HapticScapePlugin extends Plugin
 		if (currentPanel == null)
 		{
 			return;
+		}
+		if (currentPanel.isAlertClickEnabled(category) && clickerService != null)
+		{
+			clickerService.click();
 		}
 
 		currentPanel.getAlertProfiles()

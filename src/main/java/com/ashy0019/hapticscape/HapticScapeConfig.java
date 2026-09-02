@@ -40,6 +40,8 @@ public interface HapticScapeConfig extends Config
 	String CLICKER_LEVEL_UP_ENABLED_KEY = "clickerLevelUpEnabled";
 	String CLICKER_MILESTONE_ENABLED_KEY = "clickerMilestoneEnabled";
 	String CLICKER_LEVEL_99_ENABLED_KEY = "clickerLevel99Enabled";
+	String CLICKER_GENERIC_NOTIFICATION_ENABLED_KEY = "clickerGenericNotificationEnabled";
+	String CLICKER_ALERT_SETTINGS_KEY = "clickerAlertSettings";
 
 	@ConfigItem(
 		keyName = "intifaceServer",
@@ -433,5 +435,29 @@ public interface HapticScapeConfig extends Config
 	default boolean clickerLevel99Enabled()
 	{
 		return true;
+	}
+
+	@ConfigItem(
+		keyName = CLICKER_GENERIC_NOTIFICATION_ENABLED_KEY,
+		name = "Clicker generic notifications",
+		description = "Click for unclassified RuneLite notifications",
+		position = 32,
+		hidden = true
+	)
+	default boolean clickerGenericNotificationEnabled()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = CLICKER_ALERT_SETTINGS_KEY,
+		name = "Clicker semantic alerts",
+		description = "Semantic alert categories which produce auditory clicks",
+		position = 33,
+		hidden = true
+	)
+	default String clickerAlertSettings()
+	{
+		return "";
 	}
 }

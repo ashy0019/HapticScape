@@ -10,6 +10,7 @@ import com.ashy0019.hapticscape.CustomPatternLibrary;
 import com.ashy0019.hapticscape.HapticPatternSelection;
 import com.ashy0019.hapticscape.HapticScapeConfig;
 import com.ashy0019.hapticscape.NotificationFeedbackSettings;
+import com.ashy0019.hapticscape.clicker.ClickerAlertSettings;
 import java.awt.BorderLayout;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -32,7 +33,9 @@ final class AlertsPanel extends JPanel
 	private final Supplier<CustomPatternLibrary> customPatternsSupplier;
 
 	private final JCheckBox genericEnabledCheckBox =
-		new JCheckBox("Generic RuneLite notifications");
+		new JCheckBox("Haptic generic notifications");
+	private final JCheckBox genericClickEnabledCheckBox =
+		new JCheckBox("Click generic notifications");
 	private final JCheckBox respectFocusCheckBox = new JCheckBox("Respect RuneLite focus");
 	private final JSlider genericIntensitySlider;
 	private final JLabel genericIntensityValueLabel = new JLabel();
@@ -44,6 +47,8 @@ final class AlertsPanel extends JPanel
 		new JComboBox<>(AlertCategory.values());
 	private final JComboBox<AlertBehavior> behaviorComboBox =
 		new JComboBox<>(AlertBehavior.values());
+	private final JCheckBox specificClickEnabledCheckBox =
+		new JCheckBox("Click for this alert");
 	private final JPanel triggerRow = new JPanel(new BorderLayout(8, 0));
 	private final JLabel triggerLabel = new JLabel();
 	private final JSpinner triggerSpinner = new JSpinner();
@@ -54,11 +59,13 @@ final class AlertsPanel extends JPanel
 	private final JButton testSpecificButton = new JButton("Test alert");
 
 	private volatile boolean genericEnabled;
+	private volatile boolean genericClickEnabled;
 	private volatile boolean respectFocus;
 	private volatile int genericIntensityPercent;
 	private volatile int genericDurationMillis;
 	private volatile HapticPatternSelection genericPattern;
 	private volatile AlertProfiles alertProfiles;
+	private volatile ClickerAlertSettings clickerAlertSettings;
 	private volatile AlertTriggerSettings triggerSettings;
 	private volatile AlertCategory selectedCategory = AlertCategory.DIRECT_MESSAGE;
 	private boolean updatingGenericControls;
@@ -76,6 +83,7 @@ final class AlertsPanel extends JPanel
 		this.configManager = configManager;
 		this.customPatternsSupplier = customPatternsSupplier;
 		genericEnabled = config.notificationFeedbackEnabled();
+		genericClickEnabled = config.clickerGenericNotificationEnabled();
 		respectFocus = config.notificationRespectFocus();
 		genericIntensityPercent = clamp(
 			config.notificationIntensityPercent(),
@@ -94,6 +102,9 @@ final class AlertsPanel extends JPanel
 		String configuredProfiles = config.alertProfiles();
 		alertProfiles = AlertProfiles.fromConfigValue(configuredProfiles)
 			.replaceMissingCustomPatterns(customPatternsSupplier.get());
+		clickerAlertSettings = ClickerAlertSettings.fromConfigValue(
+			config.clickerAlertSettings()
+		);
 		triggerSettings = AlertTriggerSettings.fromConfigValues(
 			config.alertTriggerSettings(),
 			configuredProfiles
@@ -159,6 +170,16 @@ final class AlertsPanel extends JPanel
 		return alertProfiles;
 	}
 
+	boolean isGenericClickEnabled()
+	{
+		return genericClickEnabled;
+	}
+
+	boolean isClickEnabled(AlertCategory category)
+	{
+		return clickerAlertSettings.isEnabled(category);
+	}
+
 	AlertTriggerSettings getTriggerSettings()
 	{
 		return triggerSettings;
@@ -219,6 +240,10 @@ final class AlertsPanel extends JPanel
 		genericEnabledCheckBox.setToolTipText(
 			"Play the Generic profile for unclassified RuneLite notifications"
 		);
+		genericClickEnabledCheckBox.setSelected(genericClickEnabled);
+		genericClickEnabledCheckBox.setToolTipText(
+			"Play one click for an unclassified RuneLite notification"
+		);
 		respectFocusCheckBox.setSelected(respectFocus);
 		respectFocusCheckBox.setToolTipText(
 			"Honor RuneLite focus suppression for generic notifications"
@@ -226,6 +251,7 @@ final class AlertsPanel extends JPanel
 		genericIntensityValueLabel.setText(genericIntensityPercent + "%");
 
 		PanelUi.addVerticalComponent(panel, genericEnabledCheckBox);
+		PanelUi.addVerticalComponent(panel, genericClickEnabledCheckBox);
 		PanelUi.addVerticalComponent(panel, respectFocusCheckBox);
 
 		JPanel intensityHeader = new JPanel(new BorderLayout());
@@ -260,6 +286,10 @@ final class AlertsPanel extends JPanel
 		categoryComboBox.setToolTipText("Select the alert type to customize");
 		categoryRow.add(categoryComboBox, BorderLayout.CENTER);
 		PanelUi.addVerticalComponent(panel, categoryRow);
+		specificClickEnabledCheckBox.setToolTipText(
+			"Play one click for the selected semantic alert"
+		);
+		PanelUi.addVerticalComponent(panel, specificClickEnabledCheckBox);
 
 		JPanel behaviorRow = new JPanel(new BorderLayout(8, 0));
 		behaviorRow.add(new JLabel("Behavior"), BorderLayout.CENTER);
@@ -305,6 +335,17 @@ final class AlertsPanel extends JPanel
 				HapticScapeConfig.NOTIFICATION_FEEDBACK_ENABLED_KEY,
 				genericEnabled
 			);
+			updateGenericControlState();
+		});
+		genericClickEnabledCheckBox.addActionListener(event ->
+		{
+			genericClickEnabled = genericClickEnabledCheckBox.isSelected();
+			configManager.setConfiguration(
+				HapticScapeConfig.GROUP,
+				HapticScapeConfig.CLICKER_GENERIC_NOTIFICATION_ENABLED_KEY,
+				genericClickEnabled
+			);
+			updateGenericControlState();
 		});
 		respectFocusCheckBox.addActionListener(event ->
 		{
@@ -366,6 +407,19 @@ final class AlertsPanel extends JPanel
 				loadSelectedCategory();
 			}
 		});
+		specificClickEnabledCheckBox.addActionListener(event ->
+		{
+			if (updatingSpecificControls)
+			{
+				return;
+			}
+			clickerAlertSettings = clickerAlertSettings.withEnabled(
+				selectedCategory,
+				specificClickEnabledCheckBox.isSelected()
+			);
+			persistClickerAlertSettings();
+			updateSpecificControlState();
+		});
 		behaviorComboBox.addActionListener(event ->
 		{
 			updateSelectedProfile();
@@ -396,6 +450,9 @@ final class AlertsPanel extends JPanel
 		updatingSpecificControls = true;
 		try
 		{
+			specificClickEnabledCheckBox.setSelected(
+				clickerAlertSettings.isEnabled(selectedCategory)
+			);
 			behaviorComboBox.setSelectedItem(profile.getBehavior());
 			specificIntensitySlider.setValue(profile.getIntensityPercent());
 			specificIntensityValueLabel.setText(profile.getIntensityPercent() + "%");
@@ -476,7 +533,9 @@ final class AlertsPanel extends JPanel
 		genericIntensitySlider.setEnabled(externallyScaled);
 		genericIntensityValueLabel.setEnabled(externallyScaled);
 		genericDurationSpinner.setEnabled(externallyScaled);
-		testGenericButton.setEnabled(connected);
+		testGenericButton.setEnabled(
+			(connected && genericEnabled) || genericClickEnabled
+		);
 	}
 
 	private void updateSpecificControlState()
@@ -492,7 +551,10 @@ final class AlertsPanel extends JPanel
 		specificIntensitySlider.setEnabled(customConfiguration && externallyScaled);
 		specificIntensityValueLabel.setEnabled(customConfiguration && externallyScaled);
 		specificDurationSpinner.setEnabled(customConfiguration && externallyScaled);
-		testSpecificButton.setEnabled(connected && behavior != AlertBehavior.OFF);
+		testSpecificButton.setEnabled(
+			(connected && behavior != AlertBehavior.OFF)
+				|| clickerAlertSettings.isEnabled(selectedCategory)
+		);
 	}
 
 	private void persistMigratedSettings(
@@ -533,6 +595,15 @@ final class AlertsPanel extends JPanel
 			HapticScapeConfig.GROUP,
 			HapticScapeConfig.ALERT_TRIGGER_SETTINGS_KEY,
 			triggerSettings.toConfigValue()
+		);
+	}
+
+	private void persistClickerAlertSettings()
+	{
+		configManager.setConfiguration(
+			HapticScapeConfig.GROUP,
+			HapticScapeConfig.CLICKER_ALERT_SETTINGS_KEY,
+			clickerAlertSettings.toConfigValue()
 		);
 	}
 
