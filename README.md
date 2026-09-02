@@ -30,9 +30,6 @@ RuneLite, Jagex, or the Intiface project.
   pattern.
 - Use separate feedback for ordinary level-ups.
 - Choose a dedicated pattern for level milestones from 10 through 90.
-- Celebrate a real level 99 with a synchronized 99-beat haptic ceremony,
-  crowd cheer,
-  confetti-filled mastery overlay, and RuneLite chat message.
 - Trigger separate feedback for RuneLite notifications.
 
 ### Haptic controls
