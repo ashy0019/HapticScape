@@ -12,6 +12,7 @@ public final class MusicSignalAnalyzer
 	private static final double BASS_MINIMUM_HZ = 40.0;
 	private static final double BASS_MAXIMUM_HZ = 220.0;
 	private static final double FLUX_MAXIMUM_HZ = 2_000.0;
+	private static final double LOUDNESS_REFERENCE_RMS = 0.12;
 
 	private final DoubleConsumer levelListener;
 	private final float[] sampleWindow = new float[FFT_SIZE];
@@ -23,6 +24,7 @@ public final class MusicSignalAnalyzer
 	private double fluxBaseline;
 	private double smoothedLevel;
 	private volatile MusicResponse response = MusicResponse.RHYTHMIC;
+	private volatile double outputVolume = 1.0;
 
 	public MusicSignalAnalyzer(DoubleConsumer levelListener)
 	{
@@ -32,6 +34,16 @@ public final class MusicSignalAnalyzer
 	public void setResponse(MusicResponse response)
 	{
 		this.response = Objects.requireNonNull(response, "response");
+	}
+
+	public void setOutputVolume(double outputVolume)
+	{
+		if (!Double.isFinite(outputVolume))
+		{
+			this.outputVolume = 0.0;
+			return;
+		}
+		this.outputVolume = clamp(outputVolume);
 	}
 
 	public void accept(float[] samples, int incomingSampleRate)
@@ -44,6 +56,13 @@ public final class MusicSignalAnalyzer
 		if (sampleRate != incomingSampleRate)
 		{
 			reset(incomingSampleRate);
+		}
+		if (outputVolume == 0.0)
+		{
+			bufferedSamples = 0;
+			smoothedLevel = 0.0;
+			levelListener.accept(0.0);
+			return;
 		}
 
 		int sourceOffset = 0;
@@ -99,7 +118,9 @@ public final class MusicSignalAnalyzer
 		double fluxRatio = flux / Math.max(0.0001, fluxBaseline);
 		double normalizedBass = clamp((bassRatio - 0.55) / 1.45);
 		double normalizedOnset = clamp((fluxRatio - 1.15) / 3.0);
-		double target = response.combine(normalizedBass, normalizedOnset);
+		double beatLevel = response.combine(normalizedBass, normalizedOnset);
+		double measuredLoudness = clamp(rms / LOUDNESS_REFERENCE_RMS);
+		double target = beatLevel * measuredLoudness * outputVolume;
 		smoothedLevel = response.smooth(smoothedLevel, target);
 		levelListener.accept(smoothedLevel);
 

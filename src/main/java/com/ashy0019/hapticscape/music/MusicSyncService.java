@@ -104,7 +104,10 @@ public final class MusicSyncService implements AutoCloseable
 				}
 
 				@Override
-				public void onSamples(float[] monoSamples, int sampleRate)
+				public void onSamples(
+					float[] monoSamples,
+					int sampleRate,
+					double outputVolume)
 				{
 					MusicSignalAnalyzer currentAnalyzer;
 					synchronized (MusicSyncService.this)
@@ -113,6 +116,7 @@ public final class MusicSyncService implements AutoCloseable
 					}
 					if (currentAnalyzer != null)
 					{
+						currentAnalyzer.setOutputVolume(outputVolume);
 						currentAnalyzer.accept(monoSamples, sampleRate);
 					}
 				}

@@ -56,6 +56,8 @@ RuneLite, Jagex, or the Intiface project.
   local FFT-based analyzer.
 - Choose Smooth, Rhythmic, or Punchy response styles.
 - Adjust sensitivity plus independent minimum and maximum intensity limits.
+- Let the actual Windows audio level scale the detected beat automatically.
+- Respect the Windows master-volume slider and mute state.
 - Watch the current mapped output on a live meter.
 - Let XP feedback, alerts, custom patterns, and the Level 99 ceremony
   temporarily override music sync, then resume automatically.

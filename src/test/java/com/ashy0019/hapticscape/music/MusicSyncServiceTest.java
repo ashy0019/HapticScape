@@ -84,7 +84,7 @@ public class MusicSyncServiceTest
 
 		private void emit(float[] samples, int sampleRate)
 		{
-			listener.onSamples(samples, sampleRate);
+			listener.onSamples(samples, sampleRate, 1.0);
 		}
 
 		private void fail(String message)
