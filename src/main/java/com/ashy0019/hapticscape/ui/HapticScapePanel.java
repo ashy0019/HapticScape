@@ -14,6 +14,8 @@ import com.ashy0019.hapticscape.XpFeedbackSettings;
 import com.ashy0019.hapticscape.device.ConnectionSnapshot;
 import com.ashy0019.hapticscape.device.ConnectionState;
 import com.ashy0019.hapticscape.device.DeviceInfo;
+import com.ashy0019.hapticscape.music.MusicSyncSettings;
+import com.ashy0019.hapticscape.music.MusicSyncSnapshot;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.GridLayout;
@@ -72,6 +74,7 @@ public final class HapticScapePanel extends PluginPanel
 	private final ProfilesPanel profilesPanel;
 	private final AlertsPanel alertsPanel;
 	private final CustomPatternsPanel customPatternsPanel;
+	private final MusicPanel musicPanel;
 	private final Timer developerStatusTimer;
 
 	private volatile int intensityPercent;
@@ -102,6 +105,7 @@ public final class HapticScapePanel extends PluginPanel
 		Runnable testGenericAlertAction,
 		Consumer<AlertCategory> testSpecificAlertAction,
 		Consumer<CustomPatternEntry> patternForgePreviewAction,
+		Consumer<MusicSyncSettings> musicSettingsAction,
 		Runnable stopAction)
 	{
 		super(false);
@@ -213,13 +217,18 @@ public final class HapticScapePanel extends PluginPanel
 			patternForgePreviewAction,
 			this::applyCustomPatternLibrary
 		);
+		musicPanel = new MusicPanel(config, configManager, musicSettingsAction);
 
 		JTabbedPane tabs = new JTabbedPane(JTabbedPane.TOP, JTabbedPane.WRAP_TAB_LAYOUT);
-		tabs.putClientProperty("FlatLaf.style", "tabInsets: 2,3,2,3; tabHeight: 22");
+		tabs.putClientProperty(
+			"FlatLaf.style",
+			"tabInsets: 2,3,2,3; tabHeight: 22; tabAreaAlignment: center"
+		);
 		PanelUi.addCompactTab(tabs, "Skills", skillsPanel);
-		PanelUi.addCompactTab(tabs, "Profiles", profilesPanel);
+		PanelUi.addCompactTab(tabs, "XP", profilesPanel);
 		PanelUi.addCompactTab(tabs, "Alerts", alertsPanel);
-		PanelUi.addCompactTab(tabs, "Custom", customPatternsPanel);
+		PanelUi.addCompactTab(tabs, "Forge", customPatternsPanel);
+		PanelUi.addCompactTab(tabs, "Music", musicPanel);
 
 		JPanel topPanel = new JPanel();
 		topPanel.setLayout(new BoxLayout(topPanel, BoxLayout.Y_AXIS));
@@ -244,7 +253,11 @@ public final class HapticScapePanel extends PluginPanel
 		testButton.addActionListener(event -> testAction.run());
 		testLevelUpButton.addActionListener(event -> testLevelUpAction.run());
 		previewLevel99Button.addActionListener(event -> previewLevel99Action.run());
-		stopButton.addActionListener(event -> stopAction.run());
+		stopButton.addActionListener(event ->
+		{
+			musicPanel.disableMusicSync();
+			stopAction.run();
+		});
 
 		JPanel buttons = new JPanel(new GridLayout(2, 2, 6, 6));
 		buttons.add(connectButton);
@@ -343,6 +356,16 @@ public final class HapticScapePanel extends PluginPanel
 	public AlertTriggerSettings getAlertTriggerSettings()
 	{
 		return alertsPanel.getTriggerSettings();
+	}
+
+	public MusicSyncSettings getMusicSyncSettings()
+	{
+		return musicPanel.getSettings();
+	}
+
+	public void updateMusicSync(MusicSyncSnapshot snapshot)
+	{
+		musicPanel.updateSnapshot(snapshot);
 	}
 
 	private void configureGlobalListeners()

@@ -3,6 +3,10 @@ package com.ashy0019.hapticscape;
 import com.ashy0019.hapticscape.device.DefaultIntifaceService;
 import com.ashy0019.hapticscape.device.HapticPattern;
 import com.ashy0019.hapticscape.device.IntifaceService;
+import com.ashy0019.hapticscape.music.MusicResponse;
+import com.ashy0019.hapticscape.music.MusicSyncService;
+import com.ashy0019.hapticscape.music.MusicSyncSettings;
+import com.ashy0019.hapticscape.music.WasapiLoopbackCapture;
 import com.ashy0019.hapticscape.ui.HapticScapePanel;
 import com.ashy0019.hapticscape.ui.Level99CelebrationOverlay;
 import com.google.gson.Gson;
@@ -72,6 +76,7 @@ public class HapticScapePlugin extends Plugin
 	private final Level99CelebrationController level99CelebrationController =
 		new Level99CelebrationController();
 	private IntifaceService intifaceService;
+	private MusicSyncService musicSyncService;
 	private HapticScapePanel panel;
 	private NavigationButton navigationButton;
 	private Level99CelebrationOverlay level99CelebrationOverlay;
@@ -133,6 +138,11 @@ public class HapticScapePlugin extends Plugin
 		overlayManager.add(level99CelebrationOverlay);
 
 		intifaceService = new DefaultIntifaceService(httpClient, gson);
+		musicSyncService = new MusicSyncService(
+			intifaceService,
+			WasapiLoopbackCapture::new,
+			musicSettingsFromConfig()
+		);
 		panel = new HapticScapePanel(
 			config,
 			configManager,
@@ -145,9 +155,12 @@ public class HapticScapePlugin extends Plugin
 			this::sendTestGenericNotificationPattern,
 			this::sendTestAlert,
 			this::sendPatternForgePreview,
+			musicSyncService::updateSettings,
 			intifaceService::stopAll
 		);
 		intifaceService.setConnectionListener(panel::updateConnection);
+		musicSyncService.setListener(panel::updateMusicSync);
+		musicSyncService.updateSettings(panel.getMusicSyncSettings());
 		if (client.getGameState() == GameState.LOGGED_IN)
 		{
 			seedAlertDetectors();
@@ -183,6 +196,12 @@ public class HapticScapePlugin extends Plugin
 			navigationButton = null;
 		}
 
+		if (musicSyncService != null)
+		{
+			musicSyncService.setListener(snapshot -> { });
+			musicSyncService.close();
+			musicSyncService = null;
+		}
 		if (intifaceService != null)
 		{
 			intifaceService.setConnectionListener(snapshot -> { });
@@ -839,6 +858,31 @@ public class HapticScapePlugin extends Plugin
 	private static int clamp(int value, int minimum, int maximum)
 	{
 		return Math.max(minimum, Math.min(maximum, value));
+	}
+
+	private MusicSyncSettings musicSettingsFromConfig()
+	{
+		MusicResponse response;
+		try
+		{
+			response = MusicResponse.valueOf(config.musicResponse());
+		}
+		catch (IllegalArgumentException | NullPointerException ignored)
+		{
+			response = MusicResponse.RHYTHMIC;
+		}
+		int maximum = clamp(config.musicMaximumIntensityPercent(), 0, 100);
+		int minimum = Math.min(
+			clamp(config.musicMinimumIntensityPercent(), 0, 100),
+			maximum
+		);
+		return new MusicSyncSettings(
+			config.musicSyncEnabled(),
+			response,
+			clamp(config.musicSensitivityPercent(), 25, 200),
+			minimum,
+			maximum
+		);
 	}
 
 	@Provides

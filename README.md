@@ -50,6 +50,17 @@ RuneLite, Jagex, or the Intiface project.
   waiting for an in-game event.
 - Stop every connected device immediately with **Stop now**.
 
+### Music sync (Windows)
+
+- Turn the Windows system audio mix into continuous haptic feedback using a
+  local FFT-based analyzer.
+- Choose Smooth, Rhythmic, or Punchy response styles.
+- Adjust sensitivity plus independent minimum and maximum intensity limits.
+- Watch the current mapped output on a live meter.
+- Let XP feedback, alerts, custom patterns, and the Level 99 ceremony
+  temporarily override music sync, then resume automatically.
+- Turn music sync off automatically when **Stop now** is pressed.
+
 ### Custom Pattern Forge
 
 - Draw an intensity curve directly with the mouse.
@@ -73,15 +84,16 @@ RuneLite, Jagex, or the Intiface project.
 ## The HapticScape panel
 
 The main Feedback section controls the default XP response, ordinary level-up
-feedback, milestone feedback, and the Level 99 celebration. Four tabs provide
+feedback, milestone feedback, and the Level 99 celebration. Five tabs provide
 the remaining controls:
 
 | Tab | Purpose |
 |---|---|
 | **Skills** | Enable all skills, disable all skills, or toggle skills individually. |
-| **Profiles** | Override the global XP settings for one selected skill. |
+| **XP** | Override the global XP settings for one selected skill. |
 | **Alerts** | Configure the Generic catch-all and separate gameplay alert profiles and triggers. |
-| **Custom** | Create, preview, name, save, and manage custom patterns. |
+| **Forge** | Create, preview, name, save, and manage custom patterns. |
+| **Music** | Enable Windows system-audio sync and tune its response and output limits. |
 
 The bottom of the panel contains the connection controls, global test button,
 emergency stop, and the list of devices reported by Intiface.
@@ -113,7 +125,8 @@ For device-specific setup, use the official
 
 Different devices have different minimum usable intensities. If a device is
 silent at low percentages but begins responding above a particular value,
-raise HapticScape's intensity above that device's physical threshold.
+raise HapticScape's intensity—or Music sync's Minimum setting—above that
+device's physical threshold.
 
 ## Running from source
 
@@ -239,6 +252,11 @@ HapticScape does not send RuneScape account names, chat messages, passwords,
 or information about other players to Intiface. RuneLite notification text is
 not sent to Intiface; an accepted notification only triggers the configured
 pattern.
+
+On Windows, Music sync listens to the current system output mix. Audio is
+analyzed in a small in-memory rolling window and is never recorded, saved, or
+transmitted. Because Windows loopback captures the output device, other
+applications playing through the same device can also influence Music sync.
 
 If you configure a non-local server address, the operator of that server can
 receive your IP address and haptic command traffic. Only connect to remote
