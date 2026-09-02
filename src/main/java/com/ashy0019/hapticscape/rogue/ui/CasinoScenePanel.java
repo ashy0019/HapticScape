@@ -507,76 +507,133 @@ public final class CasinoScenePanel extends JPanel
 
 	private static void drawDealer(Graphics2D g, int x, int y)
 	{
-		// Adult tavern-wench / courtesan silhouette: long auburn hair, cream
-		// peasant blouse, wine-red lace bodice and arms resting on the table.
-		// The shapes are deliberately chunky so she remains readable at 240 px.
-		Color hairDark = new Color(76, 38, 25);
-		Color hairLight = new Color(130, 66, 34);
-		Color skin = new Color(218, 166, 126);
-		Color skinShade = new Color(178, 119, 89);
-		Color blouse = new Color(229, 218, 183);
-		Color blouseShade = new Color(188, 176, 145);
-		Color bodice = new Color(128, 34, 42);
-		Color bodiceDark = new Color(70, 25, 29);
+		// Slim, flirtatious Rogue's Den waitress. Keep the shapes simple and
+		// readable at native RuneLite scale: long dirty-blonde hair does most of
+		// the silhouette work, while the face and draped blouse stay deliberately
+		// low-detail so she still belongs beside the blockier RSC-style patrons.
+		Color hairShadow = new Color(105, 74, 42);
+		Color hair = new Color(181, 137, 72);
+		Color hairLight = new Color(219, 177, 101);
+		Color skin = new Color(224, 174, 132);
+		Color skinShade = new Color(184, 126, 92);
+		Color fabric = new Color(235, 226, 194);
+		Color fabricShade = new Color(196, 181, 147);
+		Color wine = new Color(116, 35, 48);
+		Color wineDark = new Color(66, 26, 31);
+		Color gold = new Color(222, 176, 76);
 
-		// Hair behind the head and down over both shoulders.
-		g.setColor(hairDark);
-		g.fillRect(x - 11, y - 57, 22, 28);
-		g.fillRect(x - 15, y - 43, 7, 34);
-		g.fillRect(x + 8, y - 43, 7, 34);
+		// Long hair behind everything else. The uneven lengths and separated
+		// locks stop it reading as a square frame around the face.
+		g.setColor(hairShadow);
+		g.fillRect(x - 10, y - 58, 20, 10);
+		g.fillRect(x - 13, y - 52, 5, 40);
+		g.fillRect(x + 8, y - 50, 6, 43);
+		g.fillRect(x - 16, y - 39, 4, 29);
+		g.fillRect(x + 13, y - 35, 4, 25);
+		g.fillRect(x - 12, y - 18, 4, 17);
+		g.fillRect(x + 9, y - 14, 5, 16);
+
+		g.setColor(hair);
+		g.fillRect(x - 8, y - 59, 15, 5);
+		g.fillRect(x - 11, y - 54, 18, 5);
+		g.fillRect(x - 12, y - 49, 5, 24);
+		g.fillRect(x + 7, y - 47, 5, 29);
+		g.fillRect(x - 15, y - 36, 3, 19);
+		g.fillRect(x + 12, y - 31, 3, 18);
+		g.fillRect(x - 10, y - 24, 3, 15);
+		g.fillRect(x + 8, y - 20, 4, 15);
+
+		// A few highlights create flowing strands without adding noisy detail.
 		g.setColor(hairLight);
-		g.fillRect(x - 8, y - 56, 15, 5);
-		g.fillRect(x - 13, y - 39, 3, 22);
-		g.fillRect(x + 10, y - 39, 3, 20);
+		g.fillRect(x - 6, y - 58, 8, 2);
+		g.drawLine(x - 10, y - 49, x - 13, y - 22);
+		g.drawLine(x + 9, y - 44, x + 12, y - 17);
+		g.drawLine(x - 13, y - 34, x - 15, y - 17);
 
-		// Face, neck and simple features.
+		// Small tapered face and neck. Hair overlaps the temples rather than
+		// outlining the entire head.
 		g.setColor(skin);
-		g.fillRect(x - 7, y - 49, 14, 18);
-		g.fillRect(x - 4, y - 32, 8, 8);
-		g.setColor(new Color(49, 33, 28));
-		g.fillRect(x - 4, y - 42, 2, 2);
-		g.fillRect(x + 3, y - 42, 2, 2);
-		g.setColor(new Color(142, 49, 50));
-		g.fillRect(x - 2, y - 35, 5, 2);
+		g.fillRect(x - 6, y - 51, 12, 14);
+		g.fillRect(x - 5, y - 37, 10, 3);
+		g.fillRect(x - 3, y - 34, 6, 6);
+		g.setColor(hair);
+		g.fillRect(x - 7, y - 51, 3, 7);
+		g.fillRect(x + 5, y - 50, 3, 9);
+		g.fillRect(x - 4, y - 54, 10, 3);
+		g.fillRect(x - 7, y - 52, 5, 3);
 
-		// Puffy sleeves and exposed neckline.
-		g.setColor(blouse);
-		g.fillRect(x - 20, y - 27, 10, 20);
-		g.fillRect(x + 10, y - 27, 10, 20);
-		g.fillRect(x - 11, y - 27, 22, 9);
-		g.setColor(blouseShade);
-		g.drawLine(x - 18, y - 13, x - 11, y - 13);
-		g.drawLine(x + 11, y - 13, x + 18, y - 13);
+		// Cute, tiny features: one-pixel eyes and a restrained smile. At this
+		// scale, less facial ink reads more feminine than heavy makeup blocks.
+		g.setColor(new Color(50, 39, 30));
+		g.fillRect(x - 3, y - 45, 1, 1);
+		g.fillRect(x + 3, y - 45, 1, 1);
+		g.setColor(new Color(154, 69, 70));
+		g.fillRect(x - 1, y - 40, 3, 1);
+		g.fillRect(x, y - 39, 2, 1);
+		g.setColor(new Color(214, 139, 119));
+		g.fillRect(x - 5, y - 42, 2, 1);
+		g.fillRect(x + 4, y - 42, 2, 1);
+
+		// Bare shoulders and a narrow torso. The blouse is a light draped strip,
+		// cut very low, rather than a padded corset shape. This keeps her slim.
 		g.setColor(skin);
-		g.fillRect(x - 6, y - 27, 12, 8);
+		g.fillRect(x - 11, y - 29, 22, 8);
+		g.fillRect(x - 8, y - 22, 16, 13);
+
+		// Off-shoulder sleeves, loose and slightly fallen down the arms.
+		g.setColor(fabric);
+		g.fillRect(x - 18, y - 27, 7, 13);
+		g.fillRect(x + 11, y - 27, 7, 13);
+		g.fillRect(x - 20, y - 22, 4, 11);
+		g.fillRect(x + 16, y - 22, 4, 11);
+		g.setColor(fabricShade);
+		g.drawLine(x - 18, y - 18, x - 12, y - 18);
+		g.drawLine(x + 12, y - 18, x + 18, y - 18);
+
+		// Draped low-cut top. Two shallow fabric panels follow the body and meet
+		// low in the centre, leaving collarbone and midriff exposed. No hard
+		// central cleavage block: the neckline itself does the work.
+		g.setColor(fabricShade);
+		g.fillRect(x - 9, y - 25, 5, 8);
+		g.fillRect(x + 4, y - 25, 5, 8);
+		g.setColor(fabric);
+		g.fillRect(x - 9, y - 24, 4, 7);
+		g.fillRect(x + 5, y - 24, 4, 7);
+		g.fillRect(x - 6, y - 20, 12, 4);
+		g.fillRect(x - 4, y - 17, 8, 2);
 		g.setColor(skinShade);
-		g.drawLine(x, y - 23, x, y - 19);
+		g.drawLine(x, y - 26, x, y - 22);
 
-		// Corseted bodice with gold lacing.
-		g.setColor(bodice);
-		g.fillRect(x - 11, y - 19, 22, 26);
-		g.setColor(bodiceDark);
-		g.fillRect(x - 2, y - 18, 4, 25);
-		g.setColor(new Color(221, 174, 70));
-		for (int yy = y - 15; yy <= y; yy += 5)
-		{
-			g.drawLine(x - 4, yy, x + 4, yy + 3);
-			g.drawLine(x + 4, yy, x - 4, yy + 3);
-		}
-
-		// Necklace.
-		g.setColor(new Color(231, 188, 72));
-		g.drawLine(x - 4, y - 28, x, y - 25);
-		g.drawLine(x, y - 25, x + 4, y - 28);
-		g.fillRect(x, y - 24, 1, 2);
-
-		// Forearms lean onto the near edge of the table.
+		// Exposed midriff with one tiny shadow for the navel.
 		g.setColor(skin);
-		g.fillRect(x - 23, y - 10, 14, 6);
-		g.fillRect(x + 9, y - 10, 14, 6);
+		g.fillRect(x - 7, y - 15, 14, 11);
 		g.setColor(skinShade);
-		g.drawLine(x - 23, y - 4, x - 9, y - 4);
-		g.drawLine(x + 9, y - 4, x + 23, y - 4);
+		g.fillRect(x, y - 9, 1, 2);
+
+		// Low wine-red sash/skirt top, visually separate from the blouse so the
+		// exposed waist remains obvious even at 1x scale.
+		g.setColor(wineDark);
+		g.fillRect(x - 8, y - 5, 16, 2);
+		g.setColor(wine);
+		g.fillRect(x - 9, y - 3, 18, 10);
+		g.setColor(gold);
+		g.fillRect(x - 2, y - 3, 4, 1);
+
+		// Small necklace at the open neckline.
+		g.setColor(gold);
+		g.drawLine(x - 3, y - 30, x, y - 27);
+		g.drawLine(x, y - 27, x + 3, y - 30);
+		g.fillRect(x, y - 26, 1, 1);
+
+		// Slim forearms lean onto the table, preserving the original pose.
+		g.setColor(skin);
+		g.fillRect(x - 22, y - 12, 12, 5);
+		g.fillRect(x + 10, y - 12, 12, 5);
+		g.fillRect(x - 24, y - 8, 4, 3);
+		g.fillRect(x + 20, y - 8, 4, 3);
+		g.setColor(skinShade);
+		g.drawLine(x - 22, y - 7, x - 10, y - 7);
+		g.drawLine(x + 10, y - 7, x + 22, y - 7);
 	}
 
 	private static void drawMainTable(Graphics2D g)
