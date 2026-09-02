@@ -1,0 +1,23 @@
+Level 99 ceremony crowd cheer
+=============================
+
+Source recording:
+"CRWDApls_Loud Applause, Cheering, Whistling, Barking_ShaneVincent_GSC24_FUMA-AmbeoVR.wav"
+
+Creator and recording editor:
+Shane Vincent (Freesound user ShangusBurger)
+
+Source:
+https://freesound.org/people/ShangusBurger/sounds/764042/
+
+License:
+CC0 1.0 Universal
+https://creativecommons.org/publicdomain/zero/1.0/
+
+The source page says the GameSoundCon 2024 recording session was conducted
+for the purpose of publishing the resulting recordings online under CC0.
+The page also credits the participating voice talent and additional equipment
+provider.
+
+HapticScape uses a short excerpt that has been trimmed, downmixed to mono,
+resampled to 22,050 Hz, high-pass filtered, and faded out.

@@ -119,6 +119,17 @@ Artifact:
 The project's public-domain declaration is supplied as
 AOPALLIANCE-PUBLIC-DOMAIN.txt.
 
+Level 99 crowd cheer -- CC0 1.0
+--------------------------------
+
+The Level 99 ceremony includes an edited excerpt of "CRWDApls_Loud Applause,
+Cheering, Whistling, Barking_ShaneVincent_GSC24_FUMA-AmbeoVR.wav", recorded
+and edited by Shane Vincent (Freesound user ShangusBurger) during GameSoundCon
+2024. The source recording was released under CC0 1.0. It was trimmed,
+downmixed to mono, resampled, filtered, and faded for HapticScape.
+
+The source and license details are supplied in LEVEL99-CHEER-CC0.txt.
+
 Build-only dependencies
 -----------------------
 

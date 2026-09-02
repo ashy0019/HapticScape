@@ -1,5 +1,6 @@
 package com.ashy0019.hapticscape.device;
 
+import com.ashy0019.hapticscape.Level99Ceremony;
 import java.net.URI;
 import java.time.Duration;
 import java.util.Arrays;
@@ -98,6 +99,20 @@ public class DefaultIntifaceServiceTest
 	}
 
 	@Test
+	public void stopNowCancelsRemainingLevelNinetyNineCeremony() throws Exception
+	{
+		connect();
+		service.playPattern(Level99Ceremony.pattern());
+		assertEquals(0.60, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+
+		service.stopAll();
+
+		gateway.stopped.get(1, TimeUnit.SECONDS);
+		gateway.vibrationCommands.clear();
+		assertNull(gateway.vibrationCommands.poll(150, TimeUnit.MILLISECONDS));
+	}
+
+	@Test
 	public void disconnectPublishesDisconnectedState() throws Exception
 	{
 		connect();
@@ -120,6 +135,18 @@ public class DefaultIntifaceServiceTest
 
 		closed.get(1, TimeUnit.SECONDS);
 		assertFalse(gateway.vibrated.isDone());
+	}
+
+	@Test
+	public void levelNinetyNineCeremonyWhileDisconnectedIsIgnored() throws Exception
+	{
+		CompletableFuture<ConnectionSnapshot> closed = awaitState(ConnectionState.CLOSED);
+		service.playPattern(Level99Ceremony.pattern());
+
+		service.close();
+
+		closed.get(1, TimeUnit.SECONDS);
+		assertNull(gateway.vibrationCommands.poll(100, TimeUnit.MILLISECONDS));
 	}
 
 	@Test
