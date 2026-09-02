@@ -13,12 +13,17 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.GameState;
 import net.runelite.api.Skill;
+import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.StatChanged;
 import net.runelite.client.audio.AudioPlayer;
@@ -49,12 +54,15 @@ public class HapticScapePlugin extends Plugin
 	private static final float LEVEL_99_CHEER_GAIN_DB = -4.0f;
 
 	private final XpTracker xpTracker = new XpTracker();
+	private final ThresholdAlertTracker thresholdAlertTracker = new ThresholdAlertTracker();
+	private final AlertDeduplicator alertDeduplicator = new AlertDeduplicator();
 	private final Level99CelebrationController level99CelebrationController =
 		new Level99CelebrationController();
 	private IntifaceService intifaceService;
 	private HapticScapePanel panel;
 	private NavigationButton navigationButton;
 	private Level99CelebrationOverlay level99CelebrationOverlay;
+	private ScheduledExecutorService alertScheduler;
 
 	@Inject
 	private Client client;
@@ -90,6 +98,14 @@ public class HapticScapePlugin extends Plugin
 	protected void startUp()
 	{
 		xpTracker.reset();
+		thresholdAlertTracker.reset();
+		alertDeduplicator.reset();
+		alertScheduler = Executors.newSingleThreadScheduledExecutor(task ->
+		{
+			Thread thread = new Thread(task, "hapticscape-alerts");
+			thread.setDaemon(true);
+			return thread;
+		});
 		level99CelebrationController.reset();
 		level99CelebrationOverlay = new Level99CelebrationOverlay(
 			this,
@@ -107,11 +123,15 @@ public class HapticScapePlugin extends Plugin
 			this::sendTestLevelUpPattern,
 			this::previewLevel99Ceremony,
 			this::sendTestSkillProfile,
-			this::sendTestNotificationPattern,
+			this::sendTestAlert,
 			this::sendPatternForgePreview,
 			intifaceService::stopAll
 		);
 		intifaceService.setConnectionListener(panel::updateConnection);
+		if (client.getGameState() == GameState.LOGGED_IN)
+		{
+			seedThresholdAlerts();
+		}
 
 		navigationButton = NavigationButton.builder()
 			.tooltip("HapticScape")
@@ -128,6 +148,8 @@ public class HapticScapePlugin extends Plugin
 	protected void shutDown()
 	{
 		xpTracker.reset();
+		thresholdAlertTracker.reset();
+		alertDeduplicator.reset();
 		level99CelebrationController.reset();
 		if (level99CelebrationOverlay != null)
 		{
@@ -152,6 +174,12 @@ public class HapticScapePlugin extends Plugin
 			panel.close();
 			panel = null;
 		}
+		if (alertScheduler != null)
+		{
+			ScheduledExecutorService scheduler = alertScheduler;
+			alertScheduler = null;
+			scheduler.shutdownNow();
+		}
 
 		log.info("HapticScape stopped");
 	}
@@ -164,12 +192,15 @@ public class HapticScapePlugin extends Plugin
 		if (gameState == GameState.LOGGED_IN)
 		{
 			seedCurrentXp();
+			seedThresholdAlerts();
 		}
 		else if (gameState == GameState.LOGIN_SCREEN
 			|| gameState == GameState.HOPPING
 			|| gameState == GameState.CONNECTION_LOST)
 		{
 			xpTracker.reset();
+			thresholdAlertTracker.reset();
+			alertDeduplicator.reset();
 			level99CelebrationController.reset();
 		}
 	}
@@ -181,6 +212,7 @@ public class HapticScapePlugin extends Plugin
 		{
 			return;
 		}
+		handleThresholdAlert(event);
 
 		XpChange change = xpTracker.update(event.getSkill(), event.getXp());
 		HapticScapePanel currentPanel = panel;
@@ -201,6 +233,26 @@ public class HapticScapePlugin extends Plugin
 	}
 
 	@Subscribe
+	public void onChatMessage(ChatMessage event)
+	{
+		switch (event.getType())
+		{
+			case PRIVATECHAT:
+			case MODPRIVATECHAT:
+				dispatchSpecificAlert(AlertCategory.DIRECT_MESSAGE);
+				break;
+			case TRADEREQ:
+				if (event.getMessage().contains("wishes to trade with you."))
+				{
+					dispatchSpecificAlert(AlertCategory.TRADE_REQUEST);
+				}
+				break;
+			default:
+				break;
+		}
+	}
+
+	@Subscribe
 	public void onNotificationFired(NotificationFired event)
 	{
 		HapticScapePanel currentPanel = panel;
@@ -218,13 +270,34 @@ public class HapticScapePlugin extends Plugin
 			return;
 		}
 
-		log.debug("RuneLite notification haptic requested");
-		sendPattern(
-			settings.getPatternSelection(),
-			"RUNELITE_NOTIFICATION",
-			settings.getIntensityPercent(),
-			settings.getDurationMillis()
-		);
+		ScheduledExecutorService scheduler = alertScheduler;
+		if (scheduler == null)
+		{
+			return;
+		}
+
+		long notificationNanos = System.nanoTime();
+		try
+		{
+			scheduler.schedule(
+				() ->
+				{
+					if (!alertDeduplicator.shouldSuppressGeneric(
+						notificationNanos,
+						System.nanoTime()
+					))
+					{
+						dispatchAlert(AlertCategory.GENERIC_NOTIFICATION);
+					}
+				},
+				AlertDeduplicator.GENERIC_DELAY_MILLIS,
+				TimeUnit.MILLISECONDS
+			);
+		}
+		catch (RejectedExecutionException ignored)
+		{
+			// Plugin shutdown won the race with this notification.
+		}
 	}
 
 	private void seedCurrentXp()
@@ -233,6 +306,73 @@ public class HapticScapePlugin extends Plugin
 		{
 			xpTracker.seed(skill, client.getSkillExperience(skill));
 		}
+	}
+
+	private void seedThresholdAlerts()
+	{
+		thresholdAlertTracker.seed(
+			AlertCategory.LOW_HITPOINTS,
+			client.getBoostedSkillLevel(Skill.HITPOINTS)
+		);
+		thresholdAlertTracker.seed(
+			AlertCategory.LOW_PRAYER,
+			client.getBoostedSkillLevel(Skill.PRAYER)
+		);
+	}
+
+	private void handleThresholdAlert(StatChanged event)
+	{
+		AlertCategory category;
+		if (event.getSkill() == Skill.HITPOINTS)
+		{
+			category = AlertCategory.LOW_HITPOINTS;
+		}
+		else if (event.getSkill() == Skill.PRAYER)
+		{
+			category = AlertCategory.LOW_PRAYER;
+		}
+		else
+		{
+			return;
+		}
+
+		HapticScapePanel currentPanel = panel;
+		if (currentPanel == null)
+		{
+			return;
+		}
+		int threshold = currentPanel.getAlertProfiles().get(category).getThreshold();
+		if (thresholdAlertTracker.update(category, event.getBoostedLevel(), threshold))
+		{
+			dispatchSpecificAlert(category);
+		}
+	}
+
+	private void dispatchSpecificAlert(AlertCategory category)
+	{
+		alertDeduplicator.recordSpecificAlert(System.nanoTime());
+		dispatchAlert(category);
+	}
+
+	private void dispatchAlert(AlertCategory category)
+	{
+		HapticScapePanel currentPanel = panel;
+		if (currentPanel == null)
+		{
+			return;
+		}
+		currentPanel.getAlertProfiles()
+			.resolve(category, currentPanel.getNotificationFeedbackSettings())
+			.ifPresent(playback ->
+			{
+				log.debug("{} haptic requested", category);
+				sendPattern(
+					playback.getPatternSelection(),
+					"ALERT_" + category.name(),
+					playback.getIntensityPercent(),
+					playback.getDurationMillis()
+				);
+			});
 	}
 
 	private void handleFeedbackTrigger(
@@ -402,7 +542,7 @@ public class HapticScapePlugin extends Plugin
 		);
 	}
 
-	private void sendTestNotificationPattern()
+	private void sendTestAlert(AlertCategory category)
 	{
 		HapticScapePanel currentPanel = panel;
 		if (currentPanel == null)
@@ -410,15 +550,23 @@ public class HapticScapePlugin extends Plugin
 			return;
 		}
 
-		NotificationFeedbackSettings settings =
+		NotificationFeedbackSettings configured =
 			currentPanel.getNotificationFeedbackSettings();
-		log.debug("Sending test notification haptic pattern");
-		sendPattern(
-			settings.getPatternSelection(),
-			"TEST_NOTIFICATION",
-			settings.getIntensityPercent(),
-			settings.getDurationMillis()
+		NotificationFeedbackSettings previewSettings = new NotificationFeedbackSettings(
+			true,
+			configured.isRespectRuneLiteFocus(),
+			configured.getIntensityPercent(),
+			configured.getDurationMillis(),
+			configured.getPatternSelection()
 		);
+		currentPanel.getAlertProfiles()
+			.resolve(category, previewSettings)
+			.ifPresent(playback -> sendPattern(
+				playback.getPatternSelection(),
+				"TEST_ALERT_" + category.name(),
+				playback.getIntensityPercent(),
+				playback.getDurationMillis()
+			));
 	}
 
 	private void sendPatternForgePreview(CustomPatternEntry pattern)
@@ -429,13 +577,12 @@ public class HapticScapePlugin extends Plugin
 			return;
 		}
 
-		double intensity = currentPanel.getIntensityPercent() / 100.0;
 		log.debug(
 			"Previewing unsaved Pattern Forge curve as {} beats of {} ms",
 			pattern.getBeatCount(),
 			pattern.getBeatDurationMillis()
 		);
-		intifaceService.playPattern(pattern.createPattern(intensity));
+		intifaceService.playPattern(pattern.createPattern(1.0));
 	}
 
 	private void sendConfiguredPattern(HapticPatternSelection preset, String triggerName)

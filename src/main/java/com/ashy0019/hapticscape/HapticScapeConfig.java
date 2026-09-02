@@ -25,6 +25,7 @@ public interface HapticScapeConfig extends Config
 	String NOTIFICATION_PATTERN_PRESET_KEY = "notificationPatternPreset";
 	String NOTIFICATION_DURATION_MILLIS_KEY = "notificationDurationMillis";
 	String NOTIFICATION_RESPECT_FOCUS_KEY = "notificationRespectFocus";
+	String ALERT_PROFILES_KEY = "alertProfiles";
 	String CUSTOM_PATTERNS_KEY = "customPatterns";
 
 	@ConfigItem(
@@ -237,10 +238,22 @@ public interface HapticScapeConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = ALERT_PROFILES_KEY,
+		name = "Semantic alert profiles",
+		description = "Per-category behavior and haptic settings for gameplay alerts",
+		position = 17,
+		hidden = true
+	)
+	default String alertProfiles()
+	{
+		return "";
+	}
+
+	@ConfigItem(
 		keyName = CUSTOM_PATTERNS_KEY,
 		name = "Pattern Forge library",
 		description = "Named custom haptic patterns and timing created in the Pattern Forge",
-		position = 17,
+		position = 18,
 		hidden = true
 	)
 	default String customPatterns()

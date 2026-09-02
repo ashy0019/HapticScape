@@ -33,14 +33,15 @@ RuneLite, Jagex, or the Intiface project.
 - Celebrate a real level 99 with a synchronized 99-beat haptic ceremony,
   crowd cheer,
   confetti-filled mastery overlay, and RuneLite chat message.
-- Trigger separate feedback for RuneLite notifications.
+- Route direct messages, trade requests, low hitpoints, and low prayer to
+  separate haptic profiles, with generic RuneLite notifications as the fallback.
 
 ### Haptic controls
 
 - Adjust intensity from 0% to 100%.
 - Set built-in pattern duration from 50 ms to 10 seconds.
 - Choose from Single, Double, Triple, and Ascending built-in patterns.
-- Preview global XP, level-up, skill-profile, and notification feedback without
+- Preview global XP, level-up, skill-profile, and alert feedback without
   waiting for an in-game event.
 - Stop every connected device immediately with **Stop now**.
 
@@ -49,8 +50,8 @@ RuneLite, Jagex, or the Intiface project.
 - Draw an intensity curve directly with the mouse.
 - Set the length of one drawn beat from 50 ms to 10 seconds.
 - Repeat that beat anywhere from 1 to 72 times.
-- Reuse the saved custom timing for XP, level-ups, skill profiles, milestones,
-  and notifications while retaining each trigger's configured intensity.
+- Reuse the custom pattern's own intensity curve, beat length, and repetition
+  count without profile intensity or duration rescaling it.
 - Undo edits, clear the canvas, and save changes.
 - Add, rename, and delete custom patterns.
 - Keep up to 100 custom patterns at once.
@@ -74,7 +75,7 @@ the remaining controls:
 |---|---|
 | **Skills** | Enable all skills, disable all skills, or toggle skills individually. |
 | **Profiles** | Override the global XP settings for one selected skill. |
-| **Alerts** | Configure feedback for RuneLite notifications. |
+| **Alerts** | Configure generic, direct-message, trade, low-hitpoints, and low-prayer feedback. |
 | **Custom** | Create, preview, name, save, and manage custom patterns. |
 
 The bottom of the panel contains the connection controls, global test button,
