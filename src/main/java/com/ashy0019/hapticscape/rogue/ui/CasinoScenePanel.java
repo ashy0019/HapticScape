@@ -60,8 +60,6 @@ public final class CasinoScenePanel extends JPanel
 	private static final Color LIGHT_TEXT = new Color(247, 240, 215);
 	private static final Color PANEL_DARK = new Color(20, 17, 15);
 	private static final Color PANEL_MID = new Color(45, 36, 30);
-	private static final Color STONE = new Color(65, 60, 54);
-	private static final Color STONE_LINE = new Color(87, 80, 71);
 
 	private final BufferedImage frame = new BufferedImage(
 		LOGICAL_WIDTH,
@@ -182,6 +180,7 @@ public final class CasinoScenePanel extends JPanel
 		drawLounge(g);
 		drawMainTable(g);
 		drawOpenSeats(g);
+		drawTableClutter(g);
 		drawHands(g);
 		drawWagerTray(g);
 		drawActionArea(g);
@@ -191,31 +190,67 @@ public final class CasinoScenePanel extends JPanel
 
 	private static void drawRoom(Graphics2D g)
 	{
-		g.setColor(new Color(31, 25, 22));
+		// Uneven limewash-and-stone walls framed by heavy oak timbers. Keeping
+		// these shapes deterministic avoids visual shimmer while the scene repaints.
+		g.setColor(new Color(42, 35, 29));
 		g.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
 
-		g.setColor(STONE);
-		g.fillRect(0, 0, LOGICAL_WIDTH, 188);
-		g.setColor(STONE_LINE);
-		for (int y = 4; y < 188; y += 14)
+		g.setColor(new Color(91, 78, 62));
+		g.fillRect(0, 0, LOGICAL_WIDTH, 190);
+		for (int row = 0, y = 3; y < 190; row++, y += 17)
 		{
-			int offset = ((y / 14) & 1) == 0 ? 0 : 12;
-			for (int x = -offset; x < LOGICAL_WIDTH; x += 24)
+			int offset = (row & 1) == 0 ? -9 : 4;
+			for (int x = offset; x < LOGICAL_WIDTH; x += 31)
 			{
-				g.drawRect(x, y, 23, 13);
+				int width = 28 + ((x + row * 7) & 3);
+				g.setColor(new Color(106 + (row % 3) * 4, 91 + (row % 2) * 4, 72));
+				g.fillRect(x, y, width, 14);
+				g.setColor(new Color(62, 53, 45));
+				g.drawLine(x, y + 14, x + width, y + 14);
+				g.drawLine(x + width, y + 2, x + width, y + 13);
 			}
 		}
 
-		g.setColor(new Color(73, 45, 29));
-		g.fillRect(0, 188, LOGICAL_WIDTH, LOGICAL_HEIGHT - 188);
-		g.setColor(new Color(95, 58, 35));
-		for (int y = 190; y < LOGICAL_HEIGHT; y += 16)
+		// Rough plaster patches keep the wall from reading as modern brickwork.
+		g.setColor(new Color(122, 105, 79));
+		g.fillRect(13, 95, 53, 35);
+		g.fillRect(173, 103, 50, 29);
+		g.setColor(new Color(83, 69, 55));
+		g.drawLine(20, 111, 29, 104);
+		g.drawLine(28, 104, 34, 112);
+		g.drawLine(184, 119, 192, 111);
+		g.drawLine(192, 111, 200, 117);
+
+		// Heavy timber frame and crooked braces.
+		Color timber = new Color(57, 34, 22);
+		Color timberEdge = new Color(91, 54, 31);
+		g.setColor(timber);
+		g.fillRect(0, 0, 7, 194);
+		g.fillRect(LOGICAL_WIDTH - 7, 0, 7, 194);
+		g.fillRect(0, 86, LOGICAL_WIDTH, 8);
+		g.fillRect(0, 168, LOGICAL_WIDTH, 10);
+		g.fillRect(82, 88, 7, 84);
+		g.fillRect(157, 88, 7, 84);
+		g.setStroke(new BasicStroke(5f));
+		g.drawLine(7, 94, 81, 166);
+		g.drawLine(233, 94, 165, 166);
+		g.setStroke(new BasicStroke(1f));
+		g.setColor(timberEdge);
+		g.drawLine(2, 89, 237, 89);
+		g.drawLine(2, 171, 237, 171);
+
+		// Dark plank floor below the wall. Most of it is covered by the table, but
+		// the visible strips now feel like a tavern rather than tiled masonry.
+		g.setColor(new Color(67, 40, 25));
+		g.fillRect(0, 178, LOGICAL_WIDTH, LOGICAL_HEIGHT - 178);
+		for (int y = 180; y < LOGICAL_HEIGHT; y += 17)
 		{
+			g.setColor(new Color(91, 52, 30));
 			g.drawLine(0, y, LOGICAL_WIDTH, y);
-			int offset = ((y / 16) & 1) == 0 ? 0 : 18;
-			for (int x = 6 + offset; x < LOGICAL_WIDTH; x += 36)
+			int offset = ((y / 17) & 1) == 0 ? 8 : 27;
+			for (int x = offset; x < LOGICAL_WIDTH; x += 44)
 			{
-				g.drawLine(x, y, x, Math.min(LOGICAL_HEIGHT, y + 16));
+				g.drawLine(x, y, x, Math.min(LOGICAL_HEIGHT, y + 17));
 			}
 		}
 	}
@@ -248,27 +283,48 @@ public final class CasinoScenePanel extends JPanel
 
 	private static void drawLounge(Graphics2D g)
 	{
-		// Bar and bottles give the upper area visual weight instead of dead black.
+		// Crooked back-bar with mismatched bottles, mugs and a candle.
 		g.setColor(new Color(46, 28, 20));
-		g.fillRect(8, 92, 70, 62);
-		g.setColor(new Color(130, 82, 43));
-		g.fillRect(5, 151, 76, 9);
+		g.fillRect(9, 101, 64, 50);
+		g.setColor(new Color(113, 67, 36));
+		g.fillRect(6, 149, 72, 8);
+		g.fillRect(12, 120, 58, 4);
 		Color[] bottleColors = {
-			new Color(52, 111, 72),
-			new Color(133, 64, 48),
-			new Color(73, 92, 144),
-			new Color(123, 108, 40)
+			new Color(47, 104, 66),
+			new Color(126, 58, 43),
+			new Color(65, 82, 132),
+			new Color(113, 96, 36)
 		};
 		for (int i = 0; i < bottleColors.length; i++)
 		{
+			int bx = 15 + i * 13;
+			int by = 126 + (i % 2) * 3;
 			g.setColor(bottleColors[i]);
-			g.fillRect(15 + i * 14, 108 + (i % 2) * 4, 6, 27 - (i % 2) * 4);
-			g.fillRect(17 + i * 14, 103 + (i % 2) * 4, 2, 6);
+			g.fillRect(bx, by, 6, 19 - (i % 2) * 3);
+			g.fillRect(bx + 2, by - 5, 2, 6);
+			g.setColor(new Color(198, 158, 83));
+			g.drawLine(bx + 1, by + 2, bx + 1, by + 8);
 		}
+		drawTankard(g, 61, 136, 1);
 
-		drawPatron(g, 35, 172, new Color(146, 52, 81), 0.0);
-		drawPatron(g, 205, 172, new Color(76, 72, 153), 2.2);
-		drawDealer(g, 120, 176);
+		// A tiny candle sconce and old shield make the right side read as an inn.
+		g.setColor(new Color(69, 42, 24));
+		g.fillRect(203, 106, 4, 30);
+		g.setColor(new Color(128, 72, 37));
+		g.fillOval(190, 108, 29, 35);
+		g.setColor(new Color(69, 42, 24));
+		g.drawOval(190, 108, 29, 35);
+		g.drawLine(204, 110, 204, 141);
+		g.setColor(new Color(209, 170, 74));
+		g.fillRect(176, 126, 3, 15);
+		g.setColor(new Color(255, 210, 86));
+		g.fillRect(175, 121, 5, 6);
+		g.setColor(new Color(255, 235, 143));
+		g.fillRect(176, 119, 3, 4);
+
+		drawPatron(g, 35, 176, new Color(131, 48, 73), 0.0);
+		drawPatron(g, 205, 176, new Color(67, 64, 137), 2.2);
+		drawDealer(g, 120, 181);
 
 		long phase = (System.nanoTime() / 3_800_000_000L) % 5;
 		if (phase == 0)
@@ -295,16 +351,76 @@ public final class CasinoScenePanel extends JPanel
 
 	private static void drawDealer(Graphics2D g, int x, int y)
 	{
-		g.setColor(new Color(207, 163, 120));
-		g.fillRect(x - 7, y - 37, 14, 14);
-		g.setColor(new Color(48, 30, 24));
-		g.fillRect(x - 9, y - 43, 18, 8);
-		g.setColor(new Color(28, 30, 28));
-		g.fillRect(x - 15, y - 22, 30, 32);
-		g.setColor(new Color(222, 217, 188));
-		g.fillRect(x - 4, y - 20, 8, 27);
-		g.setColor(new Color(145, 29, 30));
-		g.fillRect(x - 1, y - 17, 3, 18);
+		// Adult tavern-wench / courtesan silhouette: long auburn hair, cream
+		// peasant blouse, wine-red lace bodice and arms resting on the table.
+		// The shapes are deliberately chunky so she remains readable at 240 px.
+		Color hairDark = new Color(76, 38, 25);
+		Color hairLight = new Color(130, 66, 34);
+		Color skin = new Color(218, 166, 126);
+		Color skinShade = new Color(178, 119, 89);
+		Color blouse = new Color(229, 218, 183);
+		Color blouseShade = new Color(188, 176, 145);
+		Color bodice = new Color(128, 34, 42);
+		Color bodiceDark = new Color(70, 25, 29);
+
+		// Hair behind the head and down over both shoulders.
+		g.setColor(hairDark);
+		g.fillRect(x - 11, y - 57, 22, 28);
+		g.fillRect(x - 15, y - 43, 7, 34);
+		g.fillRect(x + 8, y - 43, 7, 34);
+		g.setColor(hairLight);
+		g.fillRect(x - 8, y - 56, 15, 5);
+		g.fillRect(x - 13, y - 39, 3, 22);
+		g.fillRect(x + 10, y - 39, 3, 20);
+
+		// Face, neck and simple features.
+		g.setColor(skin);
+		g.fillRect(x - 7, y - 49, 14, 18);
+		g.fillRect(x - 4, y - 32, 8, 8);
+		g.setColor(new Color(49, 33, 28));
+		g.fillRect(x - 4, y - 42, 2, 2);
+		g.fillRect(x + 3, y - 42, 2, 2);
+		g.setColor(new Color(142, 49, 50));
+		g.fillRect(x - 2, y - 35, 5, 2);
+
+		// Puffy sleeves and exposed neckline.
+		g.setColor(blouse);
+		g.fillRect(x - 20, y - 27, 10, 20);
+		g.fillRect(x + 10, y - 27, 10, 20);
+		g.fillRect(x - 11, y - 27, 22, 9);
+		g.setColor(blouseShade);
+		g.drawLine(x - 18, y - 13, x - 11, y - 13);
+		g.drawLine(x + 11, y - 13, x + 18, y - 13);
+		g.setColor(skin);
+		g.fillRect(x - 6, y - 27, 12, 8);
+		g.setColor(skinShade);
+		g.drawLine(x, y - 23, x, y - 19);
+
+		// Corseted bodice with gold lacing.
+		g.setColor(bodice);
+		g.fillRect(x - 11, y - 19, 22, 26);
+		g.setColor(bodiceDark);
+		g.fillRect(x - 2, y - 18, 4, 25);
+		g.setColor(new Color(221, 174, 70));
+		for (int yy = y - 15; yy <= y; yy += 5)
+		{
+			g.drawLine(x - 4, yy, x + 4, yy + 3);
+			g.drawLine(x + 4, yy, x - 4, yy + 3);
+		}
+
+		// Necklace.
+		g.setColor(new Color(231, 188, 72));
+		g.drawLine(x - 4, y - 28, x, y - 25);
+		g.drawLine(x, y - 25, x + 4, y - 28);
+		g.fillRect(x, y - 24, 1, 2);
+
+		// Forearms lean onto the near edge of the table.
+		g.setColor(skin);
+		g.fillRect(x - 23, y - 10, 14, 6);
+		g.fillRect(x + 9, y - 10, 14, 6);
+		g.setColor(skinShade);
+		g.drawLine(x - 23, y - 4, x - 9, y - 4);
+		g.drawLine(x + 9, y - 4, x + 23, y - 4);
 	}
 
 	private static void drawMainTable(Graphics2D g)
@@ -347,6 +463,151 @@ public final class CasinoScenePanel extends JPanel
 		g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 7));
 		g.setColor(new Color(226, 214, 183));
 		drawCenteredInShadowed(g, label, x, 46, y + 67);
+	}
+
+	private static void drawTableClutter(Graphics2D g)
+	{
+		// Each future seat has its own abandoned little fortune. This makes the
+		// table feel inhabited even while the seats are still marked OPEN.
+		drawChipPile(g, 57, 307, new Color(158, 45, 43), 4, false);
+		drawChipPile(g, 65, 315, new Color(52, 77, 143), 3, true);
+		drawLooseChip(g, 72, 326, new Color(210, 174, 62));
+		drawTankard(g, 57, 337, 0);
+
+		drawChipPile(g, 176, 307, new Color(47, 118, 70), 5, true);
+		drawChipPile(g, 169, 318, new Color(115, 54, 133), 2, false);
+		drawLooseChip(g, 163, 329, new Color(166, 48, 48));
+		drawDice(g, 174, 340, 1, 5);
+
+		drawChipPile(g, 57, 497, new Color(43, 43, 43), 5, false);
+		drawChipPile(g, 65, 507, new Color(158, 45, 43), 2, true);
+		drawLooseChip(g, 75, 518, new Color(54, 82, 149));
+		drawCoinPurse(g, 57, 530);
+
+		drawChipPile(g, 176, 494, new Color(111, 54, 133), 6, true);
+		drawChipPile(g, 168, 508, new Color(48, 122, 73), 3, false);
+		drawLooseChip(g, 163, 520, new Color(203, 169, 57));
+		drawDagger(g, 163, 537);
+
+		// Dealer-side junk: a discard tray, an old cup and a few loose wagers.
+		drawCardShoe(g, 181, 221);
+		drawTankard(g, 37, 224, 0);
+		drawLooseChip(g, 75, 365, new Color(157, 45, 43));
+		drawLooseChip(g, 84, 371, new Color(48, 122, 73));
+		drawLooseChip(g, 154, 365, new Color(55, 80, 146));
+		drawLooseChip(g, 161, 374, new Color(199, 164, 54));
+		drawDice(g, 44, 381, 2, 6);
+		drawDice(g, 184, 380, 3, 4);
+
+		// A few dark marks/rings in the felt keep it from looking factory-new.
+		g.setColor(new Color(12, 75, 41));
+		g.drawOval(82, 346, 15, 6);
+		g.drawArc(143, 527, 16, 7, 0, 280);
+		g.drawLine(100, 548, 107, 551);
+		g.drawLine(109, 551, 114, 549);
+	}
+
+	private static void drawChipPile(Graphics2D g, int x, int y, Color color, int count, boolean leanRight)
+	{
+		int dx = leanRight ? 1 : 0;
+		for (int index = 0; index < count; index++)
+		{
+			int yy = y - index * 3;
+			int xx = x + index * dx;
+			g.setColor(new Color(35, 27, 22));
+			g.fillOval(xx - 5, yy - 1, 11, 5);
+			g.setColor(color);
+			g.fillOval(xx - 5, yy - 2, 11, 4);
+			g.setColor(new Color(235, 220, 169));
+			g.drawLine(xx - 3, yy - 1, xx - 1, yy - 1);
+		}
+	}
+
+	private static void drawLooseChip(Graphics2D g, int x, int y, Color color)
+	{
+		g.setColor(new Color(35, 27, 22));
+		g.fillOval(x - 4, y - 2, 9, 5);
+		g.setColor(color);
+		g.fillOval(x - 4, y - 3, 9, 5);
+		g.setColor(new Color(232, 213, 158));
+		g.drawLine(x - 2, y - 1, x + 2, y - 1);
+	}
+
+	private static void drawTankard(Graphics2D g, int x, int y, int tilt)
+	{
+		g.setColor(new Color(92, 63, 38));
+		g.fillRect(x, y, 10, 11);
+		g.setColor(new Color(146, 103, 55));
+		g.fillRect(x + 2, y + 1, 6, 8);
+		g.setColor(new Color(184, 140, 77));
+		g.drawLine(x + 2, y + 2, x + 7, y + 2);
+		g.setColor(new Color(92, 63, 38));
+		g.drawOval(x + 7 + tilt, y + 2, 7, 7);
+	}
+
+	private static void drawDice(Graphics2D g, int x, int y, int first, int second)
+	{
+		drawDie(g, x, y, first);
+		drawDie(g, x + 9, y + 4, second);
+	}
+
+	private static void drawDie(Graphics2D g, int x, int y, int value)
+	{
+		g.setColor(new Color(228, 213, 177));
+		g.fillRect(x, y, 7, 7);
+		g.setColor(new Color(49, 38, 31));
+		g.drawRect(x, y, 7, 7);
+		int[][] pips = {
+			{},
+			{3, 3},
+			{1, 1, 5, 5},
+			{1, 1, 3, 3, 5, 5},
+			{1, 1, 5, 1, 1, 5, 5, 5},
+			{1, 1, 5, 1, 3, 3, 1, 5, 5, 5},
+			{1, 1, 5, 1, 1, 3, 5, 3, 1, 5, 5, 5}
+		};
+		int safe = Math.max(1, Math.min(6, value));
+		for (int i = 0; i < pips[safe].length; i += 2)
+		{
+			g.fillRect(x + pips[safe][i], y + pips[safe][i + 1], 1, 1);
+		}
+	}
+
+	private static void drawCoinPurse(Graphics2D g, int x, int y)
+	{
+		g.setColor(new Color(94, 55, 34));
+		g.fillOval(x - 7, y, 15, 11);
+		g.setColor(new Color(143, 88, 47));
+		g.fillOval(x - 5, y + 1, 11, 8);
+		g.setColor(new Color(214, 171, 76));
+		g.drawLine(x - 4, y + 1, x + 5, y + 1);
+		g.drawLine(x - 2, y - 2, x + 3, y + 2);
+	}
+
+	private static void drawDagger(Graphics2D g, int x, int y)
+	{
+		g.setColor(new Color(193, 190, 175));
+		g.drawLine(x, y, x + 17, y - 8);
+		g.drawLine(x + 1, y + 1, x + 18, y - 7);
+		g.setColor(new Color(82, 53, 31));
+		g.setStroke(new BasicStroke(3f));
+		g.drawLine(x + 17, y - 7, x + 23, y - 10);
+		g.setStroke(new BasicStroke(1f));
+		g.setColor(new Color(209, 165, 64));
+		g.drawLine(x + 15, y - 4, x + 19, y - 12);
+	}
+
+	private static void drawCardShoe(Graphics2D g, int x, int y)
+	{
+		g.setColor(new Color(47, 31, 23));
+		g.fillRect(x, y, 24, 12);
+		g.setColor(new Color(119, 74, 39));
+		g.drawRect(x, y, 24, 12);
+		g.setColor(new Color(231, 221, 192));
+		for (int i = 0; i < 4; i++)
+		{
+			g.drawLine(x + 3 + i * 4, y + 2, x + 8 + i * 4, y + 2);
+		}
 	}
 
 	private void drawHands(Graphics2D g)
