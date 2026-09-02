@@ -29,6 +29,7 @@ public final class DefaultIntifaceService implements IntifaceService
 	private final IntifaceGatewayFactory gatewayFactory;
 	private final long connectionTimeoutMillis;
 	private final AtomicBoolean closing = new AtomicBoolean();
+	private final HapticArbiter hapticArbiter = new HapticArbiter();
 
 	private volatile ConnectionSnapshot snapshot = ConnectionSnapshot.disconnected();
 	private volatile Consumer<ConnectionSnapshot> connectionListener = ignored -> { };
@@ -40,7 +41,6 @@ public final class DefaultIntifaceService implements IntifaceService
 	private ScheduledFuture<?> pendingPatternStep;
 	private ScheduledFuture<?> connectionMonitor;
 	private long connectionGeneration;
-	private boolean patternPlaying;
 	private boolean liveOutputActive;
 	private double liveIntensity;
 
@@ -103,14 +103,17 @@ public final class DefaultIntifaceService implements IntifaceService
 		Objects.requireNonNull(duration, "duration");
 		double safeIntensity = Math.max(0.0, Math.min(1.0, intensity));
 		long durationMillis = Math.max(1, duration.toMillis());
-		playPattern(HapticPattern.single(safeIntensity, Duration.ofMillis(durationMillis)));
+		play(new HapticRequest(
+			HapticEventType.MANUAL_PREVIEW,
+			HapticPattern.single(safeIntensity, Duration.ofMillis(durationMillis))
+		));
 	}
 
 	@Override
-	public void playPattern(HapticPattern pattern)
+	public void play(HapticRequest request)
 	{
-		Objects.requireNonNull(pattern, "pattern");
-		submit(() -> beginPattern(pattern));
+		Objects.requireNonNull(request, "request");
+		submit(() -> beginPlayback(request));
 	}
 
 	@Override
@@ -319,52 +322,85 @@ public final class DefaultIntifaceService implements IntifaceService
 		return candidate == gateway && generation == connectionGeneration && !closing.get();
 	}
 
-	private void beginPattern(HapticPattern pattern)
+	private void beginPlayback(HapticRequest request)
 	{
-		cancelPendingPatternStep();
-		patternPlaying = true;
 		if (!hasLiveConnection())
 		{
-			patternPlaying = false;
 			return;
 		}
-		executePatternStep(pattern, 0);
+
+		HapticArbiter.Decision decision = hapticArbiter.submit(request);
+		switch (decision)
+		{
+			case START:
+				executePatternStep(request, 0);
+				break;
+			case INTERRUPT:
+				cancelPendingPatternStep();
+				executePatternStep(request, 0);
+				break;
+			case QUEUE:
+			case COALESCE:
+				log.debug("{} haptic request {} behind active output",
+					request.getEventType(),
+					decision == HapticArbiter.Decision.QUEUE ? "queued" : "coalesced");
+				break;
+			case DROP:
+			default:
+				log.debug("Dropping {} haptic request while a protected pattern is active",
+					request.getEventType());
+				break;
+		}
 	}
 
-	private void executePatternStep(HapticPattern pattern, int stepIndex)
+	private void executePatternStep(HapticRequest request, int stepIndex)
 	{
-		if (!hasLiveConnection())
+		if (!hapticArbiter.isActive(request) || !hasLiveConnection())
 		{
 			return;
 		}
 
+		HapticPattern pattern = request.getPattern();
 		HapticPattern.Step step = pattern.getSteps().get(stepIndex);
 		int submittedCommands = gateway.vibrate(step.getIntensity());
 		if (submittedCommands == 0)
 		{
-			patternPlaying = false;
+			hapticArbiter.clear();
 			publish(ConnectionState.CONNECTED, "Connected — no vibration-capable devices", gateway.getDevices());
 			return;
 		}
 
 		pendingPatternStep = executor.schedule(
-			() -> runGuarded(() -> advancePattern(pattern, stepIndex + 1)),
+			() -> runGuarded(() -> advancePattern(request, stepIndex + 1)),
 			step.getDuration().toMillis(),
 			TimeUnit.MILLISECONDS
 		);
 	}
 
-	private void advancePattern(HapticPattern pattern, int nextStepIndex)
+	private void advancePattern(HapticRequest request, int nextStepIndex)
 	{
 		pendingPatternStep = null;
+		if (!hapticArbiter.isActive(request))
+		{
+			return;
+		}
+
+		HapticPattern pattern = request.getPattern();
 		if (nextStepIndex < pattern.getSteps().size())
 		{
-			executePatternStep(pattern, nextStepIndex);
+			executePatternStep(request, nextStepIndex);
 		}
 		else
 		{
-			patternPlaying = false;
-			restoreLiveOutputOrStop();
+			java.util.Optional<HapticRequest> next = hapticArbiter.complete(request);
+			if (next.isPresent())
+			{
+				executePatternStep(next.get(), 0);
+			}
+			else
+			{
+				restoreLiveOutputOrStop();
+			}
 		}
 	}
 
@@ -372,7 +408,7 @@ public final class DefaultIntifaceService implements IntifaceService
 	{
 		liveOutputActive = true;
 		liveIntensity = intensity;
-		if (patternPlaying || !hasLiveConnection())
+		if (hapticArbiter.hasActiveRequest() || !hasLiveConnection())
 		{
 			return;
 		}
@@ -391,7 +427,7 @@ public final class DefaultIntifaceService implements IntifaceService
 	{
 		liveOutputActive = false;
 		liveIntensity = 0.0;
-		if (!patternPlaying)
+		if (!hapticArbiter.hasActiveRequest())
 		{
 			stopConnectedDevices(false);
 		}
@@ -416,7 +452,7 @@ public final class DefaultIntifaceService implements IntifaceService
 	private void stopAllInternal(boolean userRequested)
 	{
 		cancelPendingPatternStep();
-		patternPlaying = false;
+		hapticArbiter.clear();
 		if (userRequested)
 		{
 			liveOutputActive = false;
@@ -536,7 +572,7 @@ public final class DefaultIntifaceService implements IntifaceService
 		cancelConnectionAttempt();
 		cancelPendingPatternStep();
 		cancelConnectionMonitor();
-		patternPlaying = false;
+		hapticArbiter.clear();
 
 		IntifaceGateway current = gateway;
 		gateway = null;

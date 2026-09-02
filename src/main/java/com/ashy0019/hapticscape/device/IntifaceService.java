@@ -12,7 +12,7 @@ public interface IntifaceService extends AutoCloseable
 
 	void pulse(double intensity, Duration duration);
 
-	void playPattern(HapticPattern pattern);
+	void play(HapticRequest request);
 
 	/**
 	 * Updates a continuous, low-priority output such as music visualization.

@@ -1,7 +1,7 @@
 package com.ashy0019.hapticscape.music;
 
 import com.ashy0019.hapticscape.device.ConnectionSnapshot;
-import com.ashy0019.hapticscape.device.HapticPattern;
+import com.ashy0019.hapticscape.device.HapticRequest;
 import com.ashy0019.hapticscape.device.IntifaceService;
 import java.net.URI;
 import java.time.Duration;
@@ -119,7 +119,7 @@ public class MusicSyncServiceTest
 		@Override public void connect(URI serverUri) { }
 		@Override public void disconnect() { }
 		@Override public void pulse(double intensity, Duration duration) { }
-		@Override public void playPattern(HapticPattern pattern) { }
+		@Override public void play(HapticRequest request) { }
 		@Override public void stopAll() { }
 		@Override public ConnectionSnapshot getSnapshot() { return ConnectionSnapshot.disconnected(); }
 		@Override public void setConnectionListener(Consumer<ConnectionSnapshot> listener) { }
