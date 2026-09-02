@@ -66,11 +66,11 @@ public final class NotificationFeedbackSettings
 
 	public boolean shouldPlay(boolean runeLiteFocused, boolean notificationSendsWhenFocused)
 	{
-		if (!enabled)
-		{
-			return false;
-		}
+		return enabled && allowsFocus(runeLiteFocused, notificationSendsWhenFocused);
+	}
 
+	public boolean allowsFocus(boolean runeLiteFocused, boolean notificationSendsWhenFocused)
+	{
 		return !respectRuneLiteFocus || !runeLiteFocused || notificationSendsWhenFocused;
 	}
 

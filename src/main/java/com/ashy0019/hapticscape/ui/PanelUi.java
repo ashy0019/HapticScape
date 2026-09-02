@@ -95,9 +95,9 @@ final class PanelUi
 		tabs.addTab(title, component);
 		int tabIndex = tabs.getTabCount() - 1;
 		JLabel label = new JLabel(title, SwingConstants.CENTER);
-		label.setFont(label.getFont().deriveFont(java.awt.Font.PLAIN, 12f));
-		int width = Math.max(28, Math.min(44, label.getFontMetrics(label.getFont())
-			.stringWidth(title) + 8));
+		label.setFont(label.getFont().deriveFont(java.awt.Font.PLAIN, 11f));
+		int width = Math.max(24, Math.min(38, label.getFontMetrics(label.getFont())
+			.stringWidth(title) + 4));
 		label.setPreferredSize(new Dimension(width, 18));
 		tabs.setTabComponentAt(tabIndex, label);
 	}

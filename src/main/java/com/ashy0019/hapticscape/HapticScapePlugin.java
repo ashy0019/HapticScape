@@ -1,5 +1,8 @@
 package com.ashy0019.hapticscape;
 
+import com.ashy0019.hapticscape.clicker.AudioPlayerClickPlayback;
+import com.ashy0019.hapticscape.clicker.ClickerService;
+import com.ashy0019.hapticscape.clicker.ClickerSettings;
 import com.ashy0019.hapticscape.device.DefaultIntifaceService;
 import com.ashy0019.hapticscape.device.HapticEventType;
 import com.ashy0019.hapticscape.device.HapticPattern;
@@ -60,6 +63,7 @@ import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.client.util.ColorUtil;
 import net.runelite.client.util.ImageUtil;
+import net.runelite.client.util.Text;
 import okhttp3.OkHttpClient;
 
 @Slf4j
@@ -81,6 +85,7 @@ public class HapticScapePlugin extends Plugin
 		new Level99CelebrationController();
 	private IntifaceService intifaceService;
 	private MusicSyncService musicSyncService;
+	private ClickerService clickerService;
 	private HapticScapePanel panel;
 	private NavigationButton navigationButton;
 	private Level99CelebrationOverlay level99CelebrationOverlay;
@@ -149,6 +154,10 @@ public class HapticScapePlugin extends Plugin
 			WasapiLoopbackCapture::new,
 			musicSettingsFromConfig()
 		);
+		clickerService = new ClickerService(
+			new AudioPlayerClickPlayback(audioPlayer),
+			clickerSettingsFromConfig()
+		);
 		updatePreferencesStore = new UpdatePreferencesStore(gson);
 		updateCheckService = new UpdateCheckService(httpClient, gson);
 		panel = new HapticScapePanel(
@@ -164,6 +173,8 @@ public class HapticScapePlugin extends Plugin
 			this::sendTestAlert,
 			this::sendPatternForgePreview,
 			musicSyncService::updateSettings,
+			clickerService::updateSettings,
+			clickerService::click,
 			updatePreferencesStore,
 			updateCheckService,
 			intifaceService::stopAll
@@ -211,6 +222,11 @@ public class HapticScapePlugin extends Plugin
 			musicSyncService.setListener(snapshot -> { });
 			musicSyncService.close();
 			musicSyncService = null;
+		}
+		if (clickerService != null)
+		{
+			clickerService.close();
+			clickerService = null;
 		}
 		if (intifaceService != null)
 		{
@@ -275,39 +291,65 @@ public class HapticScapePlugin extends Plugin
 
 		XpChange change = xpTracker.update(event.getSkill(), event.getXp());
 		HapticScapePanel currentPanel = panel;
-		if (currentPanel == null || !currentPanel.isSkillEnabled(change.getSkill()))
+		if (currentPanel == null)
 		{
 			return;
 		}
 
 		XpFeedbackSettings skillXpSettings = currentPanel.getXpFeedbackSettings(change.getSkill());
-		XpFeedbackTrigger trigger = XpFeedbackTrigger.classify(
+		XpOutputDecision decision = XpOutputDecision.classify(
 			change,
-			skillXpSettings.getMinimumXpGain(),
+			currentPanel.isHapticSkillEnabled(change.getSkill()),
+			skillXpSettings,
 			currentPanel.isLevelUpFeedbackEnabled(),
 			currentPanel.isMilestoneFeedbackEnabled(),
-			currentPanel.isLevel99CelebrationEnabled()
+			currentPanel.isLevel99CelebrationEnabled(),
+			currentPanel.isClickSkillEnabled(change.getSkill()),
+			currentPanel.getClickerXpSettings()
 		);
-		handleFeedbackTrigger(change, trigger, currentPanel, skillXpSettings);
+		if (decision.shouldClick() && clickerService != null)
+		{
+			clickerService.click();
+		}
+		handleFeedbackTrigger(
+			change,
+			decision.getHapticTrigger(),
+			currentPanel,
+			skillXpSettings
+		);
 	}
 
 	@Subscribe
 	public void onChatMessage(ChatMessage event)
 	{
+		boolean phraseClick = shouldClickForPhrase(event.getMessage());
+
 		switch (event.getType())
 		{
 			case PRIVATECHAT:
 			case MODPRIVATECHAT:
-				dispatchSpecificAlert(AlertCategory.DIRECT_MESSAGE);
+				dispatchSpecificAlert(
+					AlertCategory.DIRECT_MESSAGE,
+					!phraseClick
+				);
 				break;
 			case TRADEREQ:
 				if (event.getMessage().contains("wishes to trade with you."))
 				{
-					dispatchSpecificAlert(AlertCategory.TRADE_REQUEST);
+					dispatchSpecificAlert(
+						AlertCategory.TRADE_REQUEST,
+						!phraseClick
+					);
 				}
 				break;
 			default:
 				break;
+		}
+
+		if (phraseClick && clickerService != null)
+		{
+			log.debug("Phrase rule click requested");
+			clickerService.click();
 		}
 	}
 
@@ -403,7 +445,10 @@ public class HapticScapePlugin extends Plugin
 
 		NotificationFeedbackSettings settings =
 			currentPanel.getNotificationFeedbackSettings();
-		if (!settings.shouldPlay(
+		boolean genericClickEnabled = currentPanel.isGenericNotificationClickEnabled();
+		if (!GenericNotificationDecision.shouldDispatch(
+			settings,
+			genericClickEnabled,
 			clientUI.isFocused(),
 			event.getNotification().isSendWhenFocused()))
 		{
@@ -511,10 +556,33 @@ public class HapticScapePlugin extends Plugin
 		}
 	}
 
+	private boolean shouldClickForPhrase(String rawMessage)
+	{
+		HapticScapePanel currentPanel = panel;
+		if (currentPanel == null || rawMessage == null)
+		{
+			return false;
+		}
+
+		String message = Text.unescapeJagex(rawMessage)
+			.replace('\u00A0', ' ')
+			.trim();
+
+		return !message.isEmpty()
+			&& currentPanel.getClickerPhraseRules().matches(message);
+	}
+
 	private void dispatchSpecificAlert(AlertCategory category)
 	{
+		dispatchSpecificAlert(category, true);
+	}
+
+	private void dispatchSpecificAlert(
+		AlertCategory category,
+		boolean allowClick)
+	{
 		alertDeduplicator.recordSpecificAlert(System.nanoTime());
-		dispatchAlert(category);
+		dispatchAlert(category, allowClick);
 	}
 
 	private void dispatchGenericAlert()
@@ -526,6 +594,11 @@ public class HapticScapePlugin extends Plugin
 		}
 		NotificationFeedbackSettings settings =
 			currentPanel.getNotificationFeedbackSettings();
+		if (currentPanel.isGenericNotificationClickEnabled() && clickerService != null)
+		{
+			log.debug("Generic notification click requested");
+			clickerService.click();
+		}
 		if (!settings.isEnabled())
 		{
 			return;
@@ -540,13 +613,24 @@ public class HapticScapePlugin extends Plugin
 		);
 	}
 
-	private void dispatchAlert(AlertCategory category)
+	private void dispatchAlert(
+		AlertCategory category,
+		boolean allowClick)
 	{
 		HapticScapePanel currentPanel = panel;
 		if (currentPanel == null)
 		{
 			return;
 		}
+
+		if (allowClick
+			&& currentPanel.isAlertClickEnabled(category)
+			&& clickerService != null)
+		{
+			log.debug("{} click requested", category);
+			clickerService.click();
+		}
+
 		currentPanel.getAlertProfiles()
 			.resolve(category, currentPanel.getNotificationFeedbackSettings())
 			.ifPresent(playback ->
@@ -793,6 +877,14 @@ public class HapticScapePlugin extends Plugin
 
 		NotificationFeedbackSettings settings =
 			currentPanel.getNotificationFeedbackSettings();
+		if (currentPanel.isGenericNotificationClickEnabled() && clickerService != null)
+		{
+			clickerService.click();
+		}
+		if (!settings.isEnabled())
+		{
+			return;
+		}
 		log.debug("Sending test generic notification pattern");
 		sendPattern(
 			HapticEventType.MANUAL_PREVIEW,
@@ -809,6 +901,10 @@ public class HapticScapePlugin extends Plugin
 		if (currentPanel == null)
 		{
 			return;
+		}
+		if (currentPanel.isAlertClickEnabled(category) && clickerService != null)
+		{
+			clickerService.click();
 		}
 
 		currentPanel.getAlertProfiles()
@@ -959,6 +1055,18 @@ public class HapticScapePlugin extends Plugin
 			clamp(config.musicSensitivityPercent(), 25, 200),
 			minimum,
 			maximum
+		);
+	}
+
+	private ClickerSettings clickerSettingsFromConfig()
+	{
+		return new ClickerSettings(
+			config.clickerEnabled(),
+			clamp(
+				config.clickerVolumePercent(),
+				ClickerSettings.MINIMUM_VOLUME_PERCENT,
+				ClickerSettings.MAXIMUM_VOLUME_PERCENT
+			)
 		);
 	}
 

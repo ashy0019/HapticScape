@@ -49,6 +49,15 @@ public class NotificationFeedbackSettingsTest
 	}
 
 	@Test
+	public void focusRuleCanBeEvaluatedWithoutHapticEnablement()
+	{
+		NotificationFeedbackSettings settings = settings(false, true);
+
+		assertTrue(settings.allowsFocus(false, false));
+		assertFalse(settings.allowsFocus(true, false));
+	}
+
+	@Test
 	public void preservesConfiguredPatternValues()
 	{
 		NotificationFeedbackSettings settings = new NotificationFeedbackSettings(

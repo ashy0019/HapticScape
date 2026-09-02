@@ -33,6 +33,16 @@ public interface HapticScapeConfig extends Config
 	String MUSIC_SENSITIVITY_PERCENT_KEY = "musicSensitivityPercent";
 	String MUSIC_MINIMUM_INTENSITY_PERCENT_KEY = "musicMinimumIntensityPercent";
 	String MUSIC_MAXIMUM_INTENSITY_PERCENT_KEY = "musicMaximumIntensityPercent";
+	String CLICKER_ENABLED_KEY = "clickerEnabled";
+	String CLICKER_VOLUME_PERCENT_KEY = "clickerVolumePercent";
+	String CLICKER_MINIMUM_XP_GAIN_KEY = "clickerMinimumXpGain";
+	String CLICKER_DISABLED_SKILLS_KEY = "clickerDisabledSkills";
+	String CLICKER_LEVEL_UP_ENABLED_KEY = "clickerLevelUpEnabled";
+	String CLICKER_MILESTONE_ENABLED_KEY = "clickerMilestoneEnabled";
+	String CLICKER_LEVEL_99_ENABLED_KEY = "clickerLevel99Enabled";
+	String CLICKER_GENERIC_NOTIFICATION_ENABLED_KEY = "clickerGenericNotificationEnabled";
+	String CLICKER_ALERT_SETTINGS_KEY = "clickerAlertSettings";
+	String CLICKER_PHRASE_RULES_KEY = "clickerPhraseRules";
 
 	@ConfigItem(
 		keyName = "intifaceServer",
@@ -341,4 +351,125 @@ public interface HapticScapeConfig extends Config
 	{
 		return 60;
 	}
-}
+
+	@ConfigItem(
+		keyName = CLICKER_ENABLED_KEY,
+		name = "Clicker",
+		description = "Play independent auditory clicker feedback",
+		position = 25,
+		hidden = true
+	)
+	default boolean clickerEnabled()
+	{
+		return false;
+	}
+
+	@Range(min = 0, max = 100)
+	@ConfigItem(
+		keyName = CLICKER_VOLUME_PERCENT_KEY,
+		name = "Clicker volume",
+		description = "Auditory clicker volume as a percentage",
+		position = 26,
+		hidden = true
+	)
+	default int clickerVolumePercent()
+	{
+		return 70;
+	}
+
+	@Range(min = 1, max = 200_000_000)
+	@ConfigItem(
+		keyName = CLICKER_MINIMUM_XP_GAIN_KEY,
+		name = "Clicker minimum XP gain",
+		description = "Minimum XP gained by one stat change before a click is triggered",
+		position = 27,
+		hidden = true
+	)
+	default int clickerMinimumXpGain()
+	{
+		return 1;
+	}
+
+	@ConfigItem(
+		keyName = CLICKER_DISABLED_SKILLS_KEY,
+		name = "Clicker disabled skills",
+		description = "Skill identifiers which do not trigger clicker feedback",
+		position = 28,
+		hidden = true
+	)
+	default String clickerDisabledSkills()
+	{
+		return SkillSelection.allEnabled().withAllEnabled(false).toConfigValue();
+	}
+
+	@ConfigItem(
+		keyName = CLICKER_LEVEL_UP_ENABLED_KEY,
+		name = "Clicker level-ups",
+		description = "Click once when a real skill level increases",
+		position = 29,
+		hidden = true
+	)
+	default boolean clickerLevelUpEnabled()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = CLICKER_MILESTONE_ENABLED_KEY,
+		name = "Clicker milestones",
+		description = "Click once for skill levels 10 through 90",
+		position = 30,
+		hidden = true
+	)
+	default boolean clickerMilestoneEnabled()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = CLICKER_LEVEL_99_ENABLED_KEY,
+		name = "Clicker level 99",
+		description = "Click once when a skill reaches level 99",
+		position = 31,
+		hidden = true
+	)
+	default boolean clickerLevel99Enabled()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = CLICKER_GENERIC_NOTIFICATION_ENABLED_KEY,
+		name = "Clicker generic notifications",
+		description = "Click for unclassified RuneLite notifications",
+		position = 32,
+		hidden = true
+	)
+	default boolean clickerGenericNotificationEnabled()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = CLICKER_ALERT_SETTINGS_KEY,
+		name = "Clicker semantic alerts",
+		description = "Semantic alert categories which produce auditory clicks",
+		position = 33,
+		hidden = true
+	)
+	default String clickerAlertSettings()
+	{
+		return "";
+	}
+
+	@ConfigItem(
+		keyName = CLICKER_PHRASE_RULES_KEY,
+		name = "Clicker phrase rules",
+		description = "Locally evaluated chat-message rules which produce auditory clicks",
+		position = 34,
+		hidden = true
+	)
+	default String clickerPhraseRules()
+	{
+		return "";
+	}}

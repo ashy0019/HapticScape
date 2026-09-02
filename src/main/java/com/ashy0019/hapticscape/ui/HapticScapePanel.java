@@ -11,6 +11,9 @@ import com.ashy0019.hapticscape.NotificationFeedbackSettings;
 import com.ashy0019.hapticscape.SkillFeedbackProfiles;
 import com.ashy0019.hapticscape.SkillSelection;
 import com.ashy0019.hapticscape.XpFeedbackSettings;
+import com.ashy0019.hapticscape.clicker.ClickerSettings;
+import com.ashy0019.hapticscape.clicker.ClickerXpSettings;
+import com.ashy0019.hapticscape.clicker.ClickerPhraseRules;
 import com.ashy0019.hapticscape.device.ConnectionSnapshot;
 import com.ashy0019.hapticscape.device.ConnectionState;
 import com.ashy0019.hapticscape.device.DeviceInfo;
@@ -79,6 +82,7 @@ public final class HapticScapePanel extends PluginPanel
 	private final AlertsPanel alertsPanel;
 	private final CustomPatternsPanel customPatternsPanel;
 	private final MusicPanel musicPanel;
+	private final ClickerPanel clickerPanel;
 	private final UpdatesPanel updatesPanel;
 	private final Timer developerStatusTimer;
 
@@ -111,6 +115,8 @@ public final class HapticScapePanel extends PluginPanel
 		Consumer<AlertCategory> testSpecificAlertAction,
 		Consumer<CustomPatternEntry> patternForgePreviewAction,
 		Consumer<MusicSyncSettings> musicSettingsAction,
+		Consumer<ClickerSettings> clickerSettingsAction,
+		Runnable testClickAction,
 		UpdatePreferencesStore updatePreferencesStore,
 		UpdateCheckService updateCheckService,
 		Runnable stopAction)
@@ -203,6 +209,7 @@ public final class HapticScapePanel extends PluginPanel
 
 		skillsPanel = new SkillsPanel(
 			SkillSelection.fromConfigValue(config.disabledSkills()),
+			SkillSelection.fromConfigValue(config.clickerDisabledSkills()),
 			configManager
 		);
 		profilesPanel = new ProfilesPanel(
@@ -227,18 +234,25 @@ public final class HapticScapePanel extends PluginPanel
 			this::applyCustomPatternLibrary
 		);
 		musicPanel = new MusicPanel(config, configManager, musicSettingsAction);
+		clickerPanel = new ClickerPanel(
+			config,
+			configManager,
+			clickerSettingsAction,
+			testClickAction
+		);
 		updatesPanel = new UpdatesPanel(updatePreferencesStore, updateCheckService);
 
-		JTabbedPane tabs = new JTabbedPane(JTabbedPane.TOP, JTabbedPane.WRAP_TAB_LAYOUT);
+		JTabbedPane tabs = new JTabbedPane(JTabbedPane.TOP, JTabbedPane.SCROLL_TAB_LAYOUT);
 		tabs.putClientProperty(
 			"FlatLaf.style",
-			"tabInsets: 2,3,2,3; tabHeight: 22; tabAreaAlignment: center"
+			"tabInsets: 2,1,2,1; tabHeight: 22; tabAreaAlignment: center"
 		);
 		PanelUi.addCompactTab(tabs, "Skills", skillsPanel);
 		PanelUi.addCompactTab(tabs, "XP", profilesPanel);
 		PanelUi.addCompactTab(tabs, "Alerts", alertsPanel);
 		PanelUi.addCompactTab(tabs, "Forge", customPatternsPanel);
 		PanelUi.addCompactTab(tabs, "Music", musicPanel);
+		PanelUi.addCompactTab(tabs, "Click", clickerPanel);
 
 		JPanel topPanel = new JPanel();
 		topPanel.setLayout(new BoxLayout(topPanel, BoxLayout.Y_AXIS));
@@ -355,7 +369,17 @@ public final class HapticScapePanel extends PluginPanel
 
 	public boolean isSkillEnabled(Skill skill)
 	{
-		return skillsPanel.isSkillEnabled(skill);
+		return isHapticSkillEnabled(skill);
+	}
+
+	public boolean isHapticSkillEnabled(Skill skill)
+	{
+		return skillsPanel.isHapticSkillEnabled(skill);
+	}
+
+	public boolean isClickSkillEnabled(Skill skill)
+	{
+		return skillsPanel.isClickSkillEnabled(skill);
 	}
 
 	public CustomPatternLibrary getCustomPatterns()
@@ -373,6 +397,16 @@ public final class HapticScapePanel extends PluginPanel
 		return alertsPanel.getAlertProfiles();
 	}
 
+	public boolean isGenericNotificationClickEnabled()
+	{
+		return alertsPanel.isGenericClickEnabled();
+	}
+
+	public boolean isAlertClickEnabled(AlertCategory category)
+	{
+		return alertsPanel.isClickEnabled(category);
+	}
+
 	public AlertTriggerSettings getAlertTriggerSettings()
 	{
 		return alertsPanel.getTriggerSettings();
@@ -383,7 +417,21 @@ public final class HapticScapePanel extends PluginPanel
 		return musicPanel.getSettings();
 	}
 
-	public void updateMusicSync(MusicSyncSnapshot snapshot)
+	public ClickerSettings getClickerSettings()
+	{
+		return clickerPanel.getSettings();
+	}
+
+	public ClickerXpSettings getClickerXpSettings()
+	{
+		return clickerPanel.getXpSettings();
+	}
+
+
+	public ClickerPhraseRules getClickerPhraseRules()
+	{
+		return clickerPanel.getPhraseRules();
+	}	public void updateMusicSync(MusicSyncSnapshot snapshot)
 	{
 		musicPanel.updateSnapshot(snapshot);
 	}
