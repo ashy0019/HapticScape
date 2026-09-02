@@ -8,21 +8,22 @@ triggers feedback, how it feels, and which devices receive it.
 HapticScape is an unofficial RuneLite integration. It is not endorsed by
 RuneLite, Jagex, or the Intiface project.
 
-<p align="center">
-  <a href="docs/images/hapticscape-feedback.png"><img src="docs/images/hapticscape-feedback.png" width="170" alt="HapticScape feedback controls"></a>
-  &nbsp;&nbsp;
-  <a href="docs/images/hapticscape-music.png"><img src="docs/images/hapticscape-music.png" width="170" alt="HapticScape music sync"></a>
-</p>
-
-<p align="center">
-  <a href="docs/images/hapticscape-skills.png"><img src="docs/images/hapticscape-skills.png" width="130" alt="HapticScape skill selection"></a>
-  &nbsp;
-  <a href="docs/images/hapticscape-xp-profiles.png"><img src="docs/images/hapticscape-xp-profiles.png" width="130" alt="HapticScape XP profiles"></a>
-  &nbsp;
-  <a href="docs/images/hapticscape-alerts.png"><img src="docs/images/hapticscape-alerts.png" width="130" alt="HapticScape alert profiles"></a>
-  &nbsp;
-  <a href="docs/images/hapticscape-pattern-forge.png"><img src="docs/images/hapticscape-pattern-forge.png" width="130" alt="HapticScape Pattern Forge"></a>
-</p>
+<table align="center">
+  <tr>
+    <td colspan="2" align="center" valign="top" bgcolor="#212121">
+      <a href="docs/images/hapticscape-feedback.png"><img src="docs/images/hapticscape-feedback.png" width="170" alt="HapticScape feedback controls"></a>
+    </td>
+    <td colspan="2" align="center" valign="top" bgcolor="#212121">
+      <a href="docs/images/hapticscape-music.png"><img src="docs/images/hapticscape-music.png" width="170" alt="HapticScape music sync"></a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" valign="top" bgcolor="#212121"><a href="docs/images/hapticscape-skills.png"><img src="docs/images/hapticscape-skills.png" width="130" alt="HapticScape skill selection"></a></td>
+    <td align="center" valign="top" bgcolor="#212121"><a href="docs/images/hapticscape-xp-profiles.png"><img src="docs/images/hapticscape-xp-profiles.png" width="130" alt="HapticScape XP profiles"></a></td>
+    <td align="center" valign="top" bgcolor="#212121"><a href="docs/images/hapticscape-alerts.png"><img src="docs/images/hapticscape-alerts.png" width="130" alt="HapticScape alert profiles"></a></td>
+    <td align="center" valign="top" bgcolor="#212121"><a href="docs/images/hapticscape-pattern-forge.gif"><img src="docs/images/hapticscape-pattern-forge.gif" width="130" alt="HapticScape Pattern Forge"></a></td>
+  </tr>
+</table>
 
 ## Features
 
