@@ -3,8 +3,10 @@ package com.ashy0019.hapticscape.rogue.ui;
 import com.ashy0019.hapticscape.rogue.blackjack.BlackjackResult;
 import com.ashy0019.hapticscape.rogue.blackjack.BlackjackState;
 import com.ashy0019.hapticscape.rogue.blackjack.Card;
+import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
 import java.awt.Color;
+import java.awt.Composite;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.Font;
@@ -68,6 +70,7 @@ public final class CasinoScenePanel extends JPanel
 	);
 	private final Timer animationTimer;
 	private final ActionHandler actionHandler;
+	private final RogueNpcManager npcManager = new RogueNpcManager();
 	private BlackjackState state;
 	private List<String> eventLines = Collections.emptyList();
 	private long selectedBet = BETS[0];
@@ -113,7 +116,11 @@ public final class CasinoScenePanel extends JPanel
 			}
 		});
 
-		animationTimer = new Timer(33, event -> repaint());
+		animationTimer = new Timer(33, event ->
+		{
+			npcManager.update(System.nanoTime());
+			repaint();
+		});
 		animationTimer.setCoalesce(true);
 		animationTimer.start();
 	}
@@ -175,12 +182,14 @@ public final class CasinoScenePanel extends JPanel
 
 	private void renderScene(Graphics2D g)
 	{
+		List<RogueNpcManager.SeatSnapshot> npcSeats = npcManager.snapshot(System.nanoTime());
 		drawRoom(g);
-		drawHeader(g);
+		drawHeader(g, npcSeats);
 		drawLounge(g);
 		drawMainTable(g);
-		drawOpenSeats(g);
+		drawOpenSeats(g, npcSeats);
 		drawTableClutter(g);
+		drawNpcWagers(g, npcSeats);
 		drawHands(g);
 		drawWagerTray(g);
 		drawActionArea(g);
@@ -255,7 +264,7 @@ public final class CasinoScenePanel extends JPanel
 		}
 	}
 
-	private void drawHeader(Graphics2D g)
+	private void drawHeader(Graphics2D g, List<RogueNpcManager.SeatSnapshot> npcSeats)
 	{
 		g.setColor(PANEL_DARK);
 		g.fillRect(7, 7, 226, 60);
@@ -269,7 +278,19 @@ public final class CasinoScenePanel extends JPanel
 		drawCentered(g, "THE ROGUE'S DEN", 31);
 		g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 11));
 		g.setColor(new Color(240, 229, 197));
-		drawCenteredShadowed(g, "SOLO TABLE  //  4 OPEN SEATS", 51);
+		int occupied = 0;
+		for (RogueNpcManager.SeatSnapshot seat : npcSeats)
+		{
+			if (seat.getPresence() >= 0.65f)
+			{
+				occupied++;
+			}
+		}
+		int open = Math.max(0, 4 - occupied);
+		String subtitle = open == 0
+			? "SOLO RULES  //  TABLE FULL"
+			: "SOLO RULES  //  " + open + " OPEN SEAT" + (open == 1 ? "" : "S");
+		drawCenteredShadowed(g, subtitle, 51);
 
 		BlackjackState current = state;
 		long coins = current == null ? 0 : current.getCoins();
@@ -440,29 +461,186 @@ public final class CasinoScenePanel extends JPanel
 		drawCenteredShadowed(g, "BLACKJACK PAYS 3 TO 2", 212);
 	}
 
-	private static void drawOpenSeats(Graphics2D g)
+	private static void drawOpenSeats(Graphics2D g, List<RogueNpcManager.SeatSnapshot> npcSeats)
 	{
-		drawSeat(g, 7, 278, "SEAT 1");
-		drawSeat(g, 187, 278, "SEAT 2");
-		drawSeat(g, 7, 468, "SEAT 3");
-		drawSeat(g, 187, 468, "SEAT 4");
+		drawSeat(g, 7, 278, "SEAT 1", npcSeats.get(0));
+		drawSeat(g, 187, 278, "SEAT 2", npcSeats.get(1));
+		drawSeat(g, 7, 468, "SEAT 3", npcSeats.get(2));
+		drawSeat(g, 187, 468, "SEAT 4", npcSeats.get(3));
 	}
 
-	private static void drawSeat(Graphics2D g, int x, int y, String label)
+	private static void drawSeat(
+		Graphics2D g,
+		int x,
+		int y,
+		String label,
+		RogueNpcManager.SeatSnapshot npc)
 	{
 		g.setColor(new Color(43, 29, 22));
 		g.fillRoundRect(x, y, 46, 70, 8, 8);
 		g.setColor(DARK_GOLD);
 		g.drawRoundRect(x, y, 45, 69, 8, 8);
-		g.setColor(new Color(39, 43, 39));
-		g.fillOval(x + 15, y + 10, 16, 16);
-		g.fillRect(x + 11, y + 28, 24, 18);
-		g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 9));
-		g.setColor(GOLD);
-		drawCenteredInShadowed(g, "OPEN", x, 46, y + 57);
+
+		float presence = npc == null ? 0.0f : npc.getPresence();
+		if (presence <= 0.01f)
+		{
+			g.setColor(new Color(39, 43, 39));
+			g.fillOval(x + 15, y + 10, 16, 16);
+			g.fillRect(x + 11, y + 28, 24, 18);
+			g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 9));
+			g.setColor(GOLD);
+			drawCenteredInShadowed(g, "OPEN", x, 46, y + 57);
+			g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 7));
+			g.setColor(new Color(226, 214, 183));
+			drawCenteredInShadowed(g, label, x, 46, y + 67);
+			return;
+		}
+
+		boolean rightSide = npc.getSeatIndex() == 1 || npc.getSeatIndex() == 3;
+		int direction = rightSide ? 1 : -1;
+		int drift = Math.round((1.0f - presence) * 17.0f) * direction;
+		int bob = (int) Math.round(Math.sin(System.nanoTime() / 850_000_000.0 + npc.getSeatIndex()) * 0.7);
+
+		Graphics2D figure = (Graphics2D) g.create();
+		try
+		{
+			Composite originalComposite = figure.getComposite();
+			figure.setComposite(AlphaComposite.SrcOver.derive(Math.max(0.08f, presence)));
+			figure.translate(drift, bob);
+			drawNpcPortrait(figure, x + 23, y + 7, npc, rightSide);
+			figure.setComposite(originalComposite);
+		}
+		finally
+		{
+			figure.dispose();
+		}
+
 		g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 7));
+		g.setColor(new Color(246, 211, 105));
+		String name = npc.getName() == null ? "ROGUE" : npc.getName();
+		drawCenteredInShadowed(g, name, x, 46, y + 57);
+		g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 6));
 		g.setColor(new Color(226, 214, 183));
-		drawCenteredInShadowed(g, label, x, 46, y + 67);
+		String status = npc.getPhase() == RogueNpcManager.Phase.ARRIVING && presence < 0.55f
+			? "ARRIVING"
+			: (npc.getPhase() == RogueNpcManager.Phase.LEAVING && presence < 0.55f
+				? "LEAVING"
+				: "BET " + npc.getWager());
+		drawCenteredInShadowed(g, status, x, 46, y + 67);
+	}
+
+	private static void drawNpcPortrait(
+		Graphics2D g,
+		int centerX,
+		int topY,
+		RogueNpcManager.SeatSnapshot npc,
+		boolean rightSide)
+	{
+		Color skin = npc.getSkin();
+		Color hair = npc.getHair();
+		Color outfit = npc.getOutfit();
+		Color accent = npc.getAccent();
+		int look = npc.getIdleAction() == RogueNpcManager.IdleAction.LOOK_LEFT
+			? -1
+			: (npc.getIdleAction() == RogueNpcManager.IdleAction.LOOK_RIGHT ? 1 : 0);
+		int style = npc.getStyle();
+
+		// Chair back behind the figure.
+		g.setColor(new Color(63, 42, 29));
+		g.fillRect(centerX - 12, topY + 13, 24, 27);
+		g.setColor(new Color(95, 61, 35));
+		g.drawLine(centerX - 10, topY + 15, centerX + 10, topY + 15);
+
+		// Head and hair/hood. Six silhouettes are enough to make repeat patrons
+		// feel distinct without introducing sprite assets.
+		g.setColor(skin);
+		g.fillRect(centerX - 5 + look, topY + 6, 10, 11);
+		g.setColor(hair);
+		switch (style)
+		{
+			case 0: // hooded rogue
+				g.fillRect(centerX - 7, topY + 2, 14, 8);
+				g.fillRect(centerX - 8, topY + 7, 3, 11);
+				g.fillRect(centerX + 5, topY + 7, 3, 11);
+				break;
+			case 1: // mercenary / short cropped hair
+				g.fillRect(centerX - 6, topY + 3, 12, 5);
+				g.setColor(accent);
+				g.fillRect(centerX - 8, topY + 18, 4, 6);
+				g.fillRect(centerX + 4, topY + 18, 4, 6);
+				break;
+			case 2: // merchant cap
+				g.fillRect(centerX - 6, topY + 4, 12, 4);
+				g.setColor(accent);
+				g.fillRect(centerX - 8, topY + 1, 15, 4);
+				g.fillRect(centerX + 5, topY + 3, 5, 2);
+				break;
+			case 3: // miner / scruffy beard
+				g.fillRect(centerX - 6, topY + 3, 12, 5);
+				g.fillRect(centerX - 4, topY + 14, 8, 6);
+				g.setColor(accent);
+				g.fillRect(centerX - 7, topY + 1, 14, 3);
+				break;
+			case 4: // little noble hat and feather
+				g.fillRect(centerX - 6, topY + 4, 12, 4);
+				g.setColor(accent);
+				g.fillRect(centerX - 8, topY + 1, 15, 4);
+				g.drawLine(centerX + 5, topY + 1, centerX + 8, topY - 4);
+				g.drawLine(centerX + 8, topY - 4, centerX + 9, topY);
+				break;
+			default: // shaggy drifter
+				g.fillRect(centerX - 7, topY + 2, 14, 6);
+				g.fillRect(centerX - 7, topY + 6, 3, 8);
+				break;
+		}
+
+		// Eyes follow the tiny LOOK idle action.
+		g.setColor(new Color(41, 31, 27));
+		g.fillRect(centerX - 3 + look, topY + 10, 1, 1);
+		g.fillRect(centerX + 3 + look, topY + 10, 1, 1);
+
+		// Torso, belt and seated legs.
+		g.setColor(outfit);
+		g.fillRect(centerX - 9, topY + 18, 18, 18);
+		g.setColor(accent);
+		g.fillRect(centerX - 9, topY + 26, 18, 3);
+		g.setColor(new Color(38, 31, 28));
+		g.fillRect(centerX - 8, topY + 36, 6, 9);
+		g.fillRect(centerX + 2, topY + 36, 6, 9);
+
+		float action = npc.getActionProgress();
+		int reach = Math.round(action * 7.0f);
+		int tableDirection = rightSide ? -1 : 1;
+		g.setColor(skin);
+		if (npc.getIdleAction() == RogueNpcManager.IdleAction.FIDDLE_CHIPS)
+		{
+			int handX = centerX + tableDirection * (9 + reach);
+			g.drawLine(centerX + tableDirection * 7, topY + 23, handX, topY + 27);
+			g.fillRect(handX - 1, topY + 26, 3, 3);
+		}
+		else if (npc.getIdleAction() == RogueNpcManager.IdleAction.SIP)
+		{
+			int lift = Math.round(action * 10.0f);
+			int mugX = centerX + tableDirection * 8;
+			int mugY = topY + 27 - lift;
+			g.drawLine(centerX + tableDirection * 6, topY + 22, mugX, mugY + 4);
+			drawTinyTankard(g, mugX - (rightSide ? 5 : 0), mugY);
+		}
+		else
+		{
+			g.drawLine(centerX - 8, topY + 23, centerX - 11, topY + 30);
+			g.drawLine(centerX + 8, topY + 23, centerX + 11, topY + 30);
+		}
+	}
+
+	private static void drawTinyTankard(Graphics2D g, int x, int y)
+	{
+		g.setColor(new Color(107, 72, 41));
+		g.fillRect(x, y, 5, 6);
+		g.setColor(new Color(178, 126, 63));
+		g.drawLine(x + 1, y + 1, x + 3, y + 1);
+		g.setColor(new Color(107, 72, 41));
+		g.drawOval(x + 4, y + 1, 4, 4);
 	}
 
 	private static void drawTableClutter(Graphics2D g)
@@ -505,6 +683,53 @@ public final class CasinoScenePanel extends JPanel
 		g.drawArc(143, 527, 16, 7, 0, 280);
 		g.drawLine(100, 548, 107, 551);
 		g.drawLine(109, 551, 114, 549);
+	}
+
+	private static void drawNpcWagers(Graphics2D g, List<RogueNpcManager.SeatSnapshot> npcSeats)
+	{
+		int[] wagerX = {80, 160, 80, 160};
+		int[] wagerY = {321, 321, 545, 545};
+		for (RogueNpcManager.SeatSnapshot npc : npcSeats)
+		{
+			float presence = npc.getPresence();
+			if (presence <= 0.08f)
+			{
+				continue;
+			}
+
+			int index = npc.getSeatIndex();
+			boolean rightSide = index == 1 || index == 3;
+			int actionShift = npc.getIdleAction() == RogueNpcManager.IdleAction.FIDDLE_CHIPS
+				? Math.round(npc.getActionProgress() * (rightSide ? -5.0f : 5.0f))
+				: 0;
+
+			Graphics2D chips = (Graphics2D) g.create();
+			try
+			{
+				chips.setComposite(AlphaComposite.SrcOver.derive(Math.max(0.08f, presence)));
+				drawChipPile(
+					chips,
+					wagerX[index] + actionShift,
+					wagerY[index],
+					npc.getChipColor(),
+					Math.max(1, Math.min(7, npc.getChipCount())),
+					rightSide
+				);
+				if (npc.getChipCount() >= 6)
+				{
+					drawLooseChip(
+						chips,
+						wagerX[index] + (rightSide ? -10 : 10),
+						wagerY[index] + 4,
+						npc.getAccent()
+					);
+				}
+			}
+			finally
+			{
+				chips.dispose();
+			}
+		}
 	}
 
 	private static void drawChipPile(Graphics2D g, int x, int y, Color color, int count, boolean leanRight)
