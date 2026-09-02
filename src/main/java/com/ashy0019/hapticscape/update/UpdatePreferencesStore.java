@@ -10,6 +10,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.RuneLite;
 
@@ -124,6 +125,18 @@ public final class UpdatePreferencesStore implements AutoCloseable
 	@Override
 	public void close()
 	{
-		executor.shutdownNow();
+		executor.shutdown();
+		try
+		{
+			if (!executor.awaitTermination(2, TimeUnit.SECONDS))
+			{
+				executor.shutdownNow();
+			}
+		}
+		catch (InterruptedException exception)
+		{
+			executor.shutdownNow();
+			Thread.currentThread().interrupt();
+		}
 	}
 }

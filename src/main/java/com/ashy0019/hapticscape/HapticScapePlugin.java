@@ -190,6 +190,7 @@ public class HapticScapePlugin extends Plugin
 		musicSyncService.updateSettings(panel.getMusicSyncSettings());
 		if (client.getGameState() == GameState.LOGGED_IN)
 		{
+			seedCurrentXp();
 			seedAlertDetectors();
 		}
 

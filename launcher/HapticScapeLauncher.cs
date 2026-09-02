@@ -173,7 +173,7 @@ internal static class HapticScapeLauncher
 
 		ProcessStartInfo startInfo = new ProcessStartInfo();
 		startInfo.FileName = javaExecutable;
-		startInfo.Arguments = "-ea -jar \"" + clientJar + "\" --developer-mode --debug";
+		startInfo.Arguments = "-ea -jar \"" + clientJar + "\"";
 		startInfo.WorkingDirectory = applicationDirectory;
 		startInfo.UseShellExecute = false;
 		Process.Start(startInfo);
