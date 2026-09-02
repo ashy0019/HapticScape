@@ -50,6 +50,8 @@ final class RogueNpcManager
 		private final float presence;
 		private final IdleAction idleAction;
 		private final float actionProgress;
+		private final String speechLine;
+		private final float speechAlpha;
 
 		private SeatSnapshot(
 			int seatIndex,
@@ -65,7 +67,9 @@ final class RogueNpcManager
 			long wager,
 			float presence,
 			IdleAction idleAction,
-			float actionProgress)
+			float actionProgress,
+			String speechLine,
+			float speechAlpha)
 		{
 			this.seatIndex = seatIndex;
 			this.phase = phase;
@@ -81,6 +85,8 @@ final class RogueNpcManager
 			this.presence = presence;
 			this.idleAction = idleAction;
 			this.actionProgress = actionProgress;
+			this.speechLine = speechLine;
+			this.speechAlpha = speechAlpha;
 		}
 
 		int getSeatIndex()
@@ -152,6 +158,16 @@ final class RogueNpcManager
 		{
 			return actionProgress;
 		}
+
+		String getSpeechLine()
+		{
+			return speechLine;
+		}
+
+		float getSpeechAlpha()
+		{
+			return speechAlpha;
+		}
 	}
 
 	private static final long ARRIVE_NANOS = 2_600_000_000L;
@@ -163,7 +179,21 @@ final class RogueNpcManager
 	private static final long MAX_EMPTY_NANOS = 38_000_000_000L;
 	private static final long MIN_IDLE_NANOS = 6_000_000_000L;
 	private static final long MAX_IDLE_NANOS = 16_000_000_000L;
+	private static final long MIN_SPEECH_NANOS = 2_600_000_000L;
+	private static final long MAX_SPEECH_NANOS = 4_100_000_000L;
+	private static final long MIN_SPEECH_GAP_NANOS = 9_000_000_000L;
+	private static final long MAX_SPEECH_GAP_NANOS = 24_000_000_000L;
+	private static final long SPEECH_FADE_NANOS = 320_000_000L;
 	private static final long[] WAGERS = {10L, 25L, 50L, 100L, 250L};
+
+	private static final String[][] SPEECH_LINES = {
+		{"Keep it quiet.", "Eyes down.", "No peeking.", "Bad odds.", "Deal again."},
+		{"Hit me.", "Again.", "Easy coin.", "One more.", "Dealer's sharp."},
+		{"Double it.", "Twenty-five.", "Coin talks.", "Good price.", "Keep dealing."},
+		{"Bad vein.", "Need more ale.", "One more.", "Bah.", "Cold table."},
+		{"How quaint.", "Deal.", "Double it.", "Charming.", "Again, dealer."},
+		{"Not my night.", "Seen worse.", "One last hand.", "My luck...", "Good ale."}
+	};
 
 	private static final String[] NAMES = {
 		"GARRICK", "MIRA", "BRAM", "NELL", "VEX", "SABLE",
@@ -225,6 +255,10 @@ final class RogueNpcManager
 		private IdleAction idleAction = IdleAction.NONE;
 		private int chipCount;
 		private long wager;
+		private long nextSpeechNanos;
+		private long speechStartedNanos;
+		private long speechDeadlineNanos;
+		private String speechLine;
 	}
 
 	private static final class Appearance
@@ -277,13 +311,16 @@ final class RogueNpcManager
 						seat.phaseStartedNanos = nowNanos;
 						seat.phaseDeadlineNanos = nowNanos + randomBetween(MIN_DWELL_NANOS, MAX_DWELL_NANOS);
 						seat.nextIdleNanos = nowNanos + randomBetween(MIN_IDLE_NANOS, MAX_IDLE_NANOS);
+						seat.nextSpeechNanos = nowNanos + randomBetween(3_000_000_000L, 8_000_000_000L);
 					}
 					break;
 				case SEATED:
 					updateIdleAction(seat, nowNanos);
+					updateSpeech(seat, nowNanos);
 					if (nowNanos >= seat.phaseDeadlineNanos)
 					{
 						seat.idleAction = IdleAction.NONE;
+						seat.speechLine = null;
 						seat.phase = Phase.LEAVING;
 						seat.phaseStartedNanos = nowNanos;
 						seat.phaseDeadlineNanos = nowNanos + LEAVE_NANOS;
@@ -295,6 +332,7 @@ final class RogueNpcManager
 						seat.phase = Phase.EMPTY;
 						seat.appearance = null;
 						seat.idleAction = IdleAction.NONE;
+						seat.speechLine = null;
 						seat.phaseStartedNanos = nowNanos;
 						seat.phaseDeadlineNanos = nowNanos + randomBetween(MIN_EMPTY_NANOS, MAX_EMPTY_NANOS);
 					}
@@ -329,7 +367,9 @@ final class RogueNpcManager
 				seat.wager,
 				presence,
 				seat.idleAction,
-				actionProgress
+				actionProgress,
+				seat.speechLine,
+				speechAlpha(seat, nowNanos)
 			));
 		}
 		return Collections.unmodifiableList(result);
@@ -351,6 +391,7 @@ final class RogueNpcManager
 		seated.phaseStartedNanos = nowNanos;
 		seated.phaseDeadlineNanos = nowNanos + randomBetween(55_000_000_000L, 130_000_000_000L);
 		seated.nextIdleNanos = nowNanos + randomBetween(4_000_000_000L, 10_000_000_000L);
+		startSpeech(seated, nowNanos);
 
 		for (int index = 0; index < seats.length; index++)
 		{
@@ -371,6 +412,8 @@ final class RogueNpcManager
 		seat.chipCount = randomBetweenInt(2, 8);
 		seat.wager = randomWager();
 		seat.idleAction = IdleAction.NONE;
+		seat.speechLine = null;
+		seat.nextSpeechNanos = Long.MAX_VALUE;
 		seat.phase = Phase.ARRIVING;
 		seat.phaseStartedNanos = nowNanos;
 		seat.phaseDeadlineNanos = nowNanos + ARRIVE_NANOS;
@@ -419,6 +462,51 @@ final class RogueNpcManager
 				return;
 		}
 		seat.idleStartedNanos = nowNanos;
+	}
+
+	private void updateSpeech(Seat seat, long nowNanos)
+	{
+		if (seat.speechLine != null)
+		{
+			if (nowNanos >= seat.speechDeadlineNanos)
+			{
+				seat.speechLine = null;
+				seat.nextSpeechNanos = nowNanos + randomBetween(
+					MIN_SPEECH_GAP_NANOS, MAX_SPEECH_GAP_NANOS);
+			}
+			return;
+		}
+
+		if (nowNanos < seat.nextSpeechNanos || anotherSeatIsSpeaking(seat))
+		{
+			return;
+		}
+
+		startSpeech(seat, nowNanos);
+	}
+
+	private void startSpeech(Seat seat, long nowNanos)
+	{
+		if (seat.appearance == null)
+		{
+			return;
+		}
+		String[] lines = SPEECH_LINES[Math.max(0, Math.min(SPEECH_LINES.length - 1, seat.appearance.style))];
+		seat.speechLine = lines[random.nextInt(lines.length)];
+		seat.speechStartedNanos = nowNanos;
+		seat.speechDeadlineNanos = nowNanos + randomBetween(MIN_SPEECH_NANOS, MAX_SPEECH_NANOS);
+	}
+
+	private boolean anotherSeatIsSpeaking(Seat seat)
+	{
+		for (Seat candidate : seats)
+		{
+			if (candidate != seat && candidate.speechLine != null)
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private Appearance randomAppearance()
@@ -502,6 +590,20 @@ final class RogueNpcManager
 		}
 		float linear = clamp01((nowNanos - seat.idleStartedNanos) / (float) ACTION_NANOS);
 		return 1.0f - Math.abs(linear * 2.0f - 1.0f);
+	}
+
+	private static float speechAlpha(Seat seat, long nowNanos)
+	{
+		if (seat.speechLine == null)
+		{
+			return 0.0f;
+		}
+
+		long age = Math.max(0L, nowNanos - seat.speechStartedNanos);
+		long remaining = Math.max(0L, seat.speechDeadlineNanos - nowNanos);
+		float fadeIn = clamp01(age / (float) SPEECH_FADE_NANOS);
+		float fadeOut = clamp01(remaining / (float) SPEECH_FADE_NANOS);
+		return Math.min(fadeIn, fadeOut);
 	}
 
 	private static float clamp01(float value)

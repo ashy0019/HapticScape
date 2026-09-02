@@ -64,6 +64,8 @@ public final class CasinoScenePanel extends JPanel
 	private static final Color PANEL_MID = new Color(45, 36, 30);
 	private static final Font NPC_NAME_FONT = new Font(Font.SANS_SERIF, Font.BOLD, 10);
 	private static final Font NPC_STATUS_FONT = new Font(Font.MONOSPACED, Font.BOLD, 9);
+	private static final Font NPC_CHAT_FONT = new Font(Font.SANS_SERIF, Font.BOLD, 9);
+	private static final Color NPC_CHAT_COLOR = new Color(255, 225, 75);
 
 	// Hand-reduced directly from the RuneScape Classic-era green partyhat
 	// reference supplied for the "Buying gf" patron. This 14x14 reduction is
@@ -214,6 +216,7 @@ public final class CasinoScenePanel extends JPanel
 		drawTableClutter(g);
 		drawNpcWagers(g, npcSeats);
 		drawHands(g);
+		drawNpcSpeech(g, npcSeats);
 		drawWagerTray(g);
 		drawActionArea(g);
 		drawEventLog(g);
@@ -371,8 +374,8 @@ public final class CasinoScenePanel extends JPanel
 		long phase = (System.nanoTime() / 3_800_000_000L) % 5;
 		if (phase == 0)
 		{
-			g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 9));
-			g.setColor(new Color(255, 225, 75));
+			g.setFont(NPC_CHAT_FONT);
+			g.setColor(NPC_CHAT_COLOR);
 			g.drawString("Buying gf", 170, 116);
 		}
 	}
@@ -864,6 +867,48 @@ public final class CasinoScenePanel extends JPanel
 		g.drawArc(143, 527, 16, 7, 0, 280);
 		g.drawLine(100, 548, 107, 551);
 		g.drawLine(109, 551, 114, 549);
+	}
+
+	private static void drawNpcSpeech(Graphics2D g, List<RogueNpcManager.SeatSnapshot> npcSeats)
+	{
+		// Only one patron speaks at a time (enforced by RogueNpcManager), so the
+		// den feels conversational rather than like four overlapping tooltips.
+		// The styling intentionally matches the yellow "Buying gf" line in the
+		// lounge: same 9 px bold sans-serif face and the exact same gold-yellow.
+		int[] baselineY = {374, 374, 565, 565};
+		for (RogueNpcManager.SeatSnapshot npc : npcSeats)
+		{
+			String line = npc.getSpeechLine();
+			float alpha = Math.min(npc.getPresence(), npc.getSpeechAlpha());
+			if (line == null || line.isEmpty() || alpha <= 0.03f)
+			{
+				continue;
+			}
+
+			int index = npc.getSeatIndex();
+			boolean rightSide = index == 1 || index == 3;
+			Graphics2D speech = (Graphics2D) g.create();
+			try
+			{
+				speech.setComposite(AlphaComposite.SrcOver.derive(Math.max(0.05f, alpha)));
+				speech.setFont(NPC_CHAT_FONT);
+				FontMetrics metrics = speech.getFontMetrics();
+				int width = metrics.stringWidth(line);
+				int x = rightSide ? 181 - width : 59;
+				int y = baselineY[index];
+
+				// One-pixel dark shadow keeps the RSC-style floating chat readable on
+				// green felt without introducing a modern speech bubble.
+				speech.setColor(new Color(22, 16, 10));
+				speech.drawString(line, x + 1, y + 1);
+				speech.setColor(NPC_CHAT_COLOR);
+				speech.drawString(line, x, y);
+			}
+			finally
+			{
+				speech.dispose();
+			}
+		}
 	}
 
 	private static void drawNpcWagers(Graphics2D g, List<RogueNpcManager.SeatSnapshot> npcSeats)
