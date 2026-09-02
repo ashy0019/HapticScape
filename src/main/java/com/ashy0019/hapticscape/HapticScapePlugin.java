@@ -1,5 +1,8 @@
 package com.ashy0019.hapticscape;
 
+import com.ashy0019.hapticscape.clicker.AudioPlayerClickPlayback;
+import com.ashy0019.hapticscape.clicker.ClickerService;
+import com.ashy0019.hapticscape.clicker.ClickerSettings;
 import com.ashy0019.hapticscape.device.DefaultIntifaceService;
 import com.ashy0019.hapticscape.device.HapticEventType;
 import com.ashy0019.hapticscape.device.HapticPattern;
@@ -81,6 +84,7 @@ public class HapticScapePlugin extends Plugin
 		new Level99CelebrationController();
 	private IntifaceService intifaceService;
 	private MusicSyncService musicSyncService;
+	private ClickerService clickerService;
 	private HapticScapePanel panel;
 	private NavigationButton navigationButton;
 	private Level99CelebrationOverlay level99CelebrationOverlay;
@@ -149,6 +153,10 @@ public class HapticScapePlugin extends Plugin
 			WasapiLoopbackCapture::new,
 			musicSettingsFromConfig()
 		);
+		clickerService = new ClickerService(
+			new AudioPlayerClickPlayback(audioPlayer),
+			clickerSettingsFromConfig()
+		);
 		updatePreferencesStore = new UpdatePreferencesStore(gson);
 		updateCheckService = new UpdateCheckService(httpClient, gson);
 		panel = new HapticScapePanel(
@@ -164,6 +172,8 @@ public class HapticScapePlugin extends Plugin
 			this::sendTestAlert,
 			this::sendPatternForgePreview,
 			musicSyncService::updateSettings,
+			clickerService::updateSettings,
+			clickerService::click,
 			updatePreferencesStore,
 			updateCheckService,
 			intifaceService::stopAll
@@ -211,6 +221,11 @@ public class HapticScapePlugin extends Plugin
 			musicSyncService.setListener(snapshot -> { });
 			musicSyncService.close();
 			musicSyncService = null;
+		}
+		if (clickerService != null)
+		{
+			clickerService.close();
+			clickerService = null;
 		}
 		if (intifaceService != null)
 		{
@@ -959,6 +974,18 @@ public class HapticScapePlugin extends Plugin
 			clamp(config.musicSensitivityPercent(), 25, 200),
 			minimum,
 			maximum
+		);
+	}
+
+	private ClickerSettings clickerSettingsFromConfig()
+	{
+		return new ClickerSettings(
+			config.clickerEnabled(),
+			clamp(
+				config.clickerVolumePercent(),
+				ClickerSettings.MINIMUM_VOLUME_PERCENT,
+				ClickerSettings.MAXIMUM_VOLUME_PERCENT
+			)
 		);
 	}
 

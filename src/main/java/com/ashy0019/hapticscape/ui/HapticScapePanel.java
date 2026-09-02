@@ -11,6 +11,7 @@ import com.ashy0019.hapticscape.NotificationFeedbackSettings;
 import com.ashy0019.hapticscape.SkillFeedbackProfiles;
 import com.ashy0019.hapticscape.SkillSelection;
 import com.ashy0019.hapticscape.XpFeedbackSettings;
+import com.ashy0019.hapticscape.clicker.ClickerSettings;
 import com.ashy0019.hapticscape.device.ConnectionSnapshot;
 import com.ashy0019.hapticscape.device.ConnectionState;
 import com.ashy0019.hapticscape.device.DeviceInfo;
@@ -79,6 +80,7 @@ public final class HapticScapePanel extends PluginPanel
 	private final AlertsPanel alertsPanel;
 	private final CustomPatternsPanel customPatternsPanel;
 	private final MusicPanel musicPanel;
+	private final ClickerPanel clickerPanel;
 	private final UpdatesPanel updatesPanel;
 	private final Timer developerStatusTimer;
 
@@ -111,6 +113,8 @@ public final class HapticScapePanel extends PluginPanel
 		Consumer<AlertCategory> testSpecificAlertAction,
 		Consumer<CustomPatternEntry> patternForgePreviewAction,
 		Consumer<MusicSyncSettings> musicSettingsAction,
+		Consumer<ClickerSettings> clickerSettingsAction,
+		Runnable testClickAction,
 		UpdatePreferencesStore updatePreferencesStore,
 		UpdateCheckService updateCheckService,
 		Runnable stopAction)
@@ -227,6 +231,12 @@ public final class HapticScapePanel extends PluginPanel
 			this::applyCustomPatternLibrary
 		);
 		musicPanel = new MusicPanel(config, configManager, musicSettingsAction);
+		clickerPanel = new ClickerPanel(
+			config,
+			configManager,
+			clickerSettingsAction,
+			testClickAction
+		);
 		updatesPanel = new UpdatesPanel(updatePreferencesStore, updateCheckService);
 
 		JTabbedPane tabs = new JTabbedPane(JTabbedPane.TOP, JTabbedPane.WRAP_TAB_LAYOUT);
@@ -239,6 +249,7 @@ public final class HapticScapePanel extends PluginPanel
 		PanelUi.addCompactTab(tabs, "Alerts", alertsPanel);
 		PanelUi.addCompactTab(tabs, "Forge", customPatternsPanel);
 		PanelUi.addCompactTab(tabs, "Music", musicPanel);
+		PanelUi.addCompactTab(tabs, "Click", clickerPanel);
 
 		JPanel topPanel = new JPanel();
 		topPanel.setLayout(new BoxLayout(topPanel, BoxLayout.Y_AXIS));
@@ -381,6 +392,11 @@ public final class HapticScapePanel extends PluginPanel
 	public MusicSyncSettings getMusicSyncSettings()
 	{
 		return musicPanel.getSettings();
+	}
+
+	public ClickerSettings getClickerSettings()
+	{
+		return clickerPanel.getSettings();
 	}
 
 	public void updateMusicSync(MusicSyncSnapshot snapshot)

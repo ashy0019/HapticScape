@@ -33,6 +33,8 @@ public interface HapticScapeConfig extends Config
 	String MUSIC_SENSITIVITY_PERCENT_KEY = "musicSensitivityPercent";
 	String MUSIC_MINIMUM_INTENSITY_PERCENT_KEY = "musicMinimumIntensityPercent";
 	String MUSIC_MAXIMUM_INTENSITY_PERCENT_KEY = "musicMaximumIntensityPercent";
+	String CLICKER_ENABLED_KEY = "clickerEnabled";
+	String CLICKER_VOLUME_PERCENT_KEY = "clickerVolumePercent";
 
 	@ConfigItem(
 		keyName = "intifaceServer",
@@ -340,5 +342,30 @@ public interface HapticScapeConfig extends Config
 	default int musicMaximumIntensityPercent()
 	{
 		return 60;
+	}
+
+	@ConfigItem(
+		keyName = CLICKER_ENABLED_KEY,
+		name = "Clicker",
+		description = "Play independent auditory clicker feedback",
+		position = 25,
+		hidden = true
+	)
+	default boolean clickerEnabled()
+	{
+		return false;
+	}
+
+	@Range(min = 0, max = 100)
+	@ConfigItem(
+		keyName = CLICKER_VOLUME_PERCENT_KEY,
+		name = "Clicker volume",
+		description = "Auditory clicker volume as a percentage",
+		position = 26,
+		hidden = true
+	)
+	default int clickerVolumePercent()
+	{
+		return 70;
 	}
 }
