@@ -9,6 +9,8 @@ import com.ashy0019.hapticscape.music.MusicSyncSettings;
 import com.ashy0019.hapticscape.music.WasapiLoopbackCapture;
 import com.ashy0019.hapticscape.ui.HapticScapePanel;
 import com.ashy0019.hapticscape.ui.Level99CelebrationOverlay;
+import com.ashy0019.hapticscape.update.UpdateCheckService;
+import com.ashy0019.hapticscape.update.UpdatePreferencesStore;
 import com.google.gson.Gson;
 import com.google.inject.Provides;
 import java.awt.Color;
@@ -81,6 +83,8 @@ public class HapticScapePlugin extends Plugin
 	private NavigationButton navigationButton;
 	private Level99CelebrationOverlay level99CelebrationOverlay;
 	private ScheduledExecutorService alertScheduler;
+	private UpdatePreferencesStore updatePreferencesStore;
+	private UpdateCheckService updateCheckService;
 	private boolean inventoryFullKnown;
 	private boolean inventoryFull;
 	private int poisonState = -1;
@@ -143,6 +147,8 @@ public class HapticScapePlugin extends Plugin
 			WasapiLoopbackCapture::new,
 			musicSettingsFromConfig()
 		);
+		updatePreferencesStore = new UpdatePreferencesStore(gson);
+		updateCheckService = new UpdateCheckService(httpClient, gson);
 		panel = new HapticScapePanel(
 			config,
 			configManager,
@@ -156,6 +162,8 @@ public class HapticScapePlugin extends Plugin
 			this::sendTestAlert,
 			this::sendPatternForgePreview,
 			musicSyncService::updateSettings,
+			updatePreferencesStore,
+			updateCheckService,
 			intifaceService::stopAll
 		);
 		intifaceService.setConnectionListener(panel::updateConnection);
@@ -212,6 +220,16 @@ public class HapticScapePlugin extends Plugin
 		{
 			panel.close();
 			panel = null;
+		}
+		if (updateCheckService != null)
+		{
+			updateCheckService.close();
+			updateCheckService = null;
+		}
+		if (updatePreferencesStore != null)
+		{
+			updatePreferencesStore.close();
+			updatePreferencesStore = null;
 		}
 		if (alertScheduler != null)
 		{
