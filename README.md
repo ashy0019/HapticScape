@@ -83,6 +83,16 @@ RuneLite, Jagex, or the Intiface project.
 - Display discovered devices and their vibration support.
 - Recover cleanly after Intiface is stopped or loses the connection.
 
+### Client updates (Windows)
+
+- Check the latest stable GitHub Release before launching the bundled client.
+- Choose prompted updates, automatic installation, silent automatic updates,
+  or no startup update checks.
+- Dismiss an update temporarily or skip only one specific version.
+- Verify every downloaded bundle against its published SHA-256 checksum.
+- Stage and validate replacements before changing the installed bundle.
+- Restore the previous bundle when installation cannot be completed.
+
 ## The HapticScape panel
 
 The main Feedback section controls the default XP response, ordinary level-up
@@ -98,7 +108,11 @@ the remaining controls:
 | **Music** | Enable Windows system-audio sync and tune its response and output limits. |
 
 The bottom of the panel contains the connection controls, global test button,
-emergency stop, and the list of devices reported by Intiface.
+emergency stop, update settings, and the list of devices reported by Intiface.
+
+Select **Updates** with the bottom controls to manage automatic
+installation and update notifications independently or check GitHub manually.
+The default is to notify before installing; automatic installation is opt-in.
 
 ## Requirements
 
@@ -217,21 +231,23 @@ From PowerShell in the repository root:
 To specify a release version:
 
 ```powershell
-.\package-windows.ps1 -Version 1.4.0
+.\package-windows.ps1 -Version 1.6.0
 ```
 
 The script:
 
 1. Runs the tests.
 2. Builds `hapticscape-client.jar`.
-3. Compiles the native Windows launcher.
-4. Adds the required license files and friend setup guide.
-5. Creates a distributable ZIP in `build\distribution`.
+3. Compiles and runs the native updater tests.
+4. Compiles the native Windows launcher and update helper.
+5. Adds release metadata, required licenses, and the friend setup guide.
+6. Creates a distributable ZIP and SHA-256 file in `build\distribution`.
 
-For version 1.4.0 on a 64-bit Windows computer, the output is:
+For version 1.6.0 on a 64-bit Windows computer, the output is:
 
 ```text
-build\distribution\HapticScape-Windows-x64-1.4.0.zip
+build\distribution\HapticScape-Windows-x64-1.6.0.zip
+build\distribution\HapticScape-Windows-x64-1.6.0.zip.sha256
 ```
 
 Test the unpacked launcher before publishing or sharing the ZIP:
@@ -259,6 +275,12 @@ On Windows, Music sync listens to the current system output mix. Audio is
 analyzed in a small in-memory rolling window and is never recorded, saved, or
 transmitted. Because Windows loopback captures the output device, other
 applications playing through the same device can also influence Music sync.
+
+When update checks are enabled, the Windows launcher requests public release
+metadata from GitHub. HapticScape does not include account, character, chat,
+device, or gameplay data in that request. Disable both automatic updates and
+update notifications to prevent startup update requests. A manual **Check
+now** still performs a user-requested GitHub check.
 
 If you configure a non-local server address, the operator of that server can
 receive your IP address and haptic command traffic. Only connect to remote
@@ -296,9 +318,21 @@ for RuneLite's bundled Java runtime, then checks `JAVA_HOME` and `PATH`.
 
 ## Releases and updates
 
-Private Windows bundles do not update themselves. Download or build a newer
-bundle after a HapticScape update, and rebuild after a RuneLite or Old School
-RuneScape update if compatibility changes.
+Version 1.6.0 is the first updater-enabled bundle and must be installed
+manually. Later Windows bundles can update through stable GitHub Releases.
+
+To publish an updater-compatible release:
+
+1. Run `.\package-windows.ps1 -Version X.Y.Z`.
+2. Tag that exact commit as `vX.Y.Z`.
+3. Create a GitHub Release from the tag.
+4. Upload both the generated ZIP and matching `.zip.sha256` file.
+
+The asset names, tag, embedded release version, and architecture must agree.
+Drafts and prereleases are not offered through the stable update channel.
+Update preferences are stored in
+`.runelite\hapticscape\updater-settings.json`, outside the replaceable client
+bundle.
 
 ## License and acknowledgements
 

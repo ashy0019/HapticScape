@@ -16,6 +16,8 @@ import com.ashy0019.hapticscape.device.ConnectionState;
 import com.ashy0019.hapticscape.device.DeviceInfo;
 import com.ashy0019.hapticscape.music.MusicSyncSettings;
 import com.ashy0019.hapticscape.music.MusicSyncSnapshot;
+import com.ashy0019.hapticscape.update.UpdateCheckService;
+import com.ashy0019.hapticscape.update.UpdatePreferencesStore;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.GridLayout;
@@ -32,6 +34,7 @@ import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JList;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSlider;
@@ -59,6 +62,7 @@ public final class HapticScapePanel extends PluginPanel
 	private final JButton testLevelUpButton = new JButton("Test level-up");
 	private final JButton previewLevel99Button = new JButton("Test 99");
 	private final JButton stopButton = new JButton("Stop now");
+	private final JButton updatesButton = new JButton("Updates");
 	private final JCheckBox levelUpCheckBox = new JCheckBox("Level-ups");
 	private final JCheckBox milestoneCheckBox = new JCheckBox("Milestones");
 	private final JCheckBox level99CheckBox = new JCheckBox("Celebrate level 99");
@@ -75,6 +79,7 @@ public final class HapticScapePanel extends PluginPanel
 	private final AlertsPanel alertsPanel;
 	private final CustomPatternsPanel customPatternsPanel;
 	private final MusicPanel musicPanel;
+	private final UpdatesPanel updatesPanel;
 	private final Timer developerStatusTimer;
 
 	private volatile int intensityPercent;
@@ -106,6 +111,8 @@ public final class HapticScapePanel extends PluginPanel
 		Consumer<AlertCategory> testSpecificAlertAction,
 		Consumer<CustomPatternEntry> patternForgePreviewAction,
 		Consumer<MusicSyncSettings> musicSettingsAction,
+		UpdatePreferencesStore updatePreferencesStore,
+		UpdateCheckService updateCheckService,
 		Runnable stopAction)
 	{
 		super(false);
@@ -114,6 +121,8 @@ public final class HapticScapePanel extends PluginPanel
 		setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
 		statusLabel.setBorder(BorderFactory.createEmptyBorder(4, 2, 4, 2));
+		updatesButton.setMargin(new java.awt.Insets(2, 5, 2, 5));
+		updatesButton.setToolTipText("Configure HapticScape client updates");
 		developerStatusTimer = new Timer(1600, event ->
 			statusLabel.setText(latestConnectionSnapshot.getMessage()));
 		developerStatusTimer.setRepeats(false);
@@ -218,6 +227,7 @@ public final class HapticScapePanel extends PluginPanel
 			this::applyCustomPatternLibrary
 		);
 		musicPanel = new MusicPanel(config, configManager, musicSettingsAction);
+		updatesPanel = new UpdatesPanel(updatePreferencesStore, updateCheckService);
 
 		JTabbedPane tabs = new JTabbedPane(JTabbedPane.TOP, JTabbedPane.WRAP_TAB_LAYOUT);
 		tabs.putClientProperty(
@@ -258,12 +268,22 @@ public final class HapticScapePanel extends PluginPanel
 			musicPanel.disableMusicSync();
 			stopAction.run();
 		});
+		updatesButton.addActionListener(event -> JOptionPane.showMessageDialog(
+			this,
+			updatesPanel,
+			"HapticScape updates",
+			JOptionPane.PLAIN_MESSAGE));
 
-		JPanel buttons = new JPanel(new GridLayout(2, 2, 6, 6));
-		buttons.add(connectButton);
-		buttons.add(disconnectButton);
-		buttons.add(testButton);
-		buttons.add(stopButton);
+		JPanel primaryButtons = new JPanel(new GridLayout(2, 2, 6, 6));
+		primaryButtons.add(connectButton);
+		primaryButtons.add(disconnectButton);
+		primaryButtons.add(testButton);
+		primaryButtons.add(stopButton);
+
+		JPanel buttons = new JPanel();
+		buttons.setLayout(new BoxLayout(buttons, BoxLayout.Y_AXIS));
+		PanelUi.addVerticalComponent(buttons, primaryButtons);
+		PanelUi.addVerticalComponent(buttons, updatesButton);
 		add(buttons, BorderLayout.SOUTH);
 		applyState(ConnectionSnapshot.disconnected());
 	}

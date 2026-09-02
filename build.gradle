@@ -15,6 +15,8 @@ repositories {
 
 def runeLiteVersion = '1.12.37'
 def pluginMainClass = 'com.ashy0019.hapticscape.HapticScapeClient'
+def appVersion = providers.gradleProperty('appVersion').orElse('development')
+version = appVersion.get()
 def approvedRuntimeModules = [
 	'aopalliance:aopalliance',
 	'ch.qos.logback:logback-classic',
@@ -88,6 +90,12 @@ tasks.withType(JavaCompile).configureEach {
 	options.release.set(11)
 }
 
+tasks.named('processResources') {
+	filesMatching('hapticscape-version.properties') {
+		expand(appVersion: appVersion.get())
+	}
+}
+
 tasks.register('run', JavaExec) {
 	classpath = sourceSets.test.runtimeClasspath
 	mainClass = pluginMainClass
@@ -128,6 +136,7 @@ tasks.register('verifyClientJar') {
 		def clientJar = tasks.named('shadowJar').get().archiveFile.get().asFile
 		def forbiddenEntries = []
 		def hasLauncher = false
+		def hasVersionResource = false
 
 		zipTree(clientJar).visit { details ->
 			if (details.directory) {
@@ -138,6 +147,9 @@ tasks.register('verifyClientJar') {
 			if (path == 'com/ashy0019/hapticscape/HapticScapeClient.class') {
 				hasLauncher = true
 			}
+			if (path == 'hapticscape-version.properties') {
+				hasVersionResource = true
+			}
 			if (path.startsWith('org/junit/') ||
 				path.startsWith('org/hamcrest/') ||
 				(path.startsWith('com/ashy0019/hapticscape/') && path.endsWith('Test.class'))) {
@@ -147,6 +159,9 @@ tasks.register('verifyClientJar') {
 
 		if (!hasLauncher) {
 			throw new GradleException('The packaged client launcher class is missing.')
+		}
+		if (!hasVersionResource) {
+			throw new GradleException('The packaged client version metadata is missing.')
 		}
 		if (!forbiddenEntries.isEmpty()) {
 			throw new GradleException("Test code leaked into the packaged client: ${forbiddenEntries.join(', ')}")

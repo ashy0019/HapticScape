@@ -22,5 +22,21 @@ code-signed. Only run software obtained directly from a person you trust.
 
 ## Updating
 
-This package does not update itself. Download a newly built package after a
-RuneLite or Old School RuneScape update if the client stops working.
+Version 1.6.0 is the first package with built-in updates and must be installed
+manually. After that, the launcher can offer stable releases from the official
+HapticScape GitHub repository before RuneLite starts.
+
+Open **Updates** with the HapticScape panel's bottom controls to configure these
+choices independently:
+
+- **Install updates automatically**
+- **Notify me when updates are available**
+
+With both disabled, startup does not contact GitHub. **Check now** performs a
+manual check and, when a newer release exists, schedules it for the next
+HapticScape launch. Selecting **Skip this version** ignores only that release;
+a later version can still be offered.
+
+Do not move individual files out of the HapticScape folder. The updater needs
+the complete writable folder and cannot update an installation stored in a
+location that requires administrator permission.
