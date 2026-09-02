@@ -13,7 +13,7 @@ repositories {
 	mavenCentral()
 }
 
-def runeLiteVersion = '1.12.37'
+def runeLiteVersion = '1.12.38'
 def pluginMainClass = 'com.ashy0019.hapticscape.HapticScapeClient'
 def appVersion = providers.gradleProperty('appVersion').orElse('development')
 version = appVersion.get()
