@@ -140,7 +140,7 @@ public final class HapticPatternSelection
 		).findById(customPatternId).orElse(null);
 		return entry == null
 			? HapticPatternPreset.SINGLE.createPattern(maximumIntensity, totalDuration)
-			: entry.createPattern(maximumIntensity);
+			: entry.createPattern(1.0);
 	}
 
 	public String getDisplayName(CustomPatternLibrary customPatterns)

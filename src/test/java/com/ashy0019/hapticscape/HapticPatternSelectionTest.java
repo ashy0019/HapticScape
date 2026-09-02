@@ -43,10 +43,30 @@ public class HapticPatternSelectionTest
 			.sum();
 
 		assertEquals(6, pattern.getSteps().size());
-		assertEquals(0.5, pattern.getSteps().get(0).getIntensity(), 0.0001);
+		assertEquals(1.0, pattern.getSteps().get(0).getIntensity(), 0.0001);
 		assertEquals(0.0, pattern.getSteps().get(1).getIntensity(), 0.0001);
-		assertEquals(0.5, pattern.getSteps().get(2).getIntensity(), 0.0001);
+		assertEquals(1.0, pattern.getSteps().get(2).getIntensity(), 0.0001);
 		assertEquals(300, durationMillis);
+	}
+
+	@Test
+	public void customSelectionIgnoresProfileIntensityAndDuration()
+	{
+		CustomPatternLibrary library = CustomPatternLibrary.defaults()
+			.withPattern(1, new CustomPattern(80, 20), 150, 2);
+
+		HapticPattern pattern = HapticPatternSelection.custom(1).createPattern(
+			library,
+			0.10,
+			Duration.ofMillis(9_999)
+		);
+
+		assertEquals(0.80, pattern.getSteps().get(0).getIntensity(), 0.0001);
+		assertEquals(0.20, pattern.getSteps().get(1).getIntensity(), 0.0001);
+		assertEquals(300, pattern.getSteps().stream()
+			.map(HapticPattern.Step::getDuration)
+			.mapToLong(Duration::toMillis)
+			.sum());
 	}
 
 	@Test

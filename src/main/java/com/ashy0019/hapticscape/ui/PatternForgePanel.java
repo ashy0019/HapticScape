@@ -163,7 +163,7 @@ final class PatternForgePanel extends JPanel
 
 		JPanel saveStateRow = new JPanel(new BorderLayout());
 		playbackSummaryLabel.setToolTipText(
-			"Custom patterns save their timing; intensity follows the active trigger"
+			"Custom patterns save their own intensity, timing, and repetitions"
 		);
 		saveStateRow.add(playbackSummaryLabel, BorderLayout.WEST);
 		saveStateRow.add(saveStateLabel, BorderLayout.EAST);
