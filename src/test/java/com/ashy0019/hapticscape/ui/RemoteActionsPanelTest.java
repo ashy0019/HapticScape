@@ -77,7 +77,7 @@ public class RemoteActionsPanelTest
 		assertTrue(chatbox.isSelected());
 		assertEquals(42, intensity.getMaximum());
 		assertEquals(42, intensity.getValue());
-		assertEquals(900, ((Number) duration.getValue()).intValue());
+		assertEquals(500, ((Number) duration.getValue()).intValue());
 		assertEquals(900, ((Number) ((SpinnerNumberModel) duration.getModel())
 			.getMaximum()).intValue());
 		assertEquals(7, pattern.getItemCount());
@@ -97,7 +97,7 @@ public class RemoteActionsPanelTest
 
 		assertEquals("CUSTOM:2", dispatcher.pattern);
 		assertEquals(42, dispatcher.intensity);
-		assertEquals(900, dispatcher.duration);
+		assertEquals(500, dispatcher.duration);
 		assertEquals("Good job.", dispatcher.message);
 		assertFalse(dispatcher.desktop);
 		assertTrue(dispatcher.chatbox);
@@ -165,13 +165,17 @@ public class RemoteActionsPanelTest
 	{
 		RecordingDispatcher dispatcher = new RecordingDispatcher();
 		RemoteActionsPanel panel = onEdt(() -> new RemoteActionsPanel(dispatcher));
+		int[] statusHeights = new int[3];
 		onEdt(() ->
 		{
 			panel.apply(activeController(), RemotePermissions.defaults(), subjectSettings());
+			JTextArea status = component(panel, "remoteActionStatus", JTextArea.class);
+			statusHeights[0] = status.getPreferredSize().height;
 			JTextArea message = component(panel, "remoteMessage", JTextArea.class);
 			message.setText(repeat('x', 240));
 			assertEquals(200, message.getDocument().getLength());
 			component(panel, "remoteBuzz", AbstractButton.class).doClick();
+			statusHeights[1] = status.getPreferredSize().height;
 
 			RemoteActionAcknowledgement acknowledgement = new Gson().fromJson(
 				"{\"actionId\":\"haptic-1\",\"result\":\"LIMITED\","
@@ -180,16 +184,50 @@ public class RemoteActionsPanelTest
 				RemoteActionAcknowledgement.class
 			);
 			panel.showAcknowledgement(acknowledgement);
+			statusHeights[2] = status.getPreferredSize().height;
 			return null;
 		});
 
 		JTextArea status = component(panel, "remoteActionStatus", JTextArea.class);
 		assertTrue(status.getText().contains("Limited"));
 		assertTrue(status.getText().contains("42%, 900 ms"));
+		assertEquals(statusHeights[0], statusHeights[1]);
+		assertEquals(statusHeights[0], statusHeights[2]);
 		assertTrue(
 			"Preferred width was " + panel.getPreferredSize().width,
 			panel.getPreferredSize().width <= 202
 		);
+	}
+
+	@Test
+	public void remoteBuzzUsesIndependentNonZeroDefaults() throws Exception
+	{
+		RecordingDispatcher dispatcher = new RecordingDispatcher();
+		RemoteActionsPanel panel = onEdt(() -> new RemoteActionsPanel(dispatcher));
+		RemoteSettingsSnapshot zeroIntensitySettings = RemoteSettingsSnapshot.capture(
+			new HapticScapeConfig()
+			{
+				@Override
+				public int intensityPercent()
+				{
+					return 0;
+				}
+			}
+		);
+
+		onEdt(() ->
+		{
+			panel.apply(
+				activeController(),
+				RemotePermissions.defaults(),
+				zeroIntensitySettings
+			);
+			component(panel, "remoteBuzz", AbstractButton.class).doClick();
+			return null;
+		});
+
+		assertEquals(60, dispatcher.intensity);
+		assertEquals(500, dispatcher.duration);
 	}
 
 	private static RemoteSessionSnapshot activeController()

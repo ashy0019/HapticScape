@@ -624,7 +624,7 @@ public final class RemoteSessionManager implements AutoCloseable
 				|| snapshot.getState() == RemoteSessionState.WAITING_FOR_SETTINGS))
 		{
 			lastHelloNanos = now;
-			send(RemoteMessageType.HELLO, 0, role.name());
+			retryHandshake();
 		}
 		if (role == RemoteRole.CONTROLLER
 			&& controllerLockProposal != null
@@ -634,6 +634,41 @@ public final class RemoteSessionManager implements AutoCloseable
 			))
 		{
 			sendControllerLockProposal();
+		}
+	}
+
+	/** Retries every idempotent frame needed to finish the initial handshake. */
+	void retryHandshakeSafely()
+	{
+		try
+		{
+			synchronized (this)
+			{
+				if (!closed && relayClient != null && relayClient.isOpen())
+				{
+					retryHandshake();
+				}
+			}
+		}
+		catch (RuntimeException e)
+		{
+			LOG.log(Level.WARNING, "Remote handshake retry failed", e);
+		}
+	}
+
+	private void retryHandshake()
+	{
+		send(RemoteMessageType.HELLO, 0, role.name());
+		if (role == RemoteRole.CONTROLLER
+			&& snapshot.getState() == RemoteSessionState.WAITING_FOR_SETTINGS)
+		{
+			send(RemoteMessageType.SETTINGS_SEED_REQUEST, 0, "");
+		}
+		else if (role == RemoteRole.PARTICIPANT
+			&& snapshot.getState() == RemoteSessionState.WAITING_FOR_SETTINGS)
+		{
+			sendPermissions();
+			sendSettingsSeed();
 		}
 	}
 
@@ -697,12 +732,7 @@ public final class RemoteSessionManager implements AutoCloseable
 			publish(RemoteSessionState.WAITING_FOR_SETTINGS, "Sending local settings to controller");
 		}
 		lastHelloNanos = 0;
-		send(RemoteMessageType.HELLO, 0, role.name());
-		if (role == RemoteRole.PARTICIPANT)
-		{
-			sendPermissions();
-			sendSettingsSeed();
-		}
+		retryHandshake();
 	}
 
 	private synchronized void handleEncryptedMessage(String encrypted)
@@ -734,14 +764,25 @@ public final class RemoteSessionManager implements AutoCloseable
 			case HELLO:
 				if (role == RemoteRole.CONTROLLER)
 				{
-					publish(
-						RemoteSessionState.WAITING_FOR_SETTINGS,
-						"Participant connected. Loading their settings..."
-					);
+					if (controllerSettings == null)
+					{
+						publish(
+							RemoteSessionState.WAITING_FOR_SETTINGS,
+							"Participant connected. Loading their settings..."
+						);
+					}
+					send(RemoteMessageType.SETTINGS_SEED_REQUEST, 0, "");
 				}
 				else if (role == RemoteRole.PARTICIPANT)
 				{
 					send(RemoteMessageType.HELLO, 0, role.name());
+					sendPermissions();
+					sendSettingsSeed();
+				}
+				break;
+			case SETTINGS_SEED_REQUEST:
+				if (role == RemoteRole.PARTICIPANT)
+				{
 					sendPermissions();
 					sendSettingsSeed();
 				}
@@ -809,8 +850,19 @@ public final class RemoteSessionManager implements AutoCloseable
 			case SESSION_RESUMED:
 				if (role == RemoteRole.CONTROLLER)
 				{
-					publish(RemoteSessionState.ACTIVE, "Participant resumed remote control");
-					sendSettings(true);
+					if (controllerSettings == null)
+					{
+						publish(
+							RemoteSessionState.WAITING_FOR_SETTINGS,
+							"Participant resumed. Loading their settings..."
+						);
+						send(RemoteMessageType.SETTINGS_SEED_REQUEST, 0, "");
+					}
+					else
+					{
+						publish(RemoteSessionState.ACTIVE, "Participant resumed remote control");
+						sendSettings(true);
+					}
 				}
 				break;
 			case SESSION_END:
@@ -887,8 +939,19 @@ public final class RemoteSessionManager implements AutoCloseable
 
 	private void handleSettingsSeed(RemoteProtocolMessage message)
 	{
-		if (role != RemoteRole.CONTROLLER || controllerSettings != null)
+		if (role != RemoteRole.CONTROLLER)
 		{
+			return;
+		}
+		if (controllerSettings != null)
+		{
+			// The first acknowledgement may have been lost. Acknowledge duplicate
+			// seeds so the participant can leave its guarded waiting state.
+			if (snapshot.getState() == RemoteSessionState.WAITING_FOR_SETTINGS)
+			{
+				publish(RemoteSessionState.ACTIVE, "Participant settings loaded");
+			}
+			send(RemoteMessageType.SETTINGS_SEED_ACK, 0, "");
 			return;
 		}
 		try

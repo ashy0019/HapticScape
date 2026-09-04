@@ -66,6 +66,17 @@ public class HapticArbiterTest
 	}
 
 	@Test
+	public void deliberateRemoteActionInterruptsOrdinaryDirectFeedback()
+	{
+		HapticRequest directMessage = request(HapticEventType.DIRECT_MESSAGE, 0.5);
+		HapticRequest remoteAction = request(HapticEventType.REMOTE_ACTION, 0.6);
+
+		assertEquals(HapticArbiter.Decision.START, arbiter.submit(directMessage));
+		assertEquals(HapticArbiter.Decision.INTERRUPT, arbiter.submit(remoteAction));
+		assertTrue(arbiter.isActive(remoteAction));
+	}
+
+	@Test
 	public void equivalentPendingRequestsCoalesceToLatest()
 	{
 		HapticRequest ceremony = request(HapticEventType.LEVEL_99, 0.7);

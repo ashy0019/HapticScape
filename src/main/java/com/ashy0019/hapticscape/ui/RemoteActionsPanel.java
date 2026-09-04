@@ -38,8 +38,9 @@ import javax.swing.text.DocumentFilter;
 /** Compact controller UI for immediate, consent-scoped remote actions. */
 final class RemoteActionsPanel extends JPanel
 {
-	private static final int DEFAULT_INTENSITY_PERCENT = 50;
+	private static final int DEFAULT_INTENSITY_PERCENT = 60;
 	private static final int DEFAULT_DURATION_MILLIS = 500;
+	private static final int ACTION_STATUS_HEIGHT = 60;
 
 	private final ActionDispatcher dispatcher;
 	private CustomPatternLibrary customPatterns = CustomPatternLibrary.defaults();
@@ -191,6 +192,7 @@ final class RemoteActionsPanel extends JPanel
 
 		actionStatus.setName("remoteActionStatus");
 		actionStatus.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
+		setActionStatus("Ready for remote actions");
 		PanelUi.addVerticalComponent(this, actionStatus);
 
 		intensity.addChangeListener(event ->
@@ -242,7 +244,7 @@ final class RemoteActionsPanel extends JPanel
 			controllerValuesInitialized = false;
 			lastRequestedActionId = null;
 			message.setText("");
-			actionStatus.setPlainText("Ready for remote actions");
+			setActionStatus("Ready for remote actions");
 		}
 
 		if (controllerSession && settings != null)
@@ -257,11 +259,11 @@ final class RemoteActionsPanel extends JPanel
 			if (!controllerValuesInitialized)
 			{
 				intensity.setValue(Math.min(
-					global.getIntensityPercent(),
+					DEFAULT_INTENSITY_PERCENT,
 					permissions.getMaximumIntensityPercent()
 				));
 				duration.setValue(Math.min(
-					global.getDurationMillis(),
+					DEFAULT_DURATION_MILLIS,
 					permissions.getMaximumDurationMillis()
 				));
 				controllerValuesInitialized = true;
@@ -287,7 +289,7 @@ final class RemoteActionsPanel extends JPanel
 			details += " (" + acknowledgement.getAppliedIntensityPercent()
 				+ "%, " + acknowledgement.getAppliedDurationMillis() + " ms)";
 		}
-		actionStatus.setPlainText(
+		setActionStatus(
 			resultName(acknowledgement) + ": " + details
 		);
 	}
@@ -329,7 +331,9 @@ final class RemoteActionsPanel extends JPanel
 	{
 		boolean active = session.getRole() == RemoteRole.CONTROLLER
 			&& session.getState() == RemoteSessionState.ACTIVE;
-		boolean mayHaptic = active && permissions.isHapticsAllowed();
+		boolean mayHaptic = active
+			&& permissions.isHapticsAllowed()
+			&& permissions.getMaximumIntensityPercent() > 0;
 		boolean mayClick = active && permissions.isClicksAllowed();
 		boolean mayDesktop = active && permissions.isDesktopNotificationsAllowed();
 		boolean mayChatbox = active && permissions.isLocalChatboxMessagesAllowed();
@@ -338,11 +342,12 @@ final class RemoteActionsPanel extends JPanel
 		intensity.setEnabled(mayHaptic);
 		duration.setEnabled(mayHaptic);
 		buzzButton.setEnabled(mayHaptic);
-		buzzButton.setToolTipText(permissionTooltip(
-			active,
-			permissions.isHapticsAllowed(),
-			"haptic actions"
-		));
+		buzzButton.setToolTipText(
+			permissions.isHapticsAllowed()
+				&& permissions.getMaximumIntensityPercent() == 0
+				? "The participant's maximum remote intensity is 0%"
+				: permissionTooltip(active, permissions.isHapticsAllowed(), "haptic actions")
+		);
 
 		clickButton.setEnabled(mayClick);
 		clickButton.setToolTipText(permissionTooltip(
@@ -427,21 +432,29 @@ final class RemoteActionsPanel extends JPanel
 	{
 		try
 		{
-			actionStatus.setPlainText(pendingMessage);
+			setActionStatus(pendingMessage);
 			lastRequestedActionId = sender.send();
-			actionStatus.setPlainText("Sent; awaiting participant acknowledgement");
+			setActionStatus("Sent; awaiting participant acknowledgement");
 			return true;
 		}
 		catch (RuntimeException failure)
 		{
 			lastRequestedActionId = null;
-			actionStatus.setPlainText(
+			setActionStatus(
 				"Not sent: " + (failure.getMessage() == null
 					? "Remote action failed"
 					: failure.getMessage())
 			);
 			return false;
 		}
+	}
+
+	private void setActionStatus(String text)
+	{
+		actionStatus.setPlainText(text);
+		actionStatus.setPreferredSize(new Dimension(180, ACTION_STATUS_HEIGHT));
+		actionStatus.setMinimumSize(new Dimension(0, ACTION_STATUS_HEIGHT));
+		actionStatus.setMaximumSize(new Dimension(Integer.MAX_VALUE, ACTION_STATUS_HEIGHT));
 	}
 
 	private static String resultName(RemoteActionAcknowledgement acknowledgement)

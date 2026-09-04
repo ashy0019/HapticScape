@@ -136,6 +136,84 @@ public class RemoteActionProtocolTest
 		}
 	}
 
+	@Test
+	public void droppedInitialParticipantFramesAreRecoveredWithoutEmergencyPause()
+	{
+		Gson gson = new Gson();
+		TestRelay relay = new TestRelay();
+		relay.dropMessagesFrom(RemoteRole.PARTICIPANT);
+
+		try (RemoteSessionManager controller = manager(
+			gson,
+			new MutableConfig(20),
+			new InMemoryRemotePermissionsStore(RemotePermissions.defaults()),
+			RemoteActionExecutor.NO_OP,
+			relay
+		);
+			RemoteSessionManager participant = manager(
+				gson,
+				new MutableConfig(60),
+				new InMemoryRemotePermissionsStore(RemotePermissions.defaults()),
+				RemoteActionExecutor.NO_OP,
+				relay
+			))
+		{
+			RemoteInvitation invitation = controller.startController("wss://relay.example/relay");
+			participant.joinParticipant(invitation.encode());
+
+			assertEquals(RemoteSessionState.WAITING_FOR_PEER, controller.getSnapshot().getState());
+			assertEquals(
+				RemoteSessionState.WAITING_FOR_SETTINGS,
+				participant.getSnapshot().getState()
+			);
+
+			relay.allowMessagesFrom(RemoteRole.PARTICIPANT);
+			participant.retryHandshakeSafely();
+
+			assertEquals(RemoteSessionState.ACTIVE, controller.getSnapshot().getState());
+			assertEquals(RemoteSessionState.ACTIVE, participant.getSnapshot().getState());
+		}
+	}
+
+	@Test
+	public void duplicateSeedRecoversDroppedAcknowledgement()
+	{
+		Gson gson = new Gson();
+		TestRelay relay = new TestRelay();
+
+		try (RemoteSessionManager controller = manager(
+			gson,
+			new MutableConfig(20),
+			new InMemoryRemotePermissionsStore(RemotePermissions.defaults()),
+			RemoteActionExecutor.NO_OP,
+			relay
+		);
+			RemoteSessionManager participant = manager(
+				gson,
+				new MutableConfig(60),
+				new InMemoryRemotePermissionsStore(RemotePermissions.defaults()),
+				RemoteActionExecutor.NO_OP,
+				relay
+			))
+		{
+			relay.dropMessagesFrom(RemoteRole.CONTROLLER);
+			RemoteInvitation invitation = controller.startController("wss://relay.example/relay");
+			participant.joinParticipant(invitation.encode());
+
+			assertEquals(RemoteSessionState.ACTIVE, controller.getSnapshot().getState());
+			assertEquals(
+				RemoteSessionState.WAITING_FOR_SETTINGS,
+				participant.getSnapshot().getState()
+			);
+
+			relay.allowMessagesFrom(RemoteRole.CONTROLLER);
+			participant.retryHandshakeSafely();
+
+			assertEquals(RemoteSessionState.ACTIVE, controller.getSnapshot().getState());
+			assertEquals(RemoteSessionState.ACTIVE, participant.getSnapshot().getState());
+		}
+	}
+
 	@Test(expected = IllegalStateException.class)
 	public void participantCannotSendControllerActions()
 	{
@@ -258,6 +336,7 @@ public class RemoteActionProtocolTest
 	{
 		private final Map<RemoteRole, TestConnection> peers = new EnumMap<>(RemoteRole.class);
 		private final List<String> wireMessages = new ArrayList<>();
+		private final Map<RemoteRole, Boolean> droppedRoles = new EnumMap<>(RemoteRole.class);
 
 		@Override
 		public synchronized RemoteTransport create(RemoteTransport.Listener listener)
@@ -277,6 +356,10 @@ public class RemoteActionProtocolTest
 		private synchronized boolean send(TestConnection sender, String message)
 		{
 			wireMessages.add(message);
+			if (Boolean.TRUE.equals(droppedRoles.get(sender.role)))
+			{
+				return sender.open;
+			}
 			for (TestConnection peer : new ArrayList<>(peers.values()))
 			{
 				if (peer != sender && peer.open)
@@ -285,6 +368,16 @@ public class RemoteActionProtocolTest
 				}
 			}
 			return sender.open;
+		}
+
+		private synchronized void dropMessagesFrom(RemoteRole role)
+		{
+			droppedRoles.put(role, true);
+		}
+
+		private synchronized void allowMessagesFrom(RemoteRole role)
+		{
+			droppedRoles.remove(role);
 		}
 
 		private synchronized boolean containsPlaintext(String value)
