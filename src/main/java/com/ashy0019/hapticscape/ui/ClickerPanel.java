@@ -15,11 +15,10 @@ import javax.swing.JPanel;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
 import javax.swing.SpinnerNumberModel;
-import net.runelite.client.config.ConfigManager;
 
 final class ClickerPanel extends JPanel
 {
-	private final ConfigManager configManager;
+	private final SettingsChangeSink settingsSink;
 	private final Consumer<ClickerSettings> settingsListener;
 	private final JCheckBox enabledCheckBox = new JCheckBox("Enable clicker");
 	private final JSlider volumeSlider = new JSlider(
@@ -42,16 +41,17 @@ final class ClickerPanel extends JPanel
 	private final ClickerPhraseRulesPanel phraseRulesPanel;
 	private boolean updating;
 	private boolean remoteReadOnly;
+	private boolean previewAllowed = true;
 
 	ClickerPanel(
 		HapticScapeConfig config,
-		ConfigManager configManager,
+		SettingsChangeSink settingsSink,
 		Consumer<ClickerSettings> settingsListener,
 		Runnable testAction)
 	{
-		this.configManager = configManager;
+		this.settingsSink = settingsSink;
 		this.settingsListener = settingsListener;
-		phraseRulesPanel = new ClickerPhraseRulesPanel(config, configManager);
+		phraseRulesPanel = new ClickerPhraseRulesPanel(config, settingsSink);
 		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
 		setBorder(BorderFactory.createEmptyBorder(5, 4, 4, 4));
 
@@ -155,6 +155,12 @@ final class ClickerPanel extends JPanel
 		refreshEnabledState();
 	}
 
+	void setPreviewAllowed(boolean previewAllowed)
+	{
+		this.previewAllowed = previewAllowed;
+		refreshEnabledState();
+	}
+
 	ClickerSettings getSettings()
 	{
 		return settings;
@@ -169,7 +175,9 @@ final class ClickerPanel extends JPanel
 	ClickerPhraseRules getPhraseRules()
 	{
 		return phraseRulesPanel.getRules();
-	}	private void configureListeners(Runnable testAction)
+	}
+
+	private void configureListeners(Runnable testAction)
 	{
 		enabledCheckBox.addActionListener(event ->
 		{
@@ -265,7 +273,9 @@ final class ClickerPanel extends JPanel
 		level99CheckBox.setEnabled(editable && enabled);
 		phraseRulesPanel.setClickerEnabled(enabled);
 		phraseRulesPanel.setRemoteReadOnly(remoteReadOnly);
-		testButton.setEnabled(editable && enabled && volumeSlider.getValue() > 0);
+		testButton.setEnabled(
+			previewAllowed && editable && enabled && volumeSlider.getValue() > 0
+		);
 	}
 
 	private void fireSettings()
@@ -290,7 +300,7 @@ final class ClickerPanel extends JPanel
 
 	private void persist(String key, Object value)
 	{
-		configManager.setConfiguration(HapticScapeConfig.GROUP, key, value);
+		settingsSink.set(key, value);
 	}
 
 	private static JPanel row(String name, java.awt.Component control)

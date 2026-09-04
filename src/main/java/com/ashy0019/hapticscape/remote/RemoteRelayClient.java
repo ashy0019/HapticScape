@@ -11,31 +11,22 @@ import okhttp3.Response;
 import okhttp3.WebSocket;
 import okhttp3.WebSocketListener;
 
-final class RemoteRelayClient implements AutoCloseable
+final class RemoteRelayClient implements RemoteTransport
 {
-	interface Listener
-	{
-		void onOpen();
-
-		void onMessage(String message);
-
-		void onClosed(String reason);
-
-		void onFailure(String message, Throwable error);
-	}
-
 	private final OkHttpClient httpClient;
-	private final Listener listener;
+	private final RemoteTransport.Listener listener;
 	private final AtomicBoolean manualClose = new AtomicBoolean();
+	private final AtomicBoolean open = new AtomicBoolean();
 	private volatile WebSocket socket;
 
-	RemoteRelayClient(OkHttpClient httpClient, Listener listener)
+	RemoteRelayClient(OkHttpClient httpClient, RemoteTransport.Listener listener)
 	{
 		this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
 		this.listener = Objects.requireNonNull(listener, "listener");
 	}
 
-	synchronized void connect(String relayUrl, String roomId, RemoteRole role)
+	@Override
+	public synchronized void connect(String relayUrl, String roomId, RemoteRole role)
 	{
 		if (socket != null)
 		{
@@ -52,21 +43,24 @@ final class RemoteRelayClient implements AutoCloseable
 		socket = httpClient.newWebSocket(request, new SocketListener());
 	}
 
-	boolean send(String message)
+	@Override
+	public boolean send(String message)
 	{
 		WebSocket current = socket;
-		return current != null && current.send(message);
+		return open.get() && current != null && current.send(message);
 	}
 
-	boolean isOpen()
+	@Override
+	public boolean isOpen()
 	{
-		return socket != null;
+		return open.get();
 	}
 
 	@Override
 	public synchronized void close()
 	{
 		manualClose.set(true);
+		open.set(false);
 		WebSocket current = socket;
 		socket = null;
 		if (current != null && !current.close(1000, "HapticScape remote session ended"))
@@ -131,6 +125,7 @@ final class RemoteRelayClient implements AutoCloseable
 		@Override
 		public void onOpen(WebSocket webSocket, Response response)
 		{
+			open.set(true);
 			listener.onOpen();
 		}
 
@@ -143,6 +138,7 @@ final class RemoteRelayClient implements AutoCloseable
 		@Override
 		public void onClosed(WebSocket webSocket, int code, String reason)
 		{
+			open.set(false);
 			socket = null;
 			if (!manualClose.get())
 			{
@@ -153,6 +149,7 @@ final class RemoteRelayClient implements AutoCloseable
 		@Override
 		public void onFailure(WebSocket webSocket, Throwable error, Response response)
 		{
+			open.set(false);
 			socket = null;
 			if (!manualClose.get())
 			{

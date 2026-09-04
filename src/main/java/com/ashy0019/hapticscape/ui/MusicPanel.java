@@ -15,11 +15,10 @@ import javax.swing.JPanel;
 import javax.swing.JProgressBar;
 import javax.swing.JSlider;
 import javax.swing.SwingUtilities;
-import net.runelite.client.config.ConfigManager;
 
 final class MusicPanel extends JPanel
 {
-	private final ConfigManager configManager;
+	private final SettingsChangeSink settingsSink;
 	private final Consumer<MusicSyncSettings> settingsListener;
 	private final JCheckBox enabledCheckBox = new JCheckBox("Sync to system audio");
 	private final JComboBox<MusicResponse> responseComboBox =
@@ -37,10 +36,10 @@ final class MusicPanel extends JPanel
 
 	MusicPanel(
 		HapticScapeConfig config,
-		ConfigManager configManager,
+		SettingsChangeSink settingsSink,
 		Consumer<MusicSyncSettings> settingsListener)
 	{
-		this.configManager = configManager;
+		this.settingsSink = settingsSink;
 		this.settingsListener = settingsListener;
 		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
 		setBorder(BorderFactory.createEmptyBorder(5, 4, 4, 4));
@@ -256,7 +255,7 @@ final class MusicPanel extends JPanel
 
 	private void persist(String key, Object value)
 	{
-		configManager.setConfiguration(HapticScapeConfig.GROUP, key, value);
+		settingsSink.set(key, value);
 	}
 
 	private static MusicResponse parseResponse(String value)

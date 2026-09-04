@@ -23,11 +23,10 @@ import javax.swing.JSlider;
 import javax.swing.JSpinner;
 import javax.swing.SpinnerNumberModel;
 import net.runelite.api.Skill;
-import net.runelite.client.config.ConfigManager;
 
 final class ProfilesPanel extends JPanel
 {
-	private final ConfigManager configManager;
+	private final SettingsChangeSink settingsSink;
 	private final Supplier<XpFeedbackSettings> globalSettingsSupplier;
 	private final Supplier<CustomPatternLibrary> customPatternsSupplier;
 	private final JComboBox<Skill> skillComboBox;
@@ -45,16 +44,17 @@ final class ProfilesPanel extends JPanel
 	private boolean updatingPatternChoices;
 	private boolean connected;
 	private boolean remoteReadOnly;
+	private boolean previewAllowed = true;
 
 	ProfilesPanel(
 		SkillFeedbackProfiles profiles,
-		ConfigManager configManager,
+		SettingsChangeSink settingsSink,
 		Supplier<XpFeedbackSettings> globalSettingsSupplier,
 		Supplier<CustomPatternLibrary> customPatternsSupplier,
 		Runnable testAction)
 	{
 		this.profiles = profiles;
-		this.configManager = configManager;
+		this.settingsSink = settingsSink;
 		this.globalSettingsSupplier = globalSettingsSupplier;
 		this.customPatternsSupplier = customPatternsSupplier;
 		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
@@ -209,6 +209,12 @@ final class ProfilesPanel extends JPanel
 		updateControlState();
 	}
 
+	void setPreviewAllowed(boolean previewAllowed)
+	{
+		this.previewAllowed = previewAllowed;
+		updateControlState();
+	}
+
 	void refreshInheritedProfile()
 	{
 		if (selectedSkill != null && !profiles.getOverride(selectedSkill).isPresent())
@@ -336,13 +342,12 @@ final class ProfilesPanel extends JPanel
 		intensitySlider.setEnabled(editable && overridden && externallyScaled);
 		intensityValueLabel.setEnabled(editable && overridden && externallyScaled);
 		durationSpinner.setEnabled(editable && overridden && externallyScaled);
-		testButton.setEnabled(editable && connected);
+		testButton.setEnabled(editable && connected && previewAllowed);
 	}
 
 	private void persist()
 	{
-		configManager.setConfiguration(
-			HapticScapeConfig.GROUP,
+		settingsSink.set(
 			HapticScapeConfig.SKILL_FEEDBACK_PROFILES_KEY,
 			profiles.toConfigValue()
 		);

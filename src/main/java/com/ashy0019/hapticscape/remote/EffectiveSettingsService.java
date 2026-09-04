@@ -8,7 +8,8 @@ import java.util.Objects;
  *
  * <p>Local mode reads the normal RuneLite configuration. Participant Remote
  * Control mode atomically substitutes the most recent validated remote
- * snapshot without modifying the participant's saved local configuration.</p>
+ * snapshot. Accepted remote settings are also persisted by the session's
+ * settings store, so they remain the participant's local settings afterward.</p>
  */
 public final class EffectiveSettingsService
 {

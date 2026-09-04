@@ -16,6 +16,11 @@ import com.ashy0019.hapticscape.clicker.ClickerSettings;
 import com.ashy0019.hapticscape.clicker.ClickerXpSettings;
 import com.ashy0019.hapticscape.music.MusicResponse;
 import com.ashy0019.hapticscape.music.MusicSyncSettings;
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 import net.runelite.api.Skill;
 
@@ -108,6 +113,120 @@ public final class RemoteSettingsSnapshot
 	public static RemoteSettingsSnapshot capture(HapticScapeConfig config)
 	{
 		return new RemoteSettingsSnapshot(Objects.requireNonNull(config, "config"));
+	}
+
+	RemoteSettingsSnapshot withConfigurationValue(Gson gson, String key, Object value)
+	{
+		Objects.requireNonNull(gson, "gson");
+		if (!toConfigurationMap().containsKey(key))
+		{
+			throw new IllegalArgumentException("Setting is not remotely controllable: " + key);
+		}
+		JsonObject json = gson.toJsonTree(this).getAsJsonObject();
+		json.add(key, gson.toJsonTree(value));
+		RemoteSettingsSnapshot updated = gson.fromJson(json, RemoteSettingsSnapshot.class);
+		updated.validate();
+		return updated;
+	}
+
+	Map<String, Object> toConfigurationMap()
+	{
+		CustomPatternLibrary patterns = getCustomPatterns();
+		XpFeedbackSettings globalXp = getGlobalXpFeedbackSettings();
+		NotificationFeedbackSettings notifications = getNotificationFeedbackSettings();
+		MusicSyncSettings music = getMusicSyncSettings();
+		ClickerSettings clicker = getClickerSettings();
+		ClickerXpSettings clickerXp = getClickerXpSettings();
+		Map<String, Object> values = new LinkedHashMap<>();
+		values.put(HapticScapeConfig.MINIMUM_XP_GAIN_KEY, globalXp.getMinimumXpGain());
+		values.put(HapticScapeConfig.INTENSITY_PERCENT_KEY, globalXp.getIntensityPercent());
+		values.put(HapticScapeConfig.PULSE_DURATION_MILLIS_KEY, globalXp.getDurationMillis());
+		values.put(
+			HapticScapeConfig.PATTERN_PRESET_KEY,
+			globalXp.getPatternSelection().toConfigValue()
+		);
+		values.put(
+			HapticScapeConfig.DISABLED_SKILLS_KEY,
+			getHapticSkillSelection().toConfigValue()
+		);
+		values.put(HapticScapeConfig.LEVEL_UP_FEEDBACK_ENABLED_KEY, levelUpFeedbackEnabled);
+		values.put(
+			HapticScapeConfig.LEVEL_UP_PATTERN_PRESET_KEY,
+			getLevelUpPatternPreset().toConfigValue()
+		);
+		values.put(HapticScapeConfig.MILESTONE_FEEDBACK_ENABLED_KEY, milestoneFeedbackEnabled);
+		values.put(
+			HapticScapeConfig.MILESTONE_PATTERN_PRESET_KEY,
+			getMilestonePatternPreset().toConfigValue()
+		);
+		values.put(HapticScapeConfig.LEVEL_99_CELEBRATION_ENABLED_KEY, level99CelebrationEnabled);
+		values.put(
+			HapticScapeConfig.SKILL_FEEDBACK_PROFILES_KEY,
+			getSkillFeedbackProfiles().toConfigValue()
+		);
+		values.put(HapticScapeConfig.NOTIFICATION_FEEDBACK_ENABLED_KEY, notifications.isEnabled());
+		values.put(
+			HapticScapeConfig.NOTIFICATION_INTENSITY_PERCENT_KEY,
+			notifications.getIntensityPercent()
+		);
+		values.put(
+			HapticScapeConfig.NOTIFICATION_PATTERN_PRESET_KEY,
+			notifications.getPatternSelection().toConfigValue()
+		);
+		values.put(
+			HapticScapeConfig.NOTIFICATION_DURATION_MILLIS_KEY,
+			notifications.getDurationMillis()
+		);
+		values.put(
+			HapticScapeConfig.NOTIFICATION_RESPECT_FOCUS_KEY,
+			notifications.isRespectRuneLiteFocus()
+		);
+		values.put(HapticScapeConfig.ALERT_PROFILES_KEY, getAlertProfiles().toConfigValue());
+		values.put(
+			HapticScapeConfig.ALERT_TRIGGER_SETTINGS_KEY,
+			getAlertTriggerSettings().toConfigValue()
+		);
+		values.put(HapticScapeConfig.CUSTOM_PATTERNS_KEY, patterns.toConfigValue());
+		values.put(HapticScapeConfig.MUSIC_SYNC_ENABLED_KEY, music.isEnabled());
+		values.put(HapticScapeConfig.MUSIC_RESPONSE_KEY, music.getResponse().name());
+		values.put(
+			HapticScapeConfig.MUSIC_SENSITIVITY_PERCENT_KEY,
+			music.getSensitivityPercent()
+		);
+		values.put(
+			HapticScapeConfig.MUSIC_MINIMUM_INTENSITY_PERCENT_KEY,
+			music.getMinimumIntensityPercent()
+		);
+		values.put(
+			HapticScapeConfig.MUSIC_MAXIMUM_INTENSITY_PERCENT_KEY,
+			music.getMaximumIntensityPercent()
+		);
+		values.put(HapticScapeConfig.CLICKER_ENABLED_KEY, clicker.isEnabled());
+		values.put(HapticScapeConfig.CLICKER_VOLUME_PERCENT_KEY, clicker.getVolumePercent());
+		values.put(
+			HapticScapeConfig.CLICKER_MINIMUM_XP_GAIN_KEY,
+			clickerXp.getMinimumXpGain()
+		);
+		values.put(
+			HapticScapeConfig.CLICKER_DISABLED_SKILLS_KEY,
+			getClickSkillSelection().toConfigValue()
+		);
+		values.put(HapticScapeConfig.CLICKER_LEVEL_UP_ENABLED_KEY, clickerXp.isLevelUpEnabled());
+		values.put(
+			HapticScapeConfig.CLICKER_MILESTONE_ENABLED_KEY,
+			clickerXp.isMilestoneEnabled()
+		);
+		values.put(HapticScapeConfig.CLICKER_LEVEL_99_ENABLED_KEY, clickerXp.isLevel99Enabled());
+		values.put(HapticScapeConfig.CLICKER_GENERIC_NOTIFICATION_ENABLED_KEY, clickerGenericNotificationEnabled);
+		values.put(
+			HapticScapeConfig.CLICKER_ALERT_SETTINGS_KEY,
+			getClickerAlertSettings().toConfigValue()
+		);
+		values.put(
+			HapticScapeConfig.CLICKER_PHRASE_RULES_KEY,
+			getClickerPhraseRules().toConfigValue()
+		);
+		return Collections.unmodifiableMap(values);
 	}
 
 	public void validate()

@@ -1,6 +1,5 @@
 package com.ashy0019.hapticscape.remote;
 
-import com.ashy0019.hapticscape.HapticScapeConfig;
 import com.google.gson.Gson;
 import java.security.SecureRandom;
 import java.util.Base64;
@@ -30,21 +29,22 @@ public final class RemoteSessionManager implements AutoCloseable
 	private static final long HELLO_INTERVAL_MILLIS = 1_000;
 	private static final Base64.Encoder ENCODER = Base64.getUrlEncoder().withoutPadding();
 
-	private final OkHttpClient httpClient;
 	private final Gson gson;
-	private final HapticScapeConfig config;
+	private final RemoteSettingsStore settingsStore;
 	private final EffectiveSettingsService effectiveSettings;
+	private final RemoteTransportFactory transportFactory;
 	private final SecureRandom random = new SecureRandom();
 	private final ScheduledExecutorService scheduler;
 	private final CopyOnWriteArrayList<RemoteSessionListener> listeners =
 		new CopyOnWriteArrayList<>();
 
 	private volatile RemoteSessionSnapshot snapshot = RemoteSessionSnapshot.local();
-	private volatile RemoteRelayClient relayClient;
+	private volatile RemoteTransport relayClient;
 	private volatile RemoteRole role = RemoteRole.NONE;
 	private volatile RemoteCrypto crypto;
 	private volatile RemoteInvitation invitation;
 	private volatile RemoteSettingsSnapshot lastSentSettings;
+	private volatile RemoteSettingsSnapshot controllerSettings;
 	private volatile long lastHelloNanos;
 	private volatile long nextSettingsVersion;
 	private volatile long lastReceivedSettingsVersion;
@@ -55,13 +55,30 @@ public final class RemoteSessionManager implements AutoCloseable
 	public RemoteSessionManager(
 		OkHttpClient httpClient,
 		Gson gson,
-		HapticScapeConfig config,
+		RemoteSettingsStore settingsStore,
 		EffectiveSettingsService effectiveSettings)
 	{
-		this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
+		this(
+			gson,
+			settingsStore,
+			effectiveSettings,
+			listener -> new RemoteRelayClient(
+				Objects.requireNonNull(httpClient, "httpClient"),
+				listener
+			)
+		);
+	}
+
+	RemoteSessionManager(
+		Gson gson,
+		RemoteSettingsStore settingsStore,
+		EffectiveSettingsService effectiveSettings,
+		RemoteTransportFactory transportFactory)
+	{
 		this.gson = Objects.requireNonNull(gson, "gson");
-		this.config = Objects.requireNonNull(config, "config");
+		this.settingsStore = Objects.requireNonNull(settingsStore, "settingsStore");
 		this.effectiveSettings = Objects.requireNonNull(effectiveSettings, "effectiveSettings");
+		this.transportFactory = Objects.requireNonNull(transportFactory, "transportFactory");
 		this.scheduler = Executors.newSingleThreadScheduledExecutor(task ->
 		{
 			Thread thread = new Thread(task, "hapticscape-remote");
@@ -99,17 +116,16 @@ public final class RemoteSessionManager implements AutoCloseable
 		listeners.remove(listener);
 	}
 
-	/**
-	 * Requests an immediate controller settings synchronization after a local
-	 * HapticScape config change. A very small debounce collapses slider drags,
-	 * profile loads, and other bursts into one authoritative snapshot.
-	 */
-	public synchronized void onLocalSettingsChanged()
+	public synchronized boolean updateControllerSetting(String key, Object value)
 	{
-		if (!canSendControllerSettings())
+		if (role != RemoteRole.CONTROLLER
+			|| controllerSettings == null
+			|| (snapshot.getState() != RemoteSessionState.ACTIVE
+				&& snapshot.getState() != RemoteSessionState.PEER_EMERGENCY_PAUSED))
 		{
-			return;
+			return false;
 		}
+		controllerSettings = controllerSettings.withConfigurationValue(gson, key, value);
 
 		if (pendingSettingsSync != null)
 		{
@@ -120,6 +136,14 @@ public final class RemoteSessionManager implements AutoCloseable
 			SETTINGS_DEBOUNCE_MILLIS,
 			TimeUnit.MILLISECONDS
 		);
+		publish(snapshot.getState(), "Saving changes on participant...");
+		return true;
+	}
+
+	public boolean isControllerSession()
+	{
+		return role == RemoteRole.CONTROLLER
+			&& snapshot.getState() != RemoteSessionState.LOCAL;
 	}
 
 	public synchronized RemoteInvitation startController(String relayUrl)
@@ -166,7 +190,7 @@ public final class RemoteSessionManager implements AutoCloseable
 		{
 			return;
 		}
-		RemoteRelayClient relay = relayClient;
+		RemoteTransport relay = relayClient;
 		if (relay == null || !relay.isOpen())
 		{
 			publish(
@@ -208,6 +232,7 @@ public final class RemoteSessionManager implements AutoCloseable
 		invitation = nextInvitation;
 		crypto = new RemoteCrypto(nextInvitation.getKey());
 		lastSentSettings = null;
+		controllerSettings = null;
 		lastHelloNanos = 0;
 		nextSettingsVersion = 0;
 		lastReceivedSettingsVersion = 0;
@@ -218,7 +243,7 @@ public final class RemoteSessionManager implements AutoCloseable
 		}
 		publish(RemoteSessionState.CONNECTING, "Connecting to remote relay");
 
-		RemoteRelayClient client = new RemoteRelayClient(httpClient, new RelayListener());
+		RemoteTransport client = transportFactory.create(new RelayListener());
 		relayClient = client;
 		client.connect(nextInvitation.getRelayUrl(), nextInvitation.getRoomId(), nextRole);
 	}
@@ -252,7 +277,7 @@ public final class RemoteSessionManager implements AutoCloseable
 		}
 	}
 
-	private void reconcileSettingsSafely()
+	void reconcileSettingsSafely()
 	{
 		try
 		{
@@ -291,7 +316,7 @@ public final class RemoteSessionManager implements AutoCloseable
 
 	private boolean canSendControllerSettings()
 	{
-		RemoteRelayClient relay = relayClient;
+		RemoteTransport relay = relayClient;
 		return !closed
 			&& role == RemoteRole.CONTROLLER
 			&& relay != null
@@ -308,10 +333,14 @@ public final class RemoteSessionManager implements AutoCloseable
 		}
 		else if (role == RemoteRole.PARTICIPANT)
 		{
-			publish(RemoteSessionState.WAITING_FOR_SETTINGS, "Waiting for controller settings");
+			publish(RemoteSessionState.WAITING_FOR_SETTINGS, "Sending local settings to controller");
 		}
 		lastHelloNanos = 0;
 		send(RemoteMessageType.HELLO, 0, role.name());
+		if (role == RemoteRole.PARTICIPANT)
+		{
+			sendSettingsSeed();
+		}
 	}
 
 	private synchronized void handleEncryptedMessage(String encrypted)
@@ -343,13 +372,19 @@ public final class RemoteSessionManager implements AutoCloseable
 			case HELLO:
 				if (role == RemoteRole.CONTROLLER)
 				{
-					publish(RemoteSessionState.ACTIVE, "Participant connected");
-					sendSettings(true);
+					publish(
+						RemoteSessionState.WAITING_FOR_SETTINGS,
+						"Participant connected. Loading their settings..."
+					);
 				}
 				else if (role == RemoteRole.PARTICIPANT)
 				{
 					send(RemoteMessageType.HELLO, 0, role.name());
+					sendSettingsSeed();
 				}
+				break;
+			case SETTINGS_SEED:
+				handleSettingsSeed(message);
 				break;
 			case SETTINGS:
 				handleSettingsMessage(message);
@@ -357,8 +392,7 @@ public final class RemoteSessionManager implements AutoCloseable
 			case SETTINGS_ACK:
 				if (role == RemoteRole.CONTROLLER)
 				{
-					lastAcknowledgedVersion = Math.max(lastAcknowledgedVersion, message.getVersion());
-					publish(snapshot.getState(), statusForController());
+					handleSettingsAcknowledgement(message);
 				}
 				break;
 			case EMERGENCY_PAUSED:
@@ -384,8 +418,21 @@ public final class RemoteSessionManager implements AutoCloseable
 
 	private void handleSettingsMessage(RemoteProtocolMessage message)
 	{
-		if (role != RemoteRole.PARTICIPANT || message.getVersion() <= lastReceivedSettingsVersion)
+		if (role != RemoteRole.PARTICIPANT
+			|| message.getVersion() < lastReceivedSettingsVersion)
 		{
+			return;
+		}
+		if (message.getVersion() == lastReceivedSettingsVersion)
+		{
+			if (lastReceivedSettingsVersion > 0)
+			{
+				send(
+					RemoteMessageType.SETTINGS_ACK,
+					lastReceivedSettingsVersion,
+					gson.toJson(settingsStore.capture())
+				);
+			}
 			return;
 		}
 
@@ -400,17 +447,22 @@ public final class RemoteSessionManager implements AutoCloseable
 				return;
 			}
 			settings.validate();
-			effectiveSettings.applyRemote(settings);
+			RemoteSettingsSnapshot canonical = settingsStore.save(settings);
+			effectiveSettings.applyRemote(canonical);
 			lastReceivedSettingsVersion = message.getVersion();
 			for (RemoteSessionListener listener : listeners)
 			{
-				listener.onRemoteSettingsChanged(settings);
+				listener.onRemoteSettingsChanged(canonical);
 			}
 			if (snapshot.getState() != RemoteSessionState.EMERGENCY_PAUSED)
 			{
 				publish(RemoteSessionState.ACTIVE, "Remote control active");
 			}
-			send(RemoteMessageType.SETTINGS_ACK, lastReceivedSettingsVersion, "");
+			send(
+				RemoteMessageType.SETTINGS_ACK,
+				lastReceivedSettingsVersion,
+				gson.toJson(canonical)
+			);
 		}
 		catch (RuntimeException e)
 		{
@@ -419,21 +471,127 @@ public final class RemoteSessionManager implements AutoCloseable
 		}
 	}
 
+	private void handleSettingsSeed(RemoteProtocolMessage message)
+	{
+		if (role != RemoteRole.CONTROLLER || controllerSettings != null)
+		{
+			return;
+		}
+		try
+		{
+			RemoteSettingsSnapshot settings = gson.fromJson(
+				message.getPayload(),
+				RemoteSettingsSnapshot.class
+			);
+			if (settings == null)
+			{
+				return;
+			}
+			settings.validate();
+			controllerSettings = settings;
+			for (RemoteSessionListener listener : listeners)
+			{
+				listener.onRemoteSettingsChanged(settings);
+			}
+			publish(RemoteSessionState.ACTIVE, "Participant settings loaded");
+			sendSettings(true);
+		}
+		catch (RuntimeException e)
+		{
+			LOG.log(Level.WARNING, "Rejected invalid participant settings seed", e);
+			publish(RemoteSessionState.DISCONNECTED, "Participant settings could not be loaded");
+		}
+	}
+
+	private void handleSettingsAcknowledgement(RemoteProtocolMessage message)
+	{
+		long acknowledgedVersion = message.getVersion();
+		if (acknowledgedVersion <= lastAcknowledgedVersion
+			|| acknowledgedVersion > nextSettingsVersion)
+		{
+			return;
+		}
+		try
+		{
+			RemoteSettingsSnapshot canonical = gson.fromJson(
+				message.getPayload(),
+				RemoteSettingsSnapshot.class
+			);
+			if (canonical == null)
+			{
+				return;
+			}
+			canonical.validate();
+			boolean draftStillMatchesAcknowledgedRequest =
+				controllerSettings != null && controllerSettings.equals(lastSentSettings);
+			lastAcknowledgedVersion = acknowledgedVersion;
+			if (acknowledgedVersion == nextSettingsVersion)
+			{
+				lastSentSettings = canonical;
+				if (draftStillMatchesAcknowledgedRequest)
+				{
+					controllerSettings = canonical;
+					for (RemoteSessionListener listener : listeners)
+					{
+						listener.onRemoteSettingsChanged(canonical);
+					}
+				}
+			}
+			publish(snapshot.getState(), statusForController());
+		}
+		catch (RuntimeException e)
+		{
+			LOG.log(Level.WARNING, "Ignored invalid settings acknowledgement", e);
+		}
+	}
+
+	private void sendSettingsSeed()
+	{
+		if (role != RemoteRole.PARTICIPANT)
+		{
+			return;
+		}
+		RemoteSettingsSnapshot settings = settingsStore.capture();
+		settings.validate();
+		send(RemoteMessageType.SETTINGS_SEED, 0, gson.toJson(settings));
+	}
+
 	private void sendSettings(boolean force)
 	{
-		if (role != RemoteRole.CONTROLLER)
+		if (role != RemoteRole.CONTROLLER || controllerSettings == null)
 		{
 			return;
 		}
-		RemoteSettingsSnapshot settings = RemoteSettingsSnapshot.capture(config);
+		RemoteSettingsSnapshot settings = controllerSettings;
+		settings.validate();
 		if (!force && settings.equals(lastSentSettings))
 		{
+			if (lastAcknowledgedVersion < nextSettingsVersion)
+			{
+				send(
+					RemoteMessageType.SETTINGS,
+					nextSettingsVersion,
+					gson.toJson(settings)
+				);
+				publish(snapshot.getState(), statusForController());
+			}
 			return;
 		}
-		settings.validate();
+		long version = nextSettingsVersion + 1;
+		RemoteSettingsSnapshot previousSent = lastSentSettings;
+		long previousVersion = nextSettingsVersion;
 		lastSentSettings = settings;
-		long version = ++nextSettingsVersion;
-		send(RemoteMessageType.SETTINGS, version, gson.toJson(settings));
+		nextSettingsVersion = version;
+		if (!send(RemoteMessageType.SETTINGS, version, gson.toJson(settings)))
+		{
+			// Preserve a newer update if a synchronous transport callback already
+			// advanced the session while this send was in flight.
+			if (nextSettingsVersion == version && Objects.equals(lastSentSettings, settings))
+			{
+				lastSentSettings = previousSent;
+				nextSettingsVersion = previousVersion;
+			}
+		}
 		publish(snapshot.getState(), statusForController());
 	}
 
@@ -447,29 +605,34 @@ public final class RemoteSessionManager implements AutoCloseable
 		{
 			return "Participant connected";
 		}
+		if (controllerSettings != null && !controllerSettings.equals(lastSentSettings))
+		{
+			return "Saving changes on participant...";
+		}
 		if (lastAcknowledgedVersion >= nextSettingsVersion)
 		{
-			return "Remote settings synchronized (v" + nextSettingsVersion + ")";
+			return "Saved on participant";
 		}
-		return "Sending remote settings v" + nextSettingsVersion;
+		return "Saving changes on participant...";
 	}
 
-	private void send(RemoteMessageType type, long version, String payload)
+	private boolean send(RemoteMessageType type, long version, String payload)
 	{
-		RemoteRelayClient relay = relayClient;
+		RemoteTransport relay = relayClient;
 		RemoteCrypto currentCrypto = crypto;
 		if (relay == null || currentCrypto == null || !relay.isOpen())
 		{
-			return;
+			return false;
 		}
 		RemoteProtocolMessage message = new RemoteProtocolMessage(type, version, payload);
 		try
 		{
-			relay.send(currentCrypto.encrypt(gson.toJson(message)));
+			return relay.send(currentCrypto.encrypt(gson.toJson(message)));
 		}
 		catch (RuntimeException e)
 		{
 			LOG.log(Level.WARNING, "Unable to send remote session message", e);
+			return false;
 		}
 	}
 
@@ -525,7 +688,7 @@ public final class RemoteSessionManager implements AutoCloseable
 		{
 			send(RemoteMessageType.SESSION_END, 0, "");
 		}
-		RemoteRelayClient current = relayClient;
+		RemoteTransport current = relayClient;
 		relayClient = null;
 		if (current != null)
 		{
@@ -539,6 +702,7 @@ public final class RemoteSessionManager implements AutoCloseable
 		crypto = null;
 		invitation = null;
 		lastSentSettings = null;
+		controllerSettings = null;
 		lastHelloNanos = 0;
 		nextSettingsVersion = 0;
 		lastReceivedSettingsVersion = 0;
@@ -564,7 +728,7 @@ public final class RemoteSessionManager implements AutoCloseable
 		}
 	}
 
-	private final class RelayListener implements RemoteRelayClient.Listener
+	private final class RelayListener implements RemoteTransport.Listener
 	{
 		@Override
 		public void onOpen()

@@ -26,6 +26,10 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      - name: Test remote relay
+        working-directory: remote-relay
+        run: npm test
+
       - name: Run compatibility checks
         shell: bash
         run: |

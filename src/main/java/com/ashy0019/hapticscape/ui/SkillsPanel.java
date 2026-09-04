@@ -13,11 +13,10 @@ import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import net.runelite.api.Skill;
-import net.runelite.client.config.ConfigManager;
 
 final class SkillsPanel extends JPanel
 {
-	private final ConfigManager configManager;
+	private final SettingsChangeSink settingsSink;
 	private final JLabel enabledSkillsValueLabel = new JLabel();
 	private final Map<Skill, JCheckBox> skillCheckBoxes = new EnumMap<>(Skill.class);
 	private final JComboBox<SkillOutput> outputSelector =
@@ -32,11 +31,11 @@ final class SkillsPanel extends JPanel
 	SkillsPanel(
 		SkillSelection hapticSkillSelection,
 		SkillSelection clickSkillSelection,
-		ConfigManager configManager)
+		SettingsChangeSink settingsSink)
 	{
 		this.hapticSkillSelection = hapticSkillSelection;
 		this.clickSkillSelection = clickSkillSelection;
-		this.configManager = configManager;
+		this.settingsSink = settingsSink;
 		setLayout(new BorderLayout(0, 4));
 		setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
 
@@ -150,8 +149,7 @@ final class SkillsPanel extends JPanel
 
 	private void persist(SkillOutput output, SkillSelection selection)
 	{
-		configManager.setConfiguration(
-			HapticScapeConfig.GROUP,
+		settingsSink.set(
 			output == SkillOutput.HAPTICS
 				? HapticScapeConfig.DISABLED_SKILLS_KEY
 				: HapticScapeConfig.CLICKER_DISABLED_SKILLS_KEY,

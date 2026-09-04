@@ -3,6 +3,7 @@ package com.ashy0019.hapticscape.remote;
 enum RemoteMessageType
 {
 	HELLO,
+	SETTINGS_SEED,
 	SETTINGS,
 	SETTINGS_ACK,
 	EMERGENCY_PAUSED,

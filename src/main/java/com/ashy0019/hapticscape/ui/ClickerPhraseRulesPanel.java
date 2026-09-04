@@ -20,11 +20,10 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.ListSelectionModel;
-import net.runelite.client.config.ConfigManager;
 
 final class ClickerPhraseRulesPanel extends JPanel
 {
-	private final ConfigManager configManager;
+	private final SettingsChangeSink settingsSink;
 	private final DefaultListModel<ClickerPhraseRule> ruleModel =
 		new DefaultListModel<>();
 	private final JList<ClickerPhraseRule> ruleList =
@@ -39,9 +38,9 @@ final class ClickerPhraseRulesPanel extends JPanel
 
 	ClickerPhraseRulesPanel(
 		HapticScapeConfig config,
-		ConfigManager configManager)
+		SettingsChangeSink settingsSink)
 	{
-		this.configManager = configManager;
+		this.settingsSink = settingsSink;
 		rules = ClickerPhraseRules.fromConfigValue(
 			config.clickerPhraseRules()
 		);
@@ -288,8 +287,7 @@ final class ClickerPhraseRulesPanel extends JPanel
 
 	private void persist()
 	{
-		configManager.setConfiguration(
-			HapticScapeConfig.GROUP,
+		settingsSink.set(
 			HapticScapeConfig.CLICKER_PHRASE_RULES_KEY,
 			rules.toConfigValue()
 		);

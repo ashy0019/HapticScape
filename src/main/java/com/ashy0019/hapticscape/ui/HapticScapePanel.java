@@ -34,6 +34,7 @@ import com.ashy0019.hapticscape.update.UpdatePreferencesStore;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Dimension;
+import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.awt.KeyEventDispatcher;
 import java.awt.KeyboardFocusManager;
@@ -149,6 +150,7 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 	private long developerUnlockStartedNanos;
 	private ConnectionSnapshot latestConnectionSnapshot = ConnectionSnapshot.disconnected();
 	private boolean remoteReadOnly;
+	private boolean displayingRemoteSettings;
 	private boolean updatingDisplayedSettings;
 
 	public HapticScapePanel(
@@ -272,34 +274,50 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 		skillsPanel = new SkillsPanel(
 			SkillSelection.fromConfigValue(config.disabledSkills()),
 			SkillSelection.fromConfigValue(config.clickerDisabledSkills()),
-			configManager
+			this::writeFeedbackSetting
 		);
 		profilesPanel = new ProfilesPanel(
 			SkillFeedbackProfiles.fromConfigValue(config.skillFeedbackProfiles())
 				.replaceMissingCustomPatterns(customPatterns),
-			configManager,
+			this::writeFeedbackSetting,
 			this::getGlobalXpFeedbackSettings,
 			() -> customPatterns,
 			testSkillProfileAction
 		);
 		alertsPanel = new AlertsPanel(
 			config,
-			configManager,
+			this::writeFeedbackSetting,
 			() -> customPatterns,
 			testGenericAlertAction,
 			testSpecificAlertAction
 		);
 		customPatternsPanel = new CustomPatternsPanel(
 			customPatterns,
-			configManager,
+			this::writeFeedbackSetting,
 			patternForgePreviewAction,
 			this::applyCustomPatternLibrary
 		);
-		musicPanel = new MusicPanel(config, configManager, musicSettingsAction);
+		musicPanel = new MusicPanel(
+			config,
+			this::writeFeedbackSetting,
+			settings ->
+			{
+				if (!remoteSessionManager.isControllerSession())
+				{
+					musicSettingsAction.accept(settings);
+				}
+			}
+		);
 		clickerPanel = new ClickerPanel(
 			config,
-			configManager,
-			clickerSettingsAction,
+			this::writeFeedbackSetting,
+			settings ->
+			{
+				if (!remoteSessionManager.isControllerSession())
+				{
+					clickerSettingsAction.accept(settings);
+				}
+			},
 			testClickAction
 		);
 		updatesPanel = new UpdatesPanel(updatePreferencesStore, updateCheckService);
@@ -324,7 +342,7 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 
 		remoteBanner.setBorder(BorderFactory.createTitledBorder("Remote Control"));
 		remoteBanner.add(remoteBannerLabel, BorderLayout.CENTER);
-		JPanel remoteBannerButtons = new JPanel(new GridLayout(1, 3, 3, 0));
+		JPanel remoteBannerButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 3, 0));
 		remoteBannerButtons.add(remoteEmergencyButton);
 		remoteBannerButtons.add(remoteResumeButton);
 		remoteBannerButtons.add(remoteEndButton);
@@ -555,7 +573,9 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 	public ClickerPhraseRules getClickerPhraseRules()
 	{
 		return clickerPanel.getPhraseRules();
-	}	public void updateMusicSync(MusicSyncSnapshot snapshot)
+	}
+
+	public void updateMusicSync(MusicSyncSnapshot snapshot)
 	{
 		musicPanel.updateSnapshot(snapshot);
 	}
@@ -573,8 +593,7 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 			refreshInheritedProfileIfReady();
 			if (!intensitySlider.getValueIsAdjusting())
 			{
-				configManager.setConfiguration(
-					HapticScapeConfig.GROUP,
+				writeFeedbackSetting(
 					HapticScapeConfig.INTENSITY_PERCENT_KEY,
 					intensityPercent
 				);
@@ -587,8 +606,7 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 				return;
 			}
 			minimumXpGain = ((Number) minimumXpSpinner.getValue()).intValue();
-			configManager.setConfiguration(
-				HapticScapeConfig.GROUP,
+			writeFeedbackSetting(
 				HapticScapeConfig.MINIMUM_XP_GAIN_KEY,
 				minimumXpGain
 			);
@@ -601,8 +619,7 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 				return;
 			}
 			durationMillis = ((Number) durationSpinner.getValue()).intValue();
-			configManager.setConfiguration(
-				HapticScapeConfig.GROUP,
+			writeFeedbackSetting(
 				HapticScapeConfig.PULSE_DURATION_MILLIS_KEY,
 				durationMillis
 			);
@@ -623,8 +640,7 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 			if (selected != null)
 			{
 				patternSelection = selected;
-				configManager.setConfiguration(
-					HapticScapeConfig.GROUP,
+				writeFeedbackSetting(
 					HapticScapeConfig.PATTERN_PRESET_KEY,
 					selected.toConfigValue()
 				);
@@ -644,8 +660,7 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 				if (selected != null)
 				{
 					levelUpPatternSelection = selected;
-					configManager.setConfiguration(
-						HapticScapeConfig.GROUP,
+					writeFeedbackSetting(
 						HapticScapeConfig.LEVEL_UP_PATTERN_PRESET_KEY,
 						selected.toConfigValue()
 					);
@@ -665,8 +680,7 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 				if (selected != null)
 				{
 					milestonePatternSelection = selected;
-					configManager.setConfiguration(
-						HapticScapeConfig.GROUP,
+					writeFeedbackSetting(
 						HapticScapeConfig.MILESTONE_PATTERN_PRESET_KEY,
 						selected.toConfigValue()
 					);
@@ -680,8 +694,7 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 				return;
 			}
 			levelUpEnabled = levelUpCheckBox.isSelected();
-			configManager.setConfiguration(
-				HapticScapeConfig.GROUP,
+			writeFeedbackSetting(
 				HapticScapeConfig.LEVEL_UP_FEEDBACK_ENABLED_KEY,
 				levelUpEnabled
 			);
@@ -693,8 +706,7 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 				return;
 			}
 			milestoneEnabled = milestoneCheckBox.isSelected();
-			configManager.setConfiguration(
-				HapticScapeConfig.GROUP,
+			writeFeedbackSetting(
 				HapticScapeConfig.MILESTONE_FEEDBACK_ENABLED_KEY,
 				milestoneEnabled
 			);
@@ -706,8 +718,7 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 				return;
 			}
 			level99Enabled = level99CheckBox.isSelected();
-			configManager.setConfiguration(
-				HapticScapeConfig.GROUP,
+			writeFeedbackSetting(
 				HapticScapeConfig.LEVEL_99_CELEBRATION_ENABLED_KEY,
 				level99Enabled
 			);
@@ -720,6 +731,20 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 				handleDeveloperUnlockClick(event);
 			}
 		});
+	}
+
+	private void writeFeedbackSetting(String key, Object value)
+	{
+		if (remoteSessionManager.updateControllerSetting(key, value))
+		{
+			return;
+		}
+		RemoteSessionSnapshot current = remoteSessionManager.getSnapshot();
+		if (current.getState() != RemoteSessionState.LOCAL)
+		{
+			return;
+		}
+		configManager.setConfiguration(HapticScapeConfig.GROUP, key, value);
 	}
 
 	private JPanel createGlobalSettingsPanel()
@@ -818,8 +843,7 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 		HapticPatternSelection resolved = current.resolveAgainst(customPatterns);
 		if (!resolved.equals(current))
 		{
-			configManager.setConfiguration(
-				HapticScapeConfig.GROUP,
+			writeFeedbackSetting(
 				configKey,
 				resolved.toConfigValue()
 			);
@@ -1045,8 +1069,12 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 	{
 		// Re-check on the EDT so a queued remote update cannot repaint stale remote
 		// values after the participant has already ended the session.
-		if (remoteSessionManager.getSnapshot().isParticipantControlled())
+		RemoteSessionSnapshot current = remoteSessionManager.getSnapshot();
+		if (current.isParticipantControlled()
+			|| current.getRole() == RemoteRole.CONTROLLER
+				&& current.getState() != RemoteSessionState.LOCAL)
 		{
+			displayingRemoteSettings = true;
 			applyDisplayedSettings(settings);
 		}
 	}
@@ -1155,40 +1183,61 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 	private void applyRemoteSessionState(RemoteSessionSnapshot snapshot)
 	{
 		boolean participantControlled = snapshot.isParticipantControlled();
-		boolean wasRemoteReadOnly = remoteReadOnly;
+		boolean controllerSession = snapshot.getRole() == RemoteRole.CONTROLLER
+			&& snapshot.getState() != RemoteSessionState.LOCAL;
+		boolean controllerEditable = controllerSession
+			&& (snapshot.getState() == RemoteSessionState.ACTIVE
+				|| snapshot.getState() == RemoteSessionState.PEER_EMERGENCY_PAUSED);
 		stopButton.setText(participantControlled ? "Emergency Off" : "Stop now");
 
 		// Keep the normal HapticScape UI visible during Remote Control. The
 		// participant can navigate it and watch remote values change, but cannot
 		// mutate remotely authoritative feedback settings.
 		feedbackLayout.show(feedbackHost, LOCAL_FEEDBACK_CARD);
-		if (participantControlled)
+		if (participantControlled || controllerSession && !controllerEditable)
 		{
 			setRemoteReadOnly(true);
 		}
-		else if (wasRemoteReadOnly)
+		else if (controllerEditable)
 		{
-			applyDisplayedSettings(RemoteSettingsSnapshot.capture(config));
+			setRemoteReadOnly(false);
+		}
+		else
+		{
+			if (displayingRemoteSettings)
+			{
+				applyDisplayedSettings(RemoteSettingsSnapshot.capture(config));
+			}
+			displayingRemoteSettings = false;
 			setRemoteReadOnly(false);
 		}
 
 		// Connection management stays local even during Remote Control. Manual
 		// preview buttons are disabled so they cannot bypass the remote policy.
 		boolean connected = latestConnectionSnapshot.getState() == ConnectionState.CONNECTED;
+		boolean remoteSession = snapshot.getState() != RemoteSessionState.LOCAL;
+		profilesPanel.setPreviewAllowed(!remoteSession);
+		alertsPanel.setPreviewAllowed(!remoteSession);
+		customPatternsPanel.setPreviewAllowed(!remoteSession);
+		clickerPanel.setPreviewAllowed(!remoteSession);
 		boolean emergencyPaused = snapshot.getState() == RemoteSessionState.EMERGENCY_PAUSED;
 		stopButton.setEnabled(participantControlled ? !emergencyPaused : connected);
-		testButton.setEnabled(!participantControlled && connected);
-		testLevelUpButton.setEnabled(!participantControlled && connected);
-		previewLevel99Button.setEnabled(!participantControlled && developerControlsUnlocked && connected);
+		testButton.setEnabled(!remoteSession && connected);
+		testLevelUpButton.setEnabled(!remoteSession && connected);
+		previewLevel99Button.setEnabled(!remoteSession && developerControlsUnlocked && connected);
 
 		boolean showBanner = snapshot.getState() != RemoteSessionState.LOCAL;
 		remoteBanner.setVisible(showBanner);
-		remoteBannerLabel.setText(participantControlled
-			? snapshot.getMessage() + " · settings mirrored read-only"
-			: snapshot.getMessage());
+		remoteBannerLabel.setText("<html>" + snapshot.getMessage()
+			+ (participantControlled
+				? "<br><small>Changes are saved locally and remain after the session.</small>"
+				: "")
+			+ "</html>");
 		boolean participant = snapshot.getRole() == RemoteRole.PARTICIPANT && showBanner;
 		remoteEmergencyButton.setEnabled(participant && !emergencyPaused);
 		remoteResumeButton.setEnabled(participant && emergencyPaused);
+		remoteEmergencyButton.setVisible(participant && !emergencyPaused);
+		remoteResumeButton.setVisible(participant && emergencyPaused);
 		remoteEndButton.setEnabled(showBanner);
 		revalidate();
 		repaint();

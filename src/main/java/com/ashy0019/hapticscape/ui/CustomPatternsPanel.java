@@ -5,7 +5,6 @@ import com.ashy0019.hapticscape.CustomPatternLibrary;
 import java.awt.BorderLayout;
 import java.util.function.Consumer;
 import javax.swing.JPanel;
-import net.runelite.client.config.ConfigManager;
 
 /**
  * The Custom tab boundary. PatternForgePanel remains focused on editing one
@@ -17,14 +16,14 @@ final class CustomPatternsPanel extends JPanel
 
 	CustomPatternsPanel(
 		CustomPatternLibrary library,
-		ConfigManager configManager,
+		SettingsChangeSink settingsSink,
 		Consumer<CustomPatternEntry> previewAction,
 		Consumer<CustomPatternLibrary> libraryChangeAction)
 	{
 		super(new BorderLayout());
 		forgePanel = new PatternForgePanel(
 			library,
-			configManager,
+			settingsSink,
 			previewAction,
 			libraryChangeAction
 		);
@@ -39,6 +38,11 @@ final class CustomPatternsPanel extends JPanel
 	void setRemoteReadOnly(boolean remoteReadOnly)
 	{
 		forgePanel.setRemoteReadOnly(remoteReadOnly);
+	}
+
+	void setPreviewAllowed(boolean previewAllowed)
+	{
+		forgePanel.setPreviewAllowed(previewAllowed);
 	}
 
 	void setConnected(boolean connected)

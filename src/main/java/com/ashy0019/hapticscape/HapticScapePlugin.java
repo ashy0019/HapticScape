@@ -14,6 +14,7 @@ import com.ashy0019.hapticscape.music.MusicSyncService;
 import com.ashy0019.hapticscape.music.MusicSyncSettings;
 import com.ashy0019.hapticscape.music.WasapiLoopbackCapture;
 import com.ashy0019.hapticscape.rogue.RogueFeedbackEvent;
+import com.ashy0019.hapticscape.remote.ConfigBackedRemoteSettingsStore;
 import com.ashy0019.hapticscape.remote.EffectiveSettingsService;
 import com.ashy0019.hapticscape.remote.RemoteRole;
 import com.ashy0019.hapticscape.remote.RemoteSessionListener;
@@ -60,7 +61,6 @@ import net.runelite.client.config.ConfigManager;
 import net.runelite.client.chat.ChatMessageManager;
 import net.runelite.client.chat.QueuedMessage;
 import net.runelite.client.eventbus.Subscribe;
-import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.events.NotificationFired;
 import net.runelite.client.events.NpcLootReceived;
 import net.runelite.client.events.PlayerLootReceived;
@@ -144,21 +144,6 @@ public class HapticScapePlugin extends Plugin
 	@Inject
 	private Gson gson;
 
-	@Subscribe
-	public void onConfigChanged(ConfigChanged event)
-	{
-		if (!HapticScapeConfig.GROUP.equals(event.getGroup()))
-		{
-			return;
-		}
-
-		RemoteSessionManager manager = remoteSessionManager;
-		if (manager != null)
-		{
-			manager.onLocalSettingsChanged();
-		}
-	}
-
 	@Override
 	protected void startUp()
 	{
@@ -185,7 +170,7 @@ public class HapticScapePlugin extends Plugin
 		remoteSessionManager = new RemoteSessionManager(
 			httpClient,
 			gson,
-			config,
+			new ConfigBackedRemoteSettingsStore(config, configManager),
 			effectiveSettingsService
 		);
 		remoteSessionManager.addListener(new RemoteSessionListener()
@@ -1164,6 +1149,11 @@ public class HapticScapePlugin extends Plugin
 
 	private void handleRemoteSettingsChanged(RemoteSettingsSnapshot settings)
 	{
+		RemoteSessionManager manager = remoteSessionManager;
+		if (manager == null || manager.getSnapshot().getRole() != RemoteRole.PARTICIPANT)
+		{
+			return;
+		}
 		ClickerService clicks = clickerService;
 		if (clicks != null)
 		{

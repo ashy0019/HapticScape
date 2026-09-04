@@ -37,13 +37,12 @@ import javax.swing.JSpinner;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.Timer;
-import net.runelite.client.config.ConfigManager;
 
 final class PatternForgePanel extends JPanel
 {
 	private static final int MAXIMUM_UNDO_STATES = 20;
 
-	private final ConfigManager configManager;
+	private final SettingsChangeSink settingsSink;
 	private final Consumer<CustomPatternEntry> previewAction;
 	private final Consumer<CustomPatternLibrary> libraryChangeAction;
 	private final JComboBox<CustomPatternEntry> patternComboBox = new JComboBox<>();
@@ -78,17 +77,18 @@ final class PatternForgePanel extends JPanel
 	private boolean dirty;
 	private boolean connected;
 	private boolean remoteReadOnly;
+	private boolean previewAllowed = true;
 	private Timer playheadTimer;
 	private long previewStartedAt;
 
 	PatternForgePanel(
 		CustomPatternLibrary library,
-		ConfigManager configManager,
+		SettingsChangeSink settingsSink,
 		Consumer<CustomPatternEntry> previewAction,
 		Consumer<CustomPatternLibrary> libraryChangeAction)
 	{
 		this.library = Objects.requireNonNull(library, "library");
-		this.configManager = Objects.requireNonNull(configManager, "configManager");
+		this.settingsSink = Objects.requireNonNull(settingsSink, "settingsSink");
 		this.previewAction = Objects.requireNonNull(previewAction, "previewAction");
 		this.libraryChangeAction = Objects.requireNonNull(
 			libraryChangeAction,
@@ -236,6 +236,16 @@ final class PatternForgePanel extends JPanel
 	{
 		this.remoteReadOnly = remoteReadOnly;
 		if (remoteReadOnly)
+		{
+			stopAnimation();
+		}
+		refreshEditorState();
+	}
+
+	void setPreviewAllowed(boolean previewAllowed)
+	{
+		this.previewAllowed = previewAllowed;
+		if (!previewAllowed)
 		{
 			stopAnimation();
 		}
@@ -474,8 +484,7 @@ final class PatternForgePanel extends JPanel
 
 	private void persistLibrary()
 	{
-		configManager.setConfiguration(
-			HapticScapeConfig.GROUP,
+		settingsSink.set(
 			HapticScapeConfig.CUSTOM_PATTERNS_KEY,
 			library.toConfigValue()
 		);
@@ -527,7 +536,7 @@ final class PatternForgePanel extends JPanel
 		clearButton.setEnabled(editable);
 		undoButton.setEnabled(editable && !undoStates.isEmpty());
 		saveButton.setEnabled(editable && dirty);
-		previewButton.setEnabled(editable && connected);
+		previewButton.setEnabled(editable && connected && previewAllowed);
 		updateLibraryButtons();
 	}
 
