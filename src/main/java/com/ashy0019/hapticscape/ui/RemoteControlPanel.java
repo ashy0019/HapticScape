@@ -1,6 +1,7 @@
 package com.ashy0019.hapticscape.ui;
 
 import com.ashy0019.hapticscape.HapticScapeConfig;
+import com.ashy0019.hapticscape.remote.RemoteActionAcknowledgement;
 import com.ashy0019.hapticscape.remote.RemoteInvitation;
 import com.ashy0019.hapticscape.remote.RemoteLockSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteLockState;
@@ -10,6 +11,7 @@ import com.ashy0019.hapticscape.remote.RemoteSessionListener;
 import com.ashy0019.hapticscape.remote.RemoteSessionManager;
 import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteSessionState;
+import com.ashy0019.hapticscape.remote.RemoteSettingsSnapshot;
 import com.ashy0019.hapticscape.remote.SettingsLockProposal;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
@@ -62,6 +64,7 @@ final class RemoteControlPanel extends JPanel
 	private final JPanel participantPanel = new JPanel();
 	private final SavedUnlockKeysPanel savedUnlockKeysPanel;
 	private final RemotePermissionsPanel permissionsPanel;
+	private final RemoteActionsPanel actionsPanel;
 	private int nextLayoutRow;
 	private boolean wasLocal = true;
 
@@ -74,6 +77,7 @@ final class RemoteControlPanel extends JPanel
 		this.sessionManager = sessionManager;
 		this.savedUnlockKeysPanel = new SavedUnlockKeysPanel(sessionManager);
 		this.permissionsPanel = new RemotePermissionsPanel(sessionManager);
+		this.actionsPanel = new RemoteActionsPanel(sessionManager);
 		setLayout(new GridBagLayout());
 		setBorder(BorderFactory.createEmptyBorder(0, 4, 8, 4));
 
@@ -134,6 +138,7 @@ final class RemoteControlPanel extends JPanel
 		allowHorizontalShrink(session);
 		addSection(session);
 		addSection(permissionsPanel);
+		addSection(actionsPanel);
 
 		settingsLockPanel.setLayout(new BoxLayout(settingsLockPanel, BoxLayout.Y_AXIS));
 		settingsLockPanel.setBorder(
@@ -235,7 +240,31 @@ final class RemoteControlPanel extends JPanel
 	@Override
 	public void onRemotePermissionsChanged(RemotePermissions permissions)
 	{
-		SwingUtilities.invokeLater(() -> permissionsPanel.apply(permissions));
+		SwingUtilities.invokeLater(() ->
+		{
+			permissionsPanel.apply(permissions);
+			actionsPanel.apply(
+				sessionManager.getSnapshot(),
+				sessionManager.getPeerPermissions(),
+				sessionManager.getControllerSettingsSnapshot()
+			);
+		});
+	}
+
+	@Override
+	public void onRemoteSettingsChanged(RemoteSettingsSnapshot settings)
+	{
+		SwingUtilities.invokeLater(() -> actionsPanel.apply(
+			sessionManager.getSnapshot(),
+			sessionManager.getPeerPermissions(),
+			settings
+		));
+	}
+
+	@Override
+	public void onRemoteActionAcknowledged(RemoteActionAcknowledgement acknowledgement)
+	{
+		SwingUtilities.invokeLater(() -> actionsPanel.showAcknowledgement(acknowledgement));
 	}
 
 	@Override
@@ -404,6 +433,11 @@ final class RemoteControlPanel extends JPanel
 				|| snapshot.getState() == RemoteSessionState.WAITING_FOR_PEER));
 		participantPanel.setVisible(local);
 		permissionsPanel.setVisible(local || participant);
+		actionsPanel.apply(
+			snapshot,
+			sessionManager.getPeerPermissions(),
+			sessionManager.getControllerSettingsSnapshot()
+		);
 		savedUnlockKeysPanel.setVisible(!participant);
 		emergencyButton.setEnabled(participant && !emergencyPaused);
 		resumeButton.setEnabled(participant && emergencyPaused);
