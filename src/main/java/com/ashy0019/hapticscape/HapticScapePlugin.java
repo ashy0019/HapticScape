@@ -15,7 +15,9 @@ import com.ashy0019.hapticscape.music.MusicSyncSettings;
 import com.ashy0019.hapticscape.music.WasapiLoopbackCapture;
 import com.ashy0019.hapticscape.rogue.RogueFeedbackEvent;
 import com.ashy0019.hapticscape.remote.ConfigBackedRemoteSettingsStore;
+import com.ashy0019.hapticscape.remote.ConfigBackedRemotePermissionsStore;
 import com.ashy0019.hapticscape.remote.EffectiveSettingsService;
+import com.ashy0019.hapticscape.remote.RemoteActionExecutor;
 import com.ashy0019.hapticscape.remote.RemoteRole;
 import com.ashy0019.hapticscape.remote.RemoteSessionListener;
 import com.ashy0019.hapticscape.remote.RemoteSessionManager;
@@ -31,6 +33,7 @@ import com.ashy0019.hapticscape.update.UpdatePreferencesStore;
 import com.google.gson.Gson;
 import com.google.inject.Provides;
 import java.awt.Color;
+import java.awt.TrayIcon;
 import java.awt.image.BufferedImage;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -59,12 +62,15 @@ import net.runelite.api.gameval.InventoryID;
 import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.client.audio.AudioPlayer;
 import net.runelite.client.config.ConfigManager;
+import net.runelite.client.config.Notification;
+import net.runelite.client.config.RuneLiteConfig;
 import net.runelite.client.chat.ChatMessageManager;
 import net.runelite.client.chat.QueuedMessage;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.NotificationFired;
 import net.runelite.client.events.NpcLootReceived;
 import net.runelite.client.events.PlayerLootReceived;
+import net.runelite.client.Notifier;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.game.ItemStack;
 import net.runelite.client.plugins.Plugin;
@@ -126,10 +132,16 @@ public class HapticScapePlugin extends Plugin
 	private ConfigManager configManager;
 
 	@Inject
+	private RuneLiteConfig runeLiteConfig;
+
+	@Inject
 	private ClientToolbar clientToolbar;
 
 	@Inject
 	private ClientUI clientUI;
+
+	@Inject
+	private Notifier notifier;
 
 	@Inject
 	private OverlayManager overlayManager;
@@ -175,7 +187,9 @@ public class HapticScapePlugin extends Plugin
 			gson,
 			new ConfigBackedRemoteSettingsStore(config, configManager),
 			effectiveSettingsService,
-			settingsLockService
+			settingsLockService,
+			new ConfigBackedRemotePermissionsStore(config, configManager),
+			createRemoteActionExecutor()
 		);
 		remoteSessionManager.addListener(new RemoteSessionListener()
 		{
@@ -1054,6 +1068,107 @@ public class HapticScapePlugin extends Plugin
 			playbackDurationMillis
 		);
 		intifaceService.play(new HapticRequest(eventType, pattern));
+	}
+
+	private RemoteActionExecutor createRemoteActionExecutor()
+	{
+		return new RemoteActionExecutor()
+		{
+			@Override
+			public void playHaptic(
+				String patternSelection,
+				int intensityPercent,
+				int durationMillis)
+			{
+				playRemoteHaptic(patternSelection, intensityPercent, durationMillis);
+			}
+
+			@Override
+			public void playClick()
+			{
+				ClickerService clicks = clickerService;
+				if (clicks != null)
+				{
+					clicks.click();
+				}
+			}
+
+			@Override
+			public void showMessage(
+				String message,
+				boolean desktopNotification,
+				boolean localChatboxMessage)
+			{
+				if (desktopNotification && notifier != null)
+				{
+					Notification notification = new Notification(
+						true,
+						true,
+						true,
+						runeLiteConfig.enableTrayNotifications(),
+						TrayIcon.MessageType.NONE,
+						runeLiteConfig.notificationRequestFocus(),
+						runeLiteConfig.notificationSound(),
+						null,
+						runeLiteConfig.notificationVolume(),
+						runeLiteConfig.notificationTimeout(),
+						false,
+						runeLiteConfig.flashNotification(),
+						runeLiteConfig.notificationFlashColor(),
+						runeLiteConfig.sendNotificationsWhenFocused()
+					);
+					notifier.notify(notification, "HapticScape Remote: " + message);
+				}
+				if (localChatboxMessage && chatMessageManager != null)
+				{
+					chatMessageManager.queue(QueuedMessage.builder()
+						.type(ChatMessageType.CONSOLE)
+						.value("HapticScape Remote: " + message)
+						.build());
+				}
+			}
+
+			@Override
+			public void stopRemoteOutput()
+			{
+				GatedIntifaceService haptics = intifaceService;
+				if (haptics != null)
+				{
+					haptics.stopAll();
+					haptics.stopLiveOutput();
+				}
+			}
+		};
+	}
+
+	private void playRemoteHaptic(
+		String patternValue,
+		int intensityPercent,
+		int durationMillis)
+	{
+		GatedIntifaceService haptics = intifaceService;
+		if (haptics == null)
+		{
+			return;
+		}
+		CustomPatternLibrary patterns = effectiveSettings().getCustomPatterns();
+		HapticPatternSelection selection = HapticPatternSelection
+			.fromConfigValue(patternValue)
+			.resolveAgainst(patterns);
+		double intensity = intensityPercent / 100.0;
+		Duration duration = Duration.ofMillis(durationMillis);
+		HapticPattern pattern;
+		if (selection.isCustom())
+		{
+			pattern = patterns.findById(selection.getCustomPatternId())
+				.map(entry -> entry.getPattern().createPattern(intensity, duration))
+				.orElseGet(() -> HapticPattern.single(intensity, duration));
+		}
+		else
+		{
+			pattern = selection.createPattern(patterns, intensity, duration);
+		}
+		haptics.play(new HapticRequest(HapticEventType.REMOTE_ACTION, pattern));
 	}
 
 	private static HapticEventType hapticEventType(AlertCategory category)

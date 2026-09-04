@@ -22,6 +22,7 @@ import com.ashy0019.hapticscape.music.MusicSyncSnapshot;
 import com.ashy0019.hapticscape.rogue.KonamiCodeDetector;
 import com.ashy0019.hapticscape.rogue.RogueFeedbackEvent;
 import com.ashy0019.hapticscape.remote.RemoteRole;
+import com.ashy0019.hapticscape.remote.RemotePermissions;
 import com.ashy0019.hapticscape.remote.RemoteSessionListener;
 import com.ashy0019.hapticscape.remote.RemoteSessionManager;
 import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
@@ -1231,6 +1232,19 @@ public final class HapticScapePanel extends PluginPanel
 		applyRemoteSettingsIfActive(settings);
 	}
 
+	@Override
+	public void onRemotePermissionsChanged(RemotePermissions permissions)
+	{
+		if (!SwingUtilities.isEventDispatchThread())
+		{
+			SwingUtilities.invokeLater(() -> applyRemoteSessionState(
+				remoteSessionManager.getSnapshot()
+			));
+			return;
+		}
+		applyRemoteSessionState(remoteSessionManager.getSnapshot());
+	}
+
 	private void applyRemoteSettingsIfActive(RemoteSettingsSnapshot settings)
 	{
 		// Re-check on the EDT so a queued remote update cannot repaint stale remote
@@ -1430,6 +1444,7 @@ public final class HapticScapePanel extends PluginPanel
 		boolean controllerSession = snapshot.getRole() == RemoteRole.CONTROLLER
 			&& snapshot.getState() != RemoteSessionState.LOCAL;
 		boolean controllerEditable = controllerSession
+			&& remoteSessionManager.getPeerPermissions().isSettingsAllowed()
 			&& (snapshot.getState() == RemoteSessionState.ACTIVE
 				|| snapshot.getState() == RemoteSessionState.PEER_EMERGENCY_PAUSED);
 		boolean workspaceVisible = controllerSession
@@ -1479,16 +1494,13 @@ public final class HapticScapePanel extends PluginPanel
 		{
 			setRemoteReadOnly(true);
 		}
-		else if (controllerEditable)
+		else if (controllerSession && subjectWorkspaceSelected && subjectAvailable)
 		{
-			if (subjectWorkspaceSelected)
-			{
-				setRemoteReadOnly(false);
-			}
-			else
-			{
-				setLocalSettingsLocked(settingsLockService.isLocked());
-			}
+			setRemoteReadOnly(!controllerEditable);
+		}
+		else if (controllerSession)
+		{
+			setLocalSettingsLocked(settingsLockService.isLocked());
 		}
 		else
 		{

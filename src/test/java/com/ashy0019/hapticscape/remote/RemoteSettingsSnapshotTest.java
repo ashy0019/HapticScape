@@ -36,6 +36,21 @@ public class RemoteSettingsSnapshotTest
 		Map<String, Object> values = snapshot.toConfigurationMap();
 
 		assertFalse(values.containsKey(HapticScapeConfig.REMOTE_RELAY_URL_KEY));
+		assertFalse(values.containsKey(HapticScapeConfig.REMOTE_SETTINGS_ALLOWED_KEY));
+		assertFalse(values.containsKey(HapticScapeConfig.REMOTE_HAPTICS_ALLOWED_KEY));
+		assertFalse(values.containsKey(HapticScapeConfig.REMOTE_CLICKS_ALLOWED_KEY));
+		assertFalse(values.containsKey(
+			HapticScapeConfig.REMOTE_DESKTOP_NOTIFICATIONS_ALLOWED_KEY
+		));
+		assertFalse(values.containsKey(
+			HapticScapeConfig.REMOTE_LOCAL_CHATBOX_MESSAGES_ALLOWED_KEY
+		));
+		assertFalse(values.containsKey(
+			HapticScapeConfig.REMOTE_MAXIMUM_INTENSITY_PERCENT_KEY
+		));
+		assertFalse(values.containsKey(
+			HapticScapeConfig.REMOTE_MAXIMUM_DURATION_MILLIS_KEY
+		));
 		try
 		{
 			snapshot.withConfigurationValue(

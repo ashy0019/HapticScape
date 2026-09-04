@@ -15,4 +15,12 @@ public interface RemoteSessionListener
 	default void onRemoteLockProposal(SettingsLockProposal proposal)
 	{
 	}
+
+	default void onRemotePermissionsChanged(RemotePermissions permissions)
+	{
+	}
+
+	default void onRemoteActionAcknowledged(RemoteActionAcknowledgement acknowledgement)
+	{
+	}
 }

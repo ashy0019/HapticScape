@@ -44,6 +44,13 @@ public interface HapticScapeConfig extends Config
 	String CLICKER_ALERT_SETTINGS_KEY = "clickerAlertSettings";
 	String CLICKER_PHRASE_RULES_KEY = "clickerPhraseRules";
 	String REMOTE_RELAY_URL_KEY = "remoteRelayUrl";
+	String REMOTE_SETTINGS_ALLOWED_KEY = "remoteSettingsAllowed";
+	String REMOTE_HAPTICS_ALLOWED_KEY = "remoteHapticsAllowed";
+	String REMOTE_CLICKS_ALLOWED_KEY = "remoteClicksAllowed";
+	String REMOTE_DESKTOP_NOTIFICATIONS_ALLOWED_KEY = "remoteDesktopNotificationsAllowed";
+	String REMOTE_LOCAL_CHATBOX_MESSAGES_ALLOWED_KEY = "remoteLocalChatboxMessagesAllowed";
+	String REMOTE_MAXIMUM_INTENSITY_PERCENT_KEY = "remoteMaximumIntensityPercent";
+	String REMOTE_MAXIMUM_DURATION_MILLIS_KEY = "remoteMaximumDurationMillis";
 
 	@ConfigItem(
 		keyName = "intifaceServer",
@@ -486,5 +493,91 @@ public interface HapticScapeConfig extends Config
 	default String remoteRelayUrl()
 	{
 		return "";
+	}
+
+	@ConfigItem(
+		keyName = REMOTE_SETTINGS_ALLOWED_KEY,
+		name = "Allow remote settings",
+		description = "Allow a connected controller to change HapticScape feedback settings",
+		position = 36,
+		hidden = true
+	)
+	default boolean remoteSettingsAllowed()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = REMOTE_HAPTICS_ALLOWED_KEY,
+		name = "Allow remote haptics",
+		description = "Allow a connected controller to request bounded haptic actions",
+		position = 37,
+		hidden = true
+	)
+	default boolean remoteHapticsAllowed()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = REMOTE_CLICKS_ALLOWED_KEY,
+		name = "Allow remote clicks",
+		description = "Allow a connected controller to play the local click sound",
+		position = 38,
+		hidden = true
+	)
+	default boolean remoteClicksAllowed()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = REMOTE_DESKTOP_NOTIFICATIONS_ALLOWED_KEY,
+		name = "Allow remote notifications",
+		description = "Allow a connected controller to show a local RuneLite desktop notification",
+		position = 39,
+		hidden = true
+	)
+	default boolean remoteDesktopNotificationsAllowed()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = REMOTE_LOCAL_CHATBOX_MESSAGES_ALLOWED_KEY,
+		name = "Allow local chatbox notices",
+		description = "Allow remote text to appear as a local-only HapticScape console line; nothing is sent to Jagex or other players",
+		position = 40,
+		hidden = true
+	)
+	default boolean remoteLocalChatboxMessagesAllowed()
+	{
+		return false;
+	}
+
+	@Range(min = 0, max = 100)
+	@ConfigItem(
+		keyName = REMOTE_MAXIMUM_INTENSITY_PERCENT_KEY,
+		name = "Maximum remote intensity",
+		description = "Participant-owned intensity ceiling for direct remote haptic actions",
+		position = 41,
+		hidden = true
+	)
+	default int remoteMaximumIntensityPercent()
+	{
+		return 60;
+	}
+
+	@Range(min = 50, max = 10_000)
+	@ConfigItem(
+		keyName = REMOTE_MAXIMUM_DURATION_MILLIS_KEY,
+		name = "Maximum remote duration",
+		description = "Participant-owned duration ceiling for direct remote haptic actions",
+		position = 42,
+		hidden = true
+	)
+	default int remoteMaximumDurationMillis()
+	{
+		return 3_000;
 	}
 }

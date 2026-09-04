@@ -19,6 +19,7 @@ public enum HapticEventType
 
 	DIRECT_MESSAGE(HapticPriority.DIRECT, PlaybackPolicy.INTERRUPT_LOWER_OR_QUEUE, Duration.ofSeconds(5)),
 	TRADE_REQUEST(HapticPriority.DIRECT, PlaybackPolicy.INTERRUPT_LOWER_OR_QUEUE, Duration.ofSeconds(5)),
+	REMOTE_ACTION(HapticPriority.DIRECT, PlaybackPolicy.INTERRUPT_LOWER, Duration.ZERO),
 
 	MANUAL_PREVIEW(HapticPriority.MANUAL, PlaybackPolicy.INTERRUPT_LOWER, Duration.ZERO),
 	ROGUE_UNLOCK(HapticPriority.MANUAL, PlaybackPolicy.INTERRUPT_LOWER, Duration.ZERO),

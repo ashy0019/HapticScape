@@ -4,6 +4,7 @@ import com.ashy0019.hapticscape.HapticScapeConfig;
 import com.ashy0019.hapticscape.remote.RemoteInvitation;
 import com.ashy0019.hapticscape.remote.RemoteLockSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteLockState;
+import com.ashy0019.hapticscape.remote.RemotePermissions;
 import com.ashy0019.hapticscape.remote.RemoteRole;
 import com.ashy0019.hapticscape.remote.RemoteSessionListener;
 import com.ashy0019.hapticscape.remote.RemoteSessionManager;
@@ -60,6 +61,7 @@ final class RemoteControlPanel extends JPanel
 	private final JPanel controllerPanel = new JPanel();
 	private final JPanel participantPanel = new JPanel();
 	private final SavedUnlockKeysPanel savedUnlockKeysPanel;
+	private final RemotePermissionsPanel permissionsPanel;
 	private int nextLayoutRow;
 	private boolean wasLocal = true;
 
@@ -71,6 +73,7 @@ final class RemoteControlPanel extends JPanel
 		this.configManager = configManager;
 		this.sessionManager = sessionManager;
 		this.savedUnlockKeysPanel = new SavedUnlockKeysPanel(sessionManager);
+		this.permissionsPanel = new RemotePermissionsPanel(sessionManager);
 		setLayout(new GridBagLayout());
 		setBorder(BorderFactory.createEmptyBorder(0, 4, 8, 4));
 
@@ -130,6 +133,7 @@ final class RemoteControlPanel extends JPanel
 		session.add(statusText, BorderLayout.CENTER);
 		allowHorizontalShrink(session);
 		addSection(session);
+		addSection(permissionsPanel);
 
 		settingsLockPanel.setLayout(new BoxLayout(settingsLockPanel, BoxLayout.Y_AXIS));
 		settingsLockPanel.setBorder(
@@ -229,6 +233,12 @@ final class RemoteControlPanel extends JPanel
 	}
 
 	@Override
+	public void onRemotePermissionsChanged(RemotePermissions permissions)
+	{
+		SwingUtilities.invokeLater(() -> permissionsPanel.apply(permissions));
+	}
+
+	@Override
 	public void onRemoteLockProposal(SettingsLockProposal proposal)
 	{
 		SwingUtilities.invokeLater(this::confirmSettingsLockProposal);
@@ -273,6 +283,7 @@ final class RemoteControlPanel extends JPanel
 					+ "HapticScape feedback settings during the session.<br>"
 					+ "Your current settings will seed their controls. Accepted changes "
 					+ "are saved here and remain after the session.<br>"
+					+ "Remote actions are limited by the permissions shown on this page.<br>"
 					+ "Emergency Off and End Session always remain local.<br><br>"
 					+ "The relay operator can see your network IP. HapticScape does not "
 					+ "send your IP to the paired client.</html>",
@@ -392,6 +403,7 @@ final class RemoteControlPanel extends JPanel
 			&& (snapshot.getState() == RemoteSessionState.CONNECTING
 				|| snapshot.getState() == RemoteSessionState.WAITING_FOR_PEER));
 		participantPanel.setVisible(local);
+		permissionsPanel.setVisible(local || participant);
 		savedUnlockKeysPanel.setVisible(!participant);
 		emergencyButton.setEnabled(participant && !emergencyPaused);
 		resumeButton.setEnabled(participant && emergencyPaused);
