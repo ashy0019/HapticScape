@@ -22,6 +22,7 @@ public final class DefaultIntifaceService implements IntifaceService
 {
 	private static final Duration DEFAULT_CONNECTION_TIMEOUT = Duration.ofSeconds(10);
 	private static final long CONNECTION_CHECK_SECONDS = 1;
+	private static final long REMOTE_LIVE_DECAY_STEP_MILLIS = 25;
 
 	private final ScheduledExecutorService executor;
 	private final ExecutorService connectExecutor;
@@ -39,10 +40,13 @@ public final class DefaultIntifaceService implements IntifaceService
 	private Future<?> connectAttempt;
 	private ScheduledFuture<?> connectTimeout;
 	private ScheduledFuture<?> pendingPatternStep;
+	private ScheduledFuture<?> pendingRemoteLiveDecay;
 	private ScheduledFuture<?> connectionMonitor;
 	private long connectionGeneration;
 	private boolean liveOutputActive;
 	private double liveIntensity;
+	private boolean remoteLiveOutputActive;
+	private double remoteLiveIntensity;
 
 	public DefaultIntifaceService(OkHttpClient httpClient, Gson gson)
 	{
@@ -127,6 +131,29 @@ public final class DefaultIntifaceService implements IntifaceService
 	public void stopLiveOutput()
 	{
 		submit(this::stopLiveOutputInternal);
+	}
+
+	@Override
+	public void setRemoteLiveIntensity(double intensity)
+	{
+		double safeIntensity = Math.max(0.0, Math.min(1.0, intensity));
+		submit(() -> updateRemoteLiveIntensity(safeIntensity));
+	}
+
+	@Override
+	public void releaseRemoteLiveOutput(Duration decayDuration)
+	{
+		long durationMillis = Math.max(
+			1,
+			Objects.requireNonNull(decayDuration, "decayDuration").toMillis()
+		);
+		submit(() -> beginRemoteLiveRelease(durationMillis));
+	}
+
+	@Override
+	public void stopRemoteLiveOutput()
+	{
+		submit(this::stopRemoteLiveOutputInternal);
 	}
 
 	@Override
@@ -328,6 +355,13 @@ public final class DefaultIntifaceService implements IntifaceService
 		{
 			return;
 		}
+		if (remoteLiveOutputActive
+			&& !request.getEventType().getPriority().outranks(HapticPriority.MANUAL))
+		{
+			log.debug("Dropping {} haptic request during remote live control",
+				request.getEventType());
+			return;
+		}
 
 		HapticArbiter.Decision decision = hapticArbiter.submit(request);
 		switch (decision)
@@ -408,7 +442,9 @@ public final class DefaultIntifaceService implements IntifaceService
 	{
 		liveOutputActive = true;
 		liveIntensity = intensity;
-		if (hapticArbiter.hasActiveRequest() || !hasLiveConnection())
+		if (remoteLiveOutputActive
+			|| hapticArbiter.hasActiveRequest()
+			|| !hasLiveConnection())
 		{
 			return;
 		}
@@ -427,9 +463,99 @@ public final class DefaultIntifaceService implements IntifaceService
 	{
 		liveOutputActive = false;
 		liveIntensity = 0.0;
-		if (!hapticArbiter.hasActiveRequest())
+		if (!remoteLiveOutputActive && !hapticArbiter.hasActiveRequest())
 		{
 			stopConnectedDevices(false);
+		}
+	}
+
+	private void updateRemoteLiveIntensity(double intensity)
+	{
+		cancelRemoteLiveDecay();
+		remoteLiveOutputActive = true;
+		remoteLiveIntensity = intensity;
+		if (hapticArbiter.hasActiveRequest())
+		{
+			HapticPriority activePriority = hapticArbiter.getActivePriority()
+				.orElse(HapticPriority.ROUTINE);
+			if (activePriority.outranks(HapticPriority.MANUAL))
+			{
+				return;
+			}
+			cancelPendingPatternStep();
+			hapticArbiter.clear();
+		}
+		if (!hasLiveConnection())
+		{
+			return;
+		}
+		try
+		{
+			gateway.vibrate(remoteLiveIntensity);
+		}
+		catch (RuntimeException e)
+		{
+			log.warn("Unable to update remote live Intiface output", e);
+		}
+	}
+
+	private void beginRemoteLiveRelease(long durationMillis)
+	{
+		cancelRemoteLiveDecay();
+		if (!remoteLiveOutputActive)
+		{
+			return;
+		}
+		double startingIntensity = remoteLiveIntensity;
+		long startedAtNanos = System.nanoTime();
+		pendingRemoteLiveDecay = executor.scheduleAtFixedRate(
+			() -> runGuarded(() -> advanceRemoteLiveRelease(
+				startingIntensity,
+				startedAtNanos,
+				durationMillis
+			)),
+			0,
+			REMOTE_LIVE_DECAY_STEP_MILLIS,
+			TimeUnit.MILLISECONDS
+		);
+	}
+
+	private void advanceRemoteLiveRelease(
+		double startingIntensity,
+		long startedAtNanos,
+		long durationMillis)
+	{
+		if (pendingRemoteLiveDecay == null || !remoteLiveOutputActive)
+		{
+			return;
+		}
+		double elapsedMillis = (System.nanoTime() - startedAtNanos) / 1_000_000.0;
+		double progress = Math.min(1.0, elapsedMillis / durationMillis);
+		remoteLiveIntensity = startingIntensity * (1.0 - progress);
+		if (!hapticArbiter.hasActiveRequest() && hasLiveConnection())
+		{
+			gateway.vibrate(remoteLiveIntensity);
+		}
+		if (progress >= 1.0)
+		{
+			cancelRemoteLiveDecay();
+			remoteLiveOutputActive = false;
+			remoteLiveIntensity = 0.0;
+			if (!hapticArbiter.hasActiveRequest())
+			{
+				restoreLiveOutputOrStop();
+			}
+		}
+	}
+
+	private void stopRemoteLiveOutputInternal()
+	{
+		cancelRemoteLiveDecay();
+		remoteLiveOutputActive = false;
+		remoteLiveIntensity = 0.0;
+		if (!hapticArbiter.hasActiveRequest())
+		{
+			restoreLiveOutputOrStop();
 		}
 	}
 
@@ -439,7 +565,11 @@ public final class DefaultIntifaceService implements IntifaceService
 		{
 			return;
 		}
-		if (liveOutputActive)
+		if (remoteLiveOutputActive)
+		{
+			gateway.vibrate(remoteLiveIntensity);
+		}
+		else if (liveOutputActive)
 		{
 			gateway.vibrate(liveIntensity);
 		}
@@ -452,11 +582,14 @@ public final class DefaultIntifaceService implements IntifaceService
 	private void stopAllInternal(boolean userRequested)
 	{
 		cancelPendingPatternStep();
+		cancelRemoteLiveDecay();
 		hapticArbiter.clear();
 		if (userRequested)
 		{
 			liveOutputActive = false;
 			liveIntensity = 0.0;
+			remoteLiveOutputActive = false;
+			remoteLiveIntensity = 0.0;
 		}
 		stopConnectedDevices(userRequested);
 	}
@@ -571,8 +704,11 @@ public final class DefaultIntifaceService implements IntifaceService
 	{
 		cancelConnectionAttempt();
 		cancelPendingPatternStep();
+		cancelRemoteLiveDecay();
 		cancelConnectionMonitor();
 		hapticArbiter.clear();
+		remoteLiveOutputActive = false;
+		remoteLiveIntensity = 0.0;
 
 		IntifaceGateway current = gateway;
 		gateway = null;
@@ -628,6 +764,15 @@ public final class DefaultIntifaceService implements IntifaceService
 		{
 			pendingPatternStep.cancel(false);
 			pendingPatternStep = null;
+		}
+	}
+
+	private void cancelRemoteLiveDecay()
+	{
+		if (pendingRemoteLiveDecay != null)
+		{
+			pendingRemoteLiveDecay.cancel(false);
+			pendingRemoteLiveDecay = null;
 		}
 	}
 

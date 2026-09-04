@@ -137,6 +137,48 @@ public class RemoteActionProtocolTest
 	}
 
 	@Test
+	public void liveForgeStreamsEncryptedClampedSamplesAndRelease()
+	{
+		Gson gson = new Gson();
+		TestRelay relay = new TestRelay();
+		RecordingExecutor participantExecutor = new RecordingExecutor();
+		RemotePermissions participantPermissions = new RemotePermissions(
+			true, true, true, true, true, false,
+			42, 900, 30_000
+		);
+
+		try (RemoteSessionManager controller = manager(
+			gson,
+			new MutableConfig(20),
+			new InMemoryRemotePermissionsStore(RemotePermissions.defaults()),
+			RemoteActionExecutor.NO_OP,
+			relay
+		);
+			RemoteSessionManager participant = manager(
+				gson,
+				new MutableConfig(60),
+				new InMemoryRemotePermissionsStore(participantPermissions),
+				participantExecutor,
+				relay
+			))
+		{
+			RemoteInvitation invitation = controller.startController(
+				"wss://relay.example/relay"
+			);
+			participant.joinParticipant(invitation.encode());
+
+			controller.beginRemoteLiveHaptic(90);
+			controller.updateRemoteLiveHaptic(30);
+			controller.endRemoteLiveHaptic();
+
+			assertEquals(java.util.Arrays.asList(42, 30), participantExecutor.liveIntensities);
+			assertEquals(1, participantExecutor.liveReleaseCount);
+			assertFalse(relay.containsPlaintext("REMOTE_LIVE_HAPTIC"));
+			assertFalse(relay.containsPlaintext("streamId"));
+		}
+	}
+
+	@Test
 	public void droppedInitialParticipantFramesAreRecoveredWithoutEmergencyPause()
 	{
 		Gson gson = new Gson();
@@ -265,6 +307,8 @@ public class RemoteActionProtocolTest
 		private boolean desktop;
 		private boolean chatbox;
 		private int stopCount;
+		private final List<Integer> liveIntensities = new ArrayList<>();
+		private int liveReleaseCount;
 
 		@Override
 		public void playHaptic(String value, int percent, int millis)
@@ -274,6 +318,21 @@ public class RemoteActionProtocolTest
 			intensity = percent;
 			duration = millis;
 		}
+
+		@Override
+		public void setRemoteLiveIntensity(int percent)
+		{
+			liveIntensities.add(percent);
+		}
+
+		@Override
+		public void releaseRemoteLiveHaptic()
+		{
+			liveReleaseCount++;
+		}
+
+		@Override
+		public void stopRemoteLiveHaptic() { }
 
 		@Override
 		public void playClick() { }

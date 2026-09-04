@@ -15,15 +15,20 @@ public final class RemotePermissions
 	public static final int SCHEMA_VERSION = 1;
 	public static final int MINIMUM_DURATION_MILLIS = 50;
 	public static final int MAXIMUM_DURATION_MILLIS = 10_000;
+	public static final int MINIMUM_LIVE_DURATION_MILLIS = 1_000;
+	public static final int MAXIMUM_LIVE_DURATION_MILLIS = 300_000;
+	public static final int DEFAULT_LIVE_DURATION_MILLIS = 30_000;
 
 	private final int schemaVersion;
 	private final boolean settingsAllowed;
 	private final boolean hapticsAllowed;
+	private final boolean liveHapticsAllowed;
 	private final boolean clicksAllowed;
 	private final boolean desktopNotificationsAllowed;
 	private final boolean localChatboxMessagesAllowed;
 	private final int maximumIntensityPercent;
 	private final int maximumDurationMillis;
+	private final int maximumLiveDurationMillis;
 
 	public RemotePermissions(
 		boolean settingsAllowed,
@@ -35,14 +40,40 @@ public final class RemotePermissions
 		int maximumDurationMillis)
 	{
 		this(
-			SCHEMA_VERSION,
 			settingsAllowed,
 			hapticsAllowed,
+			false,
 			clicksAllowed,
 			desktopNotificationsAllowed,
 			localChatboxMessagesAllowed,
 			maximumIntensityPercent,
-			maximumDurationMillis
+			maximumDurationMillis,
+			DEFAULT_LIVE_DURATION_MILLIS
+		);
+	}
+
+	public RemotePermissions(
+		boolean settingsAllowed,
+		boolean hapticsAllowed,
+		boolean liveHapticsAllowed,
+		boolean clicksAllowed,
+		boolean desktopNotificationsAllowed,
+		boolean localChatboxMessagesAllowed,
+		int maximumIntensityPercent,
+		int maximumDurationMillis,
+		int maximumLiveDurationMillis)
+	{
+		this(
+			SCHEMA_VERSION,
+			settingsAllowed,
+			hapticsAllowed,
+			liveHapticsAllowed,
+			clicksAllowed,
+			desktopNotificationsAllowed,
+			localChatboxMessagesAllowed,
+			maximumIntensityPercent,
+			maximumDurationMillis,
+			maximumLiveDurationMillis
 		);
 	}
 
@@ -50,31 +81,41 @@ public final class RemotePermissions
 		int schemaVersion,
 		boolean settingsAllowed,
 		boolean hapticsAllowed,
+		boolean liveHapticsAllowed,
 		boolean clicksAllowed,
 		boolean desktopNotificationsAllowed,
 		boolean localChatboxMessagesAllowed,
 		int maximumIntensityPercent,
-		int maximumDurationMillis)
+		int maximumDurationMillis,
+		int maximumLiveDurationMillis)
 	{
 		this.schemaVersion = schemaVersion;
 		this.settingsAllowed = settingsAllowed;
 		this.hapticsAllowed = hapticsAllowed;
+		this.liveHapticsAllowed = liveHapticsAllowed;
 		this.clicksAllowed = clicksAllowed;
 		this.desktopNotificationsAllowed = desktopNotificationsAllowed;
 		this.localChatboxMessagesAllowed = localChatboxMessagesAllowed;
 		this.maximumIntensityPercent = maximumIntensityPercent;
 		this.maximumDurationMillis = maximumDurationMillis;
+		this.maximumLiveDurationMillis = maximumLiveDurationMillis;
 		validate();
 	}
 
 	public static RemotePermissions defaults()
 	{
-		return new RemotePermissions(true, true, true, true, false, 60, 3_000);
+		return new RemotePermissions(
+			true, true, false, true, true, false,
+			60, 3_000, DEFAULT_LIVE_DURATION_MILLIS
+		);
 	}
 
 	static RemotePermissions none()
 	{
-		return new RemotePermissions(false, false, false, false, false, 0, 50);
+		return new RemotePermissions(
+			false, false, false, false, false, false,
+			0, 50, 0
+		);
 	}
 
 	public static RemotePermissions capture(HapticScapeConfig config)
@@ -83,6 +124,7 @@ public final class RemotePermissions
 		return new RemotePermissions(
 			config.remoteSettingsAllowed(),
 			config.remoteHapticsAllowed(),
+			config.remoteLiveHapticsAllowed(),
 			config.remoteClicksAllowed(),
 			config.remoteDesktopNotificationsAllowed(),
 			config.remoteLocalChatboxMessagesAllowed(),
@@ -91,6 +133,11 @@ public final class RemotePermissions
 				config.remoteMaximumDurationMillis(),
 				MINIMUM_DURATION_MILLIS,
 				MAXIMUM_DURATION_MILLIS
+			),
+			clamp(
+				config.remoteMaximumLiveDurationMillis(),
+				MINIMUM_LIVE_DURATION_MILLIS,
+				MAXIMUM_LIVE_DURATION_MILLIS
 			)
 		);
 	}
@@ -110,6 +157,16 @@ public final class RemotePermissions
 		{
 			throw new IllegalArgumentException("Remote duration limit is out of range");
 		}
+		if (maximumLiveDurationMillis != 0
+			&& (maximumLiveDurationMillis < MINIMUM_LIVE_DURATION_MILLIS
+				|| maximumLiveDurationMillis > MAXIMUM_LIVE_DURATION_MILLIS))
+		{
+			throw new IllegalArgumentException("Remote live duration limit is out of range");
+		}
+		if (liveHapticsAllowed && maximumLiveDurationMillis == 0)
+		{
+			throw new IllegalArgumentException("Remote live duration limit is required");
+		}
 	}
 
 	public boolean isSettingsAllowed()
@@ -120,6 +177,11 @@ public final class RemotePermissions
 	public boolean isHapticsAllowed()
 	{
 		return hapticsAllowed;
+	}
+
+	public boolean isLiveHapticsAllowed()
+	{
+		return liveHapticsAllowed;
 	}
 
 	public boolean isClicksAllowed()
@@ -147,6 +209,11 @@ public final class RemotePermissions
 		return maximumDurationMillis;
 	}
 
+	public int getMaximumLiveDurationMillis()
+	{
+		return maximumLiveDurationMillis;
+	}
+
 	@Override
 	public boolean equals(Object other)
 	{
@@ -158,11 +225,13 @@ public final class RemotePermissions
 		return schemaVersion == that.schemaVersion
 			&& settingsAllowed == that.settingsAllowed
 			&& hapticsAllowed == that.hapticsAllowed
+			&& liveHapticsAllowed == that.liveHapticsAllowed
 			&& clicksAllowed == that.clicksAllowed
 			&& desktopNotificationsAllowed == that.desktopNotificationsAllowed
 			&& localChatboxMessagesAllowed == that.localChatboxMessagesAllowed
 			&& maximumIntensityPercent == that.maximumIntensityPercent
-			&& maximumDurationMillis == that.maximumDurationMillis;
+			&& maximumDurationMillis == that.maximumDurationMillis
+			&& maximumLiveDurationMillis == that.maximumLiveDurationMillis;
 	}
 
 	@Override
@@ -172,11 +241,13 @@ public final class RemotePermissions
 			schemaVersion,
 			settingsAllowed,
 			hapticsAllowed,
+			liveHapticsAllowed,
 			clicksAllowed,
 			desktopNotificationsAllowed,
 			localChatboxMessagesAllowed,
 			maximumIntensityPercent,
-			maximumDurationMillis
+			maximumDurationMillis,
+			maximumLiveDurationMillis
 		);
 	}
 

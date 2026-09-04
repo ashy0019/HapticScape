@@ -22,6 +22,15 @@ public interface IntifaceService extends AutoCloseable
 
 	void stopLiveOutput();
 
+	/** Updates the participant's higher-priority Remote Control live lane. */
+	void setRemoteLiveIntensity(double intensity);
+
+	/** Smoothly returns the Remote Control live lane to zero. */
+	void releaseRemoteLiveOutput(Duration decayDuration);
+
+	/** Immediately disables only the Remote Control live lane. */
+	void stopRemoteLiveOutput();
+
 	void stopAll();
 
 	ConnectionSnapshot getSnapshot();

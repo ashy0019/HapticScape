@@ -34,6 +34,9 @@ public final class ConfigBackedRemotePermissionsStore implements RemotePermissio
 		configManager.setConfiguration(HapticScapeConfig.GROUP,
 			HapticScapeConfig.REMOTE_HAPTICS_ALLOWED_KEY, requested.isHapticsAllowed());
 		configManager.setConfiguration(HapticScapeConfig.GROUP,
+			HapticScapeConfig.REMOTE_LIVE_HAPTICS_ALLOWED_KEY,
+			requested.isLiveHapticsAllowed());
+		configManager.setConfiguration(HapticScapeConfig.GROUP,
 			HapticScapeConfig.REMOTE_CLICKS_ALLOWED_KEY, requested.isClicksAllowed());
 		configManager.setConfiguration(HapticScapeConfig.GROUP,
 			HapticScapeConfig.REMOTE_DESKTOP_NOTIFICATIONS_ALLOWED_KEY,
@@ -47,6 +50,9 @@ public final class ConfigBackedRemotePermissionsStore implements RemotePermissio
 		configManager.setConfiguration(HapticScapeConfig.GROUP,
 			HapticScapeConfig.REMOTE_MAXIMUM_DURATION_MILLIS_KEY,
 			requested.getMaximumDurationMillis());
+		configManager.setConfiguration(HapticScapeConfig.GROUP,
+			HapticScapeConfig.REMOTE_MAXIMUM_LIVE_DURATION_MILLIS_KEY,
+			requested.getMaximumLiveDurationMillis());
 		return requested;
 	}
 }

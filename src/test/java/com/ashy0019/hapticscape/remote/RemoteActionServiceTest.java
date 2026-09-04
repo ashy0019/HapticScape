@@ -191,6 +191,15 @@ public class RemoteActionServiceTest
 		}
 
 		@Override
+		public void setRemoteLiveIntensity(int intensityPercent) { }
+
+		@Override
+		public void releaseRemoteLiveHaptic() { }
+
+		@Override
+		public void stopRemoteLiveHaptic() { }
+
+		@Override
 		public void playClick()
 		{
 			clickCount++;

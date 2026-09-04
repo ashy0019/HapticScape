@@ -62,6 +62,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 	private final SavedUnlockKeysPanel savedUnlockKeysPanel;
 	private final RemotePermissionsPanel permissionsPanel;
 	private final RemoteActionsPanel actionsPanel;
+	private final RemoteLiveForgePanel liveForgePanel;
 	private int nextLayoutRow;
 	private boolean wasLocal = true;
 
@@ -75,6 +76,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		this.savedUnlockKeysPanel = new SavedUnlockKeysPanel(sessionManager);
 		this.permissionsPanel = new RemotePermissionsPanel(sessionManager);
 		this.actionsPanel = new RemoteActionsPanel(sessionManager);
+		this.liveForgePanel = new RemoteLiveForgePanel(sessionManager);
 		setLayout(new GridBagLayout());
 		setBorder(BorderFactory.createEmptyBorder(0, 4, 8, 4));
 
@@ -141,6 +143,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		addSection(session);
 		addSection(permissionsPanel);
 		addSection(actionsPanel);
+		addSection(liveForgePanel);
 
 		settingsLockPanel.setLayout(new BoxLayout(settingsLockPanel, BoxLayout.Y_AXIS));
 		settingsLockPanel.setBorder(
@@ -188,6 +191,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 
 	void close()
 	{
+		liveForgePanel.close();
 		sessionManager.removeListener(this);
 	}
 
@@ -214,6 +218,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 				sessionManager.getPeerPermissions(),
 				sessionManager.getControllerSettingsSnapshot()
 			);
+			liveForgePanel.apply(sessionManager.getSnapshot(), permissions);
 		});
 	}
 
@@ -404,6 +409,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 			sessionManager.getPeerPermissions(),
 			sessionManager.getControllerSettingsSnapshot()
 		);
+		liveForgePanel.apply(snapshot, sessionManager.getPeerPermissions());
 		savedUnlockKeysPanel.setVisible(!participant);
 		emergencyButton.setEnabled(participant && !emergencyPaused);
 		resumeButton.setEnabled(participant && emergencyPaused);

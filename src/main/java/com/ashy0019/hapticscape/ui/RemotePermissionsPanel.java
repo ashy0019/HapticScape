@@ -19,6 +19,7 @@ final class RemotePermissionsPanel extends JPanel
 	private final RemoteSessionManager sessionManager;
 	private final JCheckBox settings = new JCheckBox("Settings changes");
 	private final JCheckBox haptics = new JCheckBox("Haptic actions");
+	private final JCheckBox liveHaptics = new JCheckBox("Live Forge control");
 	private final JCheckBox clicks = new JCheckBox("Click sounds");
 	private final JCheckBox notifications = new JCheckBox("Desktop notifications");
 	private final JCheckBox chatbox = new JCheckBox("Local chatbox notices");
@@ -30,6 +31,14 @@ final class RemotePermissionsPanel extends JPanel
 		RemotePermissions.MAXIMUM_DURATION_MILLIS,
 		50
 	));
+	private final JSpinner maximumLiveDurationSeconds = new JSpinner(
+		new SpinnerNumberModel(
+			RemotePermissions.DEFAULT_LIVE_DURATION_MILLIS / 1_000,
+			RemotePermissions.MINIMUM_LIVE_DURATION_MILLIS / 1_000,
+			RemotePermissions.MAXIMUM_LIVE_DURATION_MILLIS / 1_000,
+			1
+		)
+	);
 	private boolean applying;
 
 	RemotePermissionsPanel(RemoteSessionManager sessionManager)
@@ -44,6 +53,9 @@ final class RemotePermissionsPanel extends JPanel
 		PanelUi.addVerticalComponent(this, explanation);
 		settings.setToolTipText("Allow the controller to change feedback settings");
 		haptics.setToolTipText("Allow bounded haptic requests");
+		liveHaptics.setToolTipText(
+			"Allow continuous haptic intensity control while the controller holds Live Forge"
+		);
 		clicks.setToolTipText("Allow the controller to play your local click sound");
 		notifications.setToolTipText("Allow local RuneLite desktop notifications");
 		chatbox.setToolTipText(
@@ -51,6 +63,7 @@ final class RemotePermissionsPanel extends JPanel
 		);
 		PanelUi.addVerticalComponent(this, settings);
 		PanelUi.addVerticalComponent(this, haptics);
+		PanelUi.addVerticalComponent(this, liveHaptics);
 		PanelUi.addVerticalComponent(this, clicks);
 		PanelUi.addVerticalComponent(this, notifications);
 		PanelUi.addVerticalComponent(this, chatbox);
@@ -77,8 +90,23 @@ final class RemotePermissionsPanel extends JPanel
 		allowHorizontalShrink(durationRow);
 		PanelUi.addVerticalComponent(this, durationRow);
 
+		JPanel liveDurationRow = new JPanel(new BorderLayout(6, 0));
+		PanelUi.setFixedWidth(maximumLiveDurationSeconds, 70);
+		maximumLiveDurationSeconds.setToolTipText(
+			"Maximum duration of one continuous Live Forge gesture, in seconds"
+		);
+		liveDurationRow.add(new JLabel("Max live hold (s)"), BorderLayout.WEST);
+		liveDurationRow.add(maximumLiveDurationSeconds, BorderLayout.CENTER);
+		allowHorizontalShrink(liveDurationRow);
+		PanelUi.addVerticalComponent(this, liveDurationRow);
+
 		settings.addActionListener(event -> save());
 		haptics.addActionListener(event -> save());
+		liveHaptics.addActionListener(event ->
+		{
+			maximumLiveDurationSeconds.setEnabled(liveHaptics.isSelected());
+			save();
+		});
 		clicks.addActionListener(event -> save());
 		notifications.addActionListener(event -> save());
 		chatbox.addActionListener(event -> save());
@@ -91,6 +119,7 @@ final class RemotePermissionsPanel extends JPanel
 			}
 		});
 		maximumDuration.addChangeListener(event -> save());
+		maximumLiveDurationSeconds.addChangeListener(event -> save());
 		apply(sessionManager.getVisiblePermissions());
 	}
 
@@ -101,12 +130,20 @@ final class RemotePermissionsPanel extends JPanel
 		{
 			settings.setSelected(permissions.isSettingsAllowed());
 			haptics.setSelected(permissions.isHapticsAllowed());
+			liveHaptics.setSelected(permissions.isLiveHapticsAllowed());
 			clicks.setSelected(permissions.isClicksAllowed());
 			notifications.setSelected(permissions.isDesktopNotificationsAllowed());
 			chatbox.setSelected(permissions.isLocalChatboxMessagesAllowed());
 			maximumIntensity.setValue(permissions.getMaximumIntensityPercent());
 			maximumIntensityValue.setText(permissions.getMaximumIntensityPercent() + "%");
 			maximumDuration.setValue(permissions.getMaximumDurationMillis());
+			maximumLiveDurationSeconds.setValue(
+				Math.max(
+					RemotePermissions.MINIMUM_LIVE_DURATION_MILLIS,
+					permissions.getMaximumLiveDurationMillis()
+				) / 1_000
+			);
+			maximumLiveDurationSeconds.setEnabled(permissions.isLiveHapticsAllowed());
 		}
 		finally
 		{
@@ -123,11 +160,13 @@ final class RemotePermissionsPanel extends JPanel
 		sessionManager.updateLocalPermissions(new RemotePermissions(
 			settings.isSelected(),
 			haptics.isSelected(),
+			liveHaptics.isSelected(),
 			clicks.isSelected(),
 			notifications.isSelected(),
 			chatbox.isSelected(),
 			maximumIntensity.getValue(),
-			((Number) maximumDuration.getValue()).intValue()
+			((Number) maximumDuration.getValue()).intValue(),
+			((Number) maximumLiveDurationSeconds.getValue()).intValue() * 1_000
 		));
 	}
 

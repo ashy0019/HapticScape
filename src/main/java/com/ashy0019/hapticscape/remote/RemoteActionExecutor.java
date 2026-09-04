@@ -5,6 +5,12 @@ public interface RemoteActionExecutor
 {
 	void playHaptic(String patternSelection, int intensityPercent, int durationMillis);
 
+	void setRemoteLiveIntensity(int intensityPercent);
+
+	void releaseRemoteLiveHaptic();
+
+	void stopRemoteLiveHaptic();
+
 	void playClick();
 
 	void showMessage(String message, boolean desktopNotification, boolean localChatboxMessage);
@@ -15,6 +21,15 @@ public interface RemoteActionExecutor
 	{
 		@Override
 		public void playHaptic(String patternSelection, int intensityPercent, int durationMillis) { }
+
+		@Override
+		public void setRemoteLiveIntensity(int intensityPercent) { }
+
+		@Override
+		public void releaseRemoteLiveHaptic() { }
+
+		@Override
+		public void stopRemoteLiveHaptic() { }
 
 		@Override
 		public void playClick() { }
