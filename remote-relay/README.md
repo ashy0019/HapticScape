@@ -2,6 +2,15 @@
 
 This Cloudflare Worker/Durable Object is a deliberately dumb relay for HapticScape Remote Control.
 
+## Hosted endpoint
+
+HapticScape uses this deployed relay by default:
+
+`wss://hapticscape-remote-relay.hapticscape.workers.dev/relay`
+
+Using the hosted endpoint is optional. Users can replace the relay URL in the
+HapticScape Remote panel with a compatible self-hosted deployment.
+
 - The two HapticScape clients never connect directly to one another.
 - Cloudflare necessarily sees each client's source IP at the network edge.
 - The relay sees the random room ID and each connection's role.

@@ -44,6 +44,8 @@ public interface HapticScapeConfig extends Config
 	String CLICKER_ALERT_SETTINGS_KEY = "clickerAlertSettings";
 	String CLICKER_PHRASE_RULES_KEY = "clickerPhraseRules";
 	String REMOTE_RELAY_URL_KEY = "remoteRelayUrl";
+	String DEFAULT_REMOTE_RELAY_URL =
+		"wss://hapticscape-remote-relay.hapticscape.workers.dev/relay";
 	String REMOTE_SETTINGS_ALLOWED_KEY = "remoteSettingsAllowed";
 	String REMOTE_HAPTICS_ALLOWED_KEY = "remoteHapticsAllowed";
 	String REMOTE_CLICKS_ALLOWED_KEY = "remoteClicksAllowed";
@@ -492,7 +494,16 @@ public interface HapticScapeConfig extends Config
 	)
 	default String remoteRelayUrl()
 	{
-		return "";
+		return DEFAULT_REMOTE_RELAY_URL;
+	}
+
+	static String resolveRemoteRelayUrl(String configuredValue)
+	{
+		if (configuredValue == null || configuredValue.trim().isEmpty())
+		{
+			return DEFAULT_REMOTE_RELAY_URL;
+		}
+		return configuredValue.trim();
 	}
 
 	@ConfigItem(

@@ -251,15 +251,21 @@ Remote Control creates an explicit session between a controller and a
 participant. Both people run HapticScape. The clients exchange encrypted data
 through a WebSocket relay and never connect directly to one another.
 
-Remote Control requires a `wss://` relay URL. This repository includes a
-Cloudflare Worker and Durable Object relay implementation under
-[`remote-relay`](remote-relay), but HapticScape does not select or deploy a
-relay automatically.
+Remote Control uses this hosted Cloudflare relay by default:
+
+```text
+wss://hapticscape-remote-relay.hapticscape.workers.dev/relay
+```
+
+The relay field remains editable for users who prefer a self-hosted service.
+This repository includes the Cloudflare Worker and Durable Object relay
+implementation under [`remote-relay`](remote-relay).
 
 #### Start a session
 
 1. Both people should use the same current HapticScape release.
-2. The controller enters the relay URL and selects **Create invitation**.
+2. The controller keeps the default relay or enters a self-hosted relay URL,
+   then selects **Create invitation**.
 3. The controller sends the complete invitation to the participant through a
    private channel.
 4. The participant pastes the invitation, reviews the confirmation, and
@@ -423,6 +429,10 @@ If a non-local Intiface server is configured, its operator can observe the
 client IP address and haptic command traffic.
 
 ### Remote Control privacy
+
+The default Remote Control relay is
+`wss://hapticscape-remote-relay.hapticscape.workers.dev/relay`. Users can
+replace it with a compatible self-hosted relay in the Remote panel.
 
 Remote session messages are encrypted with AES-256-GCM before they reach the
 relay. The relay still receives network metadata needed to operate, including
