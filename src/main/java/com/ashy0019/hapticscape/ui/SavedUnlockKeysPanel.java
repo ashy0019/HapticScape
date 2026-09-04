@@ -3,7 +3,13 @@ package com.ashy0019.hapticscape.ui;
 import com.ashy0019.hapticscape.remote.RemoteSessionManager;
 import com.ashy0019.hapticscape.remote.SavedUnlockKey;
 import java.awt.BorderLayout;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.GridLayout;
+import java.awt.Insets;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
 import java.time.ZoneId;
@@ -13,6 +19,7 @@ import java.util.List;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -25,7 +32,7 @@ final class SavedUnlockKeysPanel extends JPanel
 {
 	private final RemoteSessionManager sessionManager;
 	private final JPanel entriesPanel = new JPanel();
-	private final JLabel statusLabel = new JLabel();
+	private final SidebarTextLabel statusText = new SidebarTextLabel("");
 	private final DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern(
 		"MMM d, yyyy h:mm a"
 	).withZone(ZoneId.systemDefault());
@@ -33,25 +40,26 @@ final class SavedUnlockKeysPanel extends JPanel
 	SavedUnlockKeysPanel(RemoteSessionManager sessionManager)
 	{
 		this.sessionManager = sessionManager;
-		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
+		setLayout(new BorderLayout(0, 0));
 		setBorder(BorderFactory.createTitledBorder("Saved Unlock Keys"));
+		JPanel header = new JPanel();
+		header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
 
-		JTextArea explanation = new JTextArea(
-			"Accepted post-session unlock keys are encrypted by Windows for your "
-				+ "account. Invitation and session encryption keys are never saved.",
-			3,
-			24
+		SidebarTextLabel explanation = new SidebarTextLabel(
+			"Accepted unlock keys are protected by Windows for this account. "
+				+ "Invitations are never saved."
 		);
-		explanation.setEditable(false);
-		explanation.setOpaque(false);
-		explanation.setFocusable(false);
-		explanation.setLineWrap(true);
-		explanation.setWrapStyleWord(true);
-		PanelUi.addVerticalComponent(this, explanation);
+		explanation.setBorder(BorderFactory.createEmptyBorder(0, 2, 4, 2));
+		PanelUi.addVerticalComponent(header, explanation);
 
-		entriesPanel.setLayout(new BoxLayout(entriesPanel, BoxLayout.Y_AXIS));
-		PanelUi.addVerticalComponent(this, entriesPanel);
-		PanelUi.addVerticalComponent(this, statusLabel);
+		statusText.setBorder(BorderFactory.createEmptyBorder(0, 2, 4, 2));
+		PanelUi.addVerticalComponent(header, statusText);
+		add(header, BorderLayout.NORTH);
+		entriesPanel.setLayout(new GridBagLayout());
+		entriesPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+		entriesPanel.setMinimumSize(new Dimension(0, 0));
+		entriesPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
+		add(entriesPanel, BorderLayout.CENTER);
 	}
 
 	void refresh()
@@ -59,28 +67,34 @@ final class SavedUnlockKeysPanel extends JPanel
 		entriesPanel.removeAll();
 		if (!sessionManager.isSavedUnlockKeyVaultAvailable())
 		{
-			statusLabel.setText(
-				"<html>" + sessionManager.getSavedUnlockKeyVaultMessage() + "</html>"
-			);
+			statusText.setPlainText(sessionManager.getSavedUnlockKeyVaultMessage());
 		}
 		else
 		{
 			List<SavedUnlockKey> entries = sessionManager.getSavedUnlockKeys();
 			if (entries.isEmpty())
 			{
-				statusLabel.setText("No accepted unlock keys saved");
+				statusText.setPlainText("No accepted unlock keys saved");
 			}
 			else
 			{
-				statusLabel.setText(entries.size() + (entries.size() == 1
-					? " saved key"
-					: " saved keys"));
-				for (SavedUnlockKey entry : entries)
+				statusText.setPlainText(entries.size() + (entries.size() == 1
+					? " key saved"
+					: " keys saved"));
+				for (int index = 0; index < entries.size(); index++)
 				{
-					PanelUi.addVerticalComponent(entriesPanel, entryRow(entry));
+					GridBagConstraints constraints = new GridBagConstraints();
+					constraints.gridx = 0;
+					constraints.gridy = index;
+					constraints.weightx = 1.0;
+					constraints.fill = GridBagConstraints.HORIZONTAL;
+					constraints.anchor = GridBagConstraints.NORTHWEST;
+					constraints.insets = new Insets(index == 0 ? 0 : 6, 0, 0, 0);
+					entriesPanel.add(entryRow(entries.get(index)), constraints);
 				}
 			}
 		}
+		updateDynamicSizeConstraints();
 		entriesPanel.revalidate();
 		entriesPanel.repaint();
 		revalidate();
@@ -95,28 +109,39 @@ final class SavedUnlockKeysPanel extends JPanel
 			BorderFactory.createEtchedBorder(),
 			BorderFactory.createEmptyBorder(4, 4, 4, 4)
 		));
-		JLabel label = new JLabel(entry.getLabel());
+		SidebarTextLabel label = new SidebarTextLabel(entry.getLabel());
+		label.setFont(label.getFont().deriveFont(Font.BOLD));
+		label.setPlainText(entry.getLabel());
 		label.setToolTipText(entry.getNote().isEmpty() ? null : entry.getNote());
+		allowHorizontalShrink(label);
 		PanelUi.addVerticalComponent(row, label);
-		PanelUi.addVerticalComponent(
-			row,
-			new JLabel("Created " + dateFormat.format(entry.getCreatedAt()))
+		JLabel created = metadataLabel(
+			"Created " + dateFormat.format(entry.getCreatedAt())
 		);
-		PanelUi.addVerticalComponent(row, new JLabel(entry.getLastUsedAt() == null
-			? "Never copied"
-			: "Last copied " + dateFormat.format(entry.getLastUsedAt())));
+		JLabel lastUsed = metadataLabel(entry.getLastUsedAt() == null
+			? "Not copied yet"
+			: "Copied " + dateFormat.format(entry.getLastUsedAt()));
+		PanelUi.addVerticalComponent(row, created);
+		PanelUi.addVerticalComponent(row, lastUsed);
 
-		JPanel buttons = new JPanel(new GridLayout(1, 3, 4, 0));
-		JButton copy = new JButton("Copy");
+		JButton copy = new JButton("Copy key");
 		JButton edit = new JButton("Edit");
 		JButton forget = new JButton("Forget");
+		configureCompactButton(copy);
+		configureCompactButton(edit);
+		configureCompactButton(forget);
 		copy.addActionListener(event -> copy(entry));
 		edit.addActionListener(event -> edit(entry));
 		forget.addActionListener(event -> forget(entry));
-		buttons.add(copy);
-		buttons.add(edit);
-		buttons.add(forget);
-		PanelUi.addVerticalComponent(row, buttons);
+		PanelUi.addVerticalComponent(row, copy);
+		JPanel secondaryActions = new JPanel(new GridLayout(1, 2, 4, 0));
+		secondaryActions.setMinimumSize(new Dimension(0, edit.getPreferredSize().height));
+		secondaryActions.add(edit);
+		secondaryActions.add(forget);
+		PanelUi.addVerticalComponent(row, secondaryActions);
+		Dimension preferred = row.getPreferredSize();
+		row.setMinimumSize(new Dimension(0, preferred.height));
+		row.setMaximumSize(new Dimension(Integer.MAX_VALUE, preferred.height));
 		return row;
 	}
 
@@ -131,7 +156,7 @@ final class SavedUnlockKeysPanel extends JPanel
 				null
 			);
 			refresh();
-			statusLabel.setText("Unlock key copied");
+			statusText.setPlainText("Unlock key copied");
 		}
 		catch (RuntimeException e)
 		{
@@ -223,5 +248,36 @@ final class SavedUnlockKeysPanel extends JPanel
 		row.add(new JLabel(name), BorderLayout.WEST);
 		row.add(control, BorderLayout.CENTER);
 		return row;
+	}
+
+	private void updateDynamicSizeConstraints()
+	{
+		Dimension entriesSize = entriesPanel.getPreferredSize();
+		entriesPanel.setMinimumSize(new Dimension(0, entriesSize.height));
+		entriesPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, entriesSize.height));
+		Dimension panelSize = getPreferredSize();
+		setMinimumSize(new Dimension(0, panelSize.height));
+		setMaximumSize(new Dimension(Integer.MAX_VALUE, panelSize.height));
+	}
+
+	private static JLabel metadataLabel(String text)
+	{
+		JLabel label = new JLabel(text);
+		label.setFont(label.getFont().deriveFont(Font.PLAIN, 10f));
+		allowHorizontalShrink(label);
+		return label;
+	}
+
+	private static void configureCompactButton(JButton button)
+	{
+		button.setMargin(new Insets(2, 6, 2, 6));
+		button.setFocusable(false);
+		allowHorizontalShrink(button);
+	}
+
+	private static void allowHorizontalShrink(JComponent component)
+	{
+		Dimension preferred = component.getPreferredSize();
+		component.setMinimumSize(new Dimension(0, preferred.height));
 	}
 }

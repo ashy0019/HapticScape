@@ -13,6 +13,8 @@ import com.ashy0019.hapticscape.remote.SettingsLockProposal;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Rectangle;
 import java.awt.Toolkit;
@@ -22,6 +24,7 @@ import java.util.Arrays;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -37,7 +40,7 @@ final class RemoteControlPanel extends JPanel
 {
 	private final ConfigManager configManager;
 	private final RemoteSessionManager sessionManager;
-	private final JLabel statusLabel = new JLabel("Local control");
+	private final SidebarTextLabel statusText = new SidebarTextLabel("Local control");
 	private final JTextField relayUrlField = new JTextField();
 	private final JTextArea invitationOutput = new JTextArea(4, 24);
 	private final JTextArea invitationInput = new JTextArea(4, 24);
@@ -49,12 +52,15 @@ final class RemoteControlPanel extends JPanel
 	private final JButton resumeButton = new JButton("Resume");
 	private final JButton endButton = new JButton("End session");
 	private final JPanel settingsLockPanel = new JPanel();
-	private final JLabel settingsLockStatusLabel = new JLabel("No post-session lock requested");
+	private final SidebarTextLabel settingsLockStatusText = new SidebarTextLabel(
+		"No post-session lock requested"
+	);
 	private final JButton armSettingsLockButton = new JButton("Generate unlock key");
 	private final JButton cancelSettingsLockButton = new JButton("Cancel lock");
 	private final JPanel controllerPanel = new JPanel();
 	private final JPanel participantPanel = new JPanel();
 	private final SavedUnlockKeysPanel savedUnlockKeysPanel;
+	private int nextLayoutRow;
 	private boolean wasLocal = true;
 
 	RemoteControlPanel(
@@ -65,31 +71,28 @@ final class RemoteControlPanel extends JPanel
 		this.configManager = configManager;
 		this.sessionManager = sessionManager;
 		this.savedUnlockKeysPanel = new SavedUnlockKeysPanel(sessionManager);
-		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
+		setLayout(new GridBagLayout());
+		setBorder(BorderFactory.createEmptyBorder(0, 4, 8, 4));
 
-		JTextArea privacy = new JTextArea(
+		SidebarTextLabel privacy = new SidebarTextLabel(
 			"Settings are end-to-end encrypted. Peers do not connect directly, "
-				+ "but the relay operator can see each client's IP.",
-			3,
-			24
+				+ "but the relay operator can see each client's IP."
 		);
-		privacy.setEditable(false);
-		privacy.setOpaque(false);
-		privacy.setFocusable(false);
-		privacy.setLineWrap(true);
-		privacy.setWrapStyleWord(true);
 		privacy.setBorder(BorderFactory.createEmptyBorder(2, 2, 6, 2));
 		privacy.setToolTipText(
 			"Settings are encrypted before relay transport. If your partner operates the relay, they may be able to see connection metadata such as your IP address."
 		);
-		PanelUi.addVerticalComponent(this, privacy);
+		addSection(privacy);
 
 		relayUrlField.setText(config.remoteRelayUrl());
-		PanelUi.addVerticalComponent(this, row("Relay", relayUrlField));
+		addSection(row("Relay", relayUrlField));
 
 		controllerPanel.setLayout(new BoxLayout(controllerPanel, BoxLayout.Y_AXIS));
 		controllerPanel.setBorder(BorderFactory.createTitledBorder("Control a partner"));
 		JPanel createRow = new JPanel(new GridLayout(1, 2, 4, 0));
+		allowHorizontalShrink(createRow);
+		configureCompactButton(createButton);
+		configureCompactButton(copyButton);
 		createRow.add(createButton);
 		createRow.add(copyButton);
 		PanelUi.addVerticalComponent(controllerPanel, createRow);
@@ -99,56 +102,63 @@ final class RemoteControlPanel extends JPanel
 		invitationOutput.setToolTipText(
 			"Share this invitation privately with the participant. It contains the session encryption key."
 		);
-		PanelUi.addVerticalComponent(controllerPanel, new JScrollPane(invitationOutput));
-		PanelUi.addVerticalComponent(this, controllerPanel);
+		JScrollPane invitationOutputScroll = new JScrollPane(invitationOutput);
+		allowHorizontalShrink(invitationOutputScroll);
+		PanelUi.addVerticalComponent(controllerPanel, invitationOutputScroll);
+		allowHorizontalShrink(controllerPanel);
+		addSection(controllerPanel);
 
 		participantPanel.setLayout(new BoxLayout(participantPanel, BoxLayout.Y_AXIS));
 		participantPanel.setBorder(BorderFactory.createTitledBorder("Let a partner control you"));
 		invitationInput.setLineWrap(true);
 		invitationInput.setWrapStyleWord(true);
-		PanelUi.addVerticalComponent(participantPanel, new JScrollPane(invitationInput));
+		JScrollPane invitationInputScroll = new JScrollPane(invitationInput);
+		allowHorizontalShrink(invitationInputScroll);
+		PanelUi.addVerticalComponent(participantPanel, invitationInputScroll);
 		JPanel joinRow = new JPanel(new GridLayout(1, 2, 4, 0));
+		allowHorizontalShrink(joinRow);
+		configureCompactButton(pasteButton);
+		configureCompactButton(joinButton);
 		joinRow.add(pasteButton);
 		joinRow.add(joinButton);
 		PanelUi.addVerticalComponent(participantPanel, joinRow);
-		PanelUi.addVerticalComponent(this, participantPanel);
+		allowHorizontalShrink(participantPanel);
+		addSection(participantPanel);
 
 		JPanel session = new JPanel(new BorderLayout(8, 0));
 		session.setBorder(BorderFactory.createTitledBorder("Session"));
-		session.add(statusLabel, BorderLayout.CENTER);
-		PanelUi.addVerticalComponent(this, session);
+		session.add(statusText, BorderLayout.CENTER);
+		allowHorizontalShrink(session);
+		addSection(session);
 
 		settingsLockPanel.setLayout(new BoxLayout(settingsLockPanel, BoxLayout.Y_AXIS));
 		settingsLockPanel.setBorder(
 			BorderFactory.createTitledBorder("Post-session settings lock")
 		);
-		JTextArea lockExplanation = new JTextArea(
+		SidebarTextLabel lockExplanation = new SidebarTextLabel(
 			"Ask the participant to keep the final feedback settings locked after "
 				+ "the session. They must approve the request. HapticScape generates "
-				+ "the unlock key for you.",
-			3,
-			24
+				+ "the unlock key for you."
 		);
-		lockExplanation.setEditable(false);
-		lockExplanation.setOpaque(false);
-		lockExplanation.setFocusable(false);
-		lockExplanation.setLineWrap(true);
-		lockExplanation.setWrapStyleWord(true);
 		PanelUi.addVerticalComponent(settingsLockPanel, lockExplanation);
 		JPanel settingsLockButtons = new JPanel(new GridLayout(0, 1, 0, 4));
+		allowHorizontalShrink(settingsLockButtons);
+		configureCompactButton(armSettingsLockButton);
+		configureCompactButton(cancelSettingsLockButton);
 		settingsLockButtons.add(armSettingsLockButton);
 		settingsLockButtons.add(cancelSettingsLockButton);
 		PanelUi.addVerticalComponent(settingsLockPanel, settingsLockButtons);
-		PanelUi.addVerticalComponent(settingsLockPanel, settingsLockStatusLabel);
-		PanelUi.addVerticalComponent(this, settingsLockPanel);
+		PanelUi.addVerticalComponent(settingsLockPanel, settingsLockStatusText);
+		allowHorizontalShrink(settingsLockPanel);
+		addSection(settingsLockPanel);
 
-		PanelUi.addVerticalComponent(this, savedUnlockKeysPanel);
+		addSection(savedUnlockKeysPanel);
 
 		JPanel safetyButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
 		safetyButtons.add(emergencyButton);
 		safetyButtons.add(resumeButton);
 		safetyButtons.add(endButton);
-		PanelUi.addVerticalComponent(this, safetyButtons);
+		addSection(safetyButtons);
 
 		createButton.addActionListener(event -> createInvitation());
 		copyButton.addActionListener(event -> copyInvitation());
@@ -293,17 +303,10 @@ final class RemoteControlPanel extends JPanel
 		JTextField keyField = new JTextField(new String(unlockKey));
 		keyField.setEditable(false);
 		keyField.setHorizontalAlignment(JTextField.CENTER);
-		JTextArea explanation = new JTextArea(
+		SidebarTextLabel explanation = new SidebarTextLabel(
 			"HapticScape will save this unlock key only if the participant accepts "
-				+ "the lock. The saved copy is encrypted by Windows for your account.",
-			3,
-			24
+				+ "the lock. The saved copy is encrypted by Windows for your account."
 		);
-		explanation.setEditable(false);
-		explanation.setOpaque(false);
-		explanation.setFocusable(false);
-		explanation.setLineWrap(true);
-		explanation.setWrapStyleWord(true);
 		JPanel content = new JPanel();
 		content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
 		PanelUi.addVerticalComponent(content, explanation);
@@ -367,7 +370,7 @@ final class RemoteControlPanel extends JPanel
 
 	private void applySnapshot(RemoteSessionSnapshot snapshot)
 	{
-		statusLabel.setText("<html>" + snapshot.getMessage() + "</html>");
+		statusText.setPlainText(snapshot.getMessage());
 		boolean local = snapshot.getState() == RemoteSessionState.LOCAL;
 		boolean controller = snapshot.getRole() == RemoteRole.CONTROLLER && !local;
 		boolean participant = snapshot.getRole() == RemoteRole.PARTICIPANT && !local;
@@ -397,6 +400,7 @@ final class RemoteControlPanel extends JPanel
 		endButton.setEnabled(!local);
 		endButton.setVisible(!local);
 		applyLockSnapshot(sessionManager.getLockSnapshot());
+		refreshSectionMinimumHeights();
 		revalidate();
 		repaint();
 	}
@@ -409,7 +413,7 @@ final class RemoteControlPanel extends JPanel
 				|| session.getState() == RemoteSessionState.PEER_EMERGENCY_PAUSED);
 		RemoteLockState state = snapshot.getState();
 		settingsLockPanel.setVisible(controllerActive);
-		settingsLockStatusLabel.setText("<html>" + snapshot.getMessage() + "</html>");
+		settingsLockStatusText.setPlainText(snapshot.getMessage());
 		savedUnlockKeysPanel.refresh();
 		boolean mayRequest = state == RemoteLockState.INACTIVE
 			|| state == RemoteLockState.DECLINED;
@@ -428,6 +432,7 @@ final class RemoteControlPanel extends JPanel
 			|| state == RemoteLockState.DECLINED;
 		cancelSettingsLockButton.setVisible(mayCancel);
 		cancelSettingsLockButton.setEnabled(controllerActive && mayCancel);
+		refreshSectionMinimumHeights();
 		settingsLockPanel.revalidate();
 		settingsLockPanel.repaint();
 	}
@@ -445,7 +450,7 @@ final class RemoteControlPanel extends JPanel
 				new StringSelection(invitation),
 				null
 			);
-			statusLabel.setText("Invitation copied");
+			statusText.setPlainText("Invitation copied");
 		}
 		catch (RuntimeException e)
 		{
@@ -486,6 +491,47 @@ final class RemoteControlPanel extends JPanel
 		JPanel row = new JPanel(new BorderLayout(8, 0));
 		row.add(new JLabel(name), BorderLayout.WEST);
 		row.add(control, BorderLayout.CENTER);
+		allowHorizontalShrink(row);
+		if (control instanceof JComponent)
+		{
+			allowHorizontalShrink((JComponent) control);
+		}
 		return row;
+	}
+
+	private static void configureCompactButton(JButton button)
+	{
+		button.setMargin(new java.awt.Insets(2, 6, 2, 6));
+		allowHorizontalShrink(button);
+	}
+
+	private static void allowHorizontalShrink(JComponent component)
+	{
+		Dimension preferred = component.getPreferredSize();
+		component.setMinimumSize(new Dimension(0, preferred.height));
+	}
+
+	private void addSection(JComponent component)
+	{
+		GridBagConstraints constraints = new GridBagConstraints();
+		constraints.gridx = 0;
+		constraints.gridy = nextLayoutRow++;
+		constraints.weightx = 1.0;
+		constraints.fill = GridBagConstraints.HORIZONTAL;
+		constraints.anchor = GridBagConstraints.NORTHWEST;
+		constraints.insets = new java.awt.Insets(0, 0, 6, 0);
+		allowHorizontalShrink(component);
+		add(component, constraints);
+	}
+
+	private void refreshSectionMinimumHeights()
+	{
+		for (java.awt.Component component : getComponents())
+		{
+			if (component instanceof JComponent)
+			{
+				allowHorizontalShrink((JComponent) component);
+			}
+		}
 	}
 }
