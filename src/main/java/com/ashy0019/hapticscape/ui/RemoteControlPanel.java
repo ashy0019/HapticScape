@@ -54,6 +54,7 @@ final class RemoteControlPanel extends JPanel
 	private final JButton cancelSettingsLockButton = new JButton("Cancel lock");
 	private final JPanel controllerPanel = new JPanel();
 	private final JPanel participantPanel = new JPanel();
+	private final SavedUnlockKeysPanel savedUnlockKeysPanel;
 	private boolean wasLocal = true;
 
 	RemoteControlPanel(
@@ -63,6 +64,7 @@ final class RemoteControlPanel extends JPanel
 	{
 		this.configManager = configManager;
 		this.sessionManager = sessionManager;
+		this.savedUnlockKeysPanel = new SavedUnlockKeysPanel(sessionManager);
 		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
 
 		JTextArea privacy = new JTextArea(
@@ -140,6 +142,8 @@ final class RemoteControlPanel extends JPanel
 		PanelUi.addVerticalComponent(settingsLockPanel, settingsLockStatusLabel);
 		PanelUi.addVerticalComponent(this, settingsLockPanel);
 
+		PanelUi.addVerticalComponent(this, savedUnlockKeysPanel);
+
 		JPanel safetyButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
 		safetyButtons.add(emergencyButton);
 		safetyButtons.add(resumeButton);
@@ -157,6 +161,7 @@ final class RemoteControlPanel extends JPanel
 		cancelSettingsLockButton.addActionListener(event -> sessionManager.cancelSettingsLock());
 
 		sessionManager.addListener(this);
+		savedUnlockKeysPanel.refresh();
 		applySnapshot(sessionManager.getSnapshot());
 	}
 
@@ -279,13 +284,18 @@ final class RemoteControlPanel extends JPanel
 
 	private void armSettingsLock()
 	{
+		if (!sessionManager.isSavedUnlockKeyVaultAvailable())
+		{
+			showError(sessionManager.getSavedUnlockKeyVaultMessage());
+			return;
+		}
 		char[] unlockKey = sessionManager.generateSettingsLockKey();
 		JTextField keyField = new JTextField(new String(unlockKey));
 		keyField.setEditable(false);
 		keyField.setHorizontalAlignment(JTextField.CENTER);
 		JTextArea explanation = new JTextArea(
-			"Save this unlock key somewhere safe. HapticScape does not retain it, "
-				+ "and the participant will need it to unlock the settings normally.",
+			"HapticScape will save this unlock key only if the participant accepts "
+				+ "the lock. The saved copy is encrypted by Windows for your account.",
 			3,
 			24
 		);
@@ -379,6 +389,7 @@ final class RemoteControlPanel extends JPanel
 			&& (snapshot.getState() == RemoteSessionState.CONNECTING
 				|| snapshot.getState() == RemoteSessionState.WAITING_FOR_PEER));
 		participantPanel.setVisible(local);
+		savedUnlockKeysPanel.setVisible(!participant);
 		emergencyButton.setEnabled(participant && !emergencyPaused);
 		resumeButton.setEnabled(participant && emergencyPaused);
 		emergencyButton.setVisible(participant && !emergencyPaused);
@@ -399,9 +410,19 @@ final class RemoteControlPanel extends JPanel
 		RemoteLockState state = snapshot.getState();
 		settingsLockPanel.setVisible(controllerActive);
 		settingsLockStatusLabel.setText("<html>" + snapshot.getMessage() + "</html>");
+		savedUnlockKeysPanel.refresh();
 		boolean mayRequest = state == RemoteLockState.INACTIVE
 			|| state == RemoteLockState.DECLINED;
-		armSettingsLockButton.setEnabled(controllerActive && mayRequest);
+		armSettingsLockButton.setEnabled(
+			controllerActive
+				&& mayRequest
+				&& sessionManager.isSavedUnlockKeyVaultAvailable()
+		);
+		armSettingsLockButton.setToolTipText(
+			sessionManager.isSavedUnlockKeyVaultAvailable()
+				? null
+				: sessionManager.getSavedUnlockKeyVaultMessage()
+		);
 		boolean mayCancel = state == RemoteLockState.AWAITING_APPROVAL
 			|| state == RemoteLockState.ARMED
 			|| state == RemoteLockState.DECLINED;

@@ -4,6 +4,7 @@ import com.ashy0019.hapticscape.CustomPattern;
 import com.ashy0019.hapticscape.CustomPatternLibrary;
 import com.ashy0019.hapticscape.HapticScapeConfig;
 import com.google.gson.Gson;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
@@ -14,6 +15,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -226,6 +228,74 @@ public class RemoteSessionManagerTest
 			assertFalse(participantLock.isLocked());
 			assertEquals(RemoteLockState.INACTIVE, controller.getLockSnapshot().getState());
 			assertEquals(RemoteLockState.INACTIVE, participant.getLockSnapshot().getState());
+		}
+	}
+
+	@Test
+	public void controllerVaultSavesOnlyAcceptedKeysAndRemovesCancelledLocks()
+	{
+		Gson gson = new Gson();
+		TestRelay relay = new TestRelay();
+		MutableConfig controllerConfig = new MutableConfig(20);
+		MutableConfig participantConfig = new MutableConfig(60);
+		TestUnlockKeyProtector protector = new TestUnlockKeyProtector();
+		SavedUnlockKeyStore vault = new SavedUnlockKeyStore(
+			gson,
+			temporaryFolder.getRoot().toPath().resolve("controller-vault.json"),
+			protector,
+			Clock.systemUTC()
+		);
+		char[] declinedKey = "ABCD-EFGH-JKLM-NPQR-STUV".toCharArray();
+		char[] acceptedKey = "WXYZ-2345-6789-BCDF-GHJK".toCharArray();
+		try (RemoteSessionManager controller = new RemoteSessionManager(
+			gson,
+			new MemoryStore(controllerConfig),
+			new EffectiveSettingsService(controllerConfig),
+			lockService("vault-controller-lock.json"),
+			vault,
+			relay);
+			RemoteSessionManager participant = new RemoteSessionManager(
+				gson,
+				new MemoryStore(participantConfig),
+				new EffectiveSettingsService(participantConfig),
+				lockService("vault-participant-lock.json"),
+				relay))
+		{
+			RemoteInvitation invitation = controller.startController(
+				"wss://relay.example/relay"
+			);
+			participant.joinParticipant(invitation.encode());
+
+			controller.proposeSettingsLock(declinedKey);
+			assertTrue(vault.list().isEmpty());
+			assertEquals(0, protector.getProtectCount());
+			participant.declinePendingSettingsLock();
+			assertTrue(vault.list().isEmpty());
+			assertEquals(0, protector.getProtectCount());
+			controller.cancelSettingsLock();
+
+			controller.proposeSettingsLock(acceptedKey);
+			assertTrue(vault.list().isEmpty());
+			participant.acceptPendingSettingsLock();
+			assertEquals(1, vault.list().size());
+			assertEquals(1, protector.getProtectCount());
+			char[] revealed = controller.revealSavedUnlockKey(vault.list().get(0).getId());
+			try
+			{
+				assertArrayEquals(acceptedKey, revealed);
+			}
+			finally
+			{
+				java.util.Arrays.fill(revealed, '\0');
+			}
+
+			controller.cancelSettingsLock();
+			assertTrue(vault.list().isEmpty());
+		}
+		finally
+		{
+			java.util.Arrays.fill(declinedKey, '\0');
+			java.util.Arrays.fill(acceptedKey, '\0');
 		}
 	}
 

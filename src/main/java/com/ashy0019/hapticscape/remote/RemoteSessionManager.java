@@ -2,7 +2,9 @@ package com.ashy0019.hapticscape.remote;
 
 import com.google.gson.Gson;
 import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.Base64;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
@@ -34,6 +36,7 @@ public final class RemoteSessionManager implements AutoCloseable
 	private final RemoteSettingsStore settingsStore;
 	private final EffectiveSettingsService effectiveSettings;
 	private final SettingsLockService settingsLockService;
+	private final SavedUnlockKeyStore savedUnlockKeyStore;
 	private final RemoteTransportFactory transportFactory;
 	private final SettingsLockListener settingsLockListener = this::handleLocalSettingsLockChanged;
 	private final SecureRandom random = new SecureRandom();
@@ -54,6 +57,7 @@ public final class RemoteSessionManager implements AutoCloseable
 	private volatile long lastAcknowledgedVersion;
 	private volatile RemoteLockSnapshot lockSnapshot = RemoteLockSnapshot.inactive();
 	private volatile SettingsLockProposal controllerLockProposal;
+	private char[] pendingControllerUnlockKey;
 	private volatile SettingsLockProposal participantLockProposal;
 	private volatile String participantArmedLockId;
 	private volatile String participantDeclinedLockId;
@@ -73,6 +77,7 @@ public final class RemoteSessionManager implements AutoCloseable
 			settingsStore,
 			effectiveSettings,
 			settingsLockService,
+			new SavedUnlockKeyStore(gson),
 			listener -> new RemoteRelayClient(
 				Objects.requireNonNull(httpClient, "httpClient"),
 				listener
@@ -87,10 +92,32 @@ public final class RemoteSessionManager implements AutoCloseable
 		SettingsLockService settingsLockService,
 		RemoteTransportFactory transportFactory)
 	{
+		this(
+			gson,
+			settingsStore,
+			effectiveSettings,
+			settingsLockService,
+			SavedUnlockKeyStore.disabled(gson),
+			transportFactory
+		);
+	}
+
+	RemoteSessionManager(
+		Gson gson,
+		RemoteSettingsStore settingsStore,
+		EffectiveSettingsService effectiveSettings,
+		SettingsLockService settingsLockService,
+		SavedUnlockKeyStore savedUnlockKeyStore,
+		RemoteTransportFactory transportFactory)
+	{
 		this.gson = Objects.requireNonNull(gson, "gson");
 		this.settingsStore = Objects.requireNonNull(settingsStore, "settingsStore");
 		this.effectiveSettings = Objects.requireNonNull(effectiveSettings, "effectiveSettings");
 		this.settingsLockService = Objects.requireNonNull(settingsLockService, "settingsLockService");
+		this.savedUnlockKeyStore = Objects.requireNonNull(
+			savedUnlockKeyStore,
+			"savedUnlockKeyStore"
+		);
 		this.transportFactory = Objects.requireNonNull(transportFactory, "transportFactory");
 		this.settingsLockService.addListener(settingsLockListener);
 		this.scheduler = Executors.newSingleThreadScheduledExecutor(task ->
@@ -177,6 +204,39 @@ public final class RemoteSessionManager implements AutoCloseable
 		return settingsLockService.generateUnlockKey();
 	}
 
+	public List<SavedUnlockKey> getSavedUnlockKeys()
+	{
+		return savedUnlockKeyStore.list();
+	}
+
+	public boolean isSavedUnlockKeyVaultAvailable()
+	{
+		return savedUnlockKeyStore.isAvailable();
+	}
+
+	public String getSavedUnlockKeyVaultMessage()
+	{
+		return savedUnlockKeyStore.getUnavailableMessage();
+	}
+
+	public char[] revealSavedUnlockKey(String id)
+	{
+		return savedUnlockKeyStore.reveal(id);
+	}
+
+	public SavedUnlockKey updateSavedUnlockKey(
+		String id,
+		String label,
+		String note)
+	{
+		return savedUnlockKeyStore.updateDetails(id, label, note);
+	}
+
+	public boolean forgetSavedUnlockKey(String id)
+	{
+		return savedUnlockKeyStore.forget(id);
+	}
+
 	public synchronized void proposeSettingsLock(char[] password)
 	{
 		if (role != RemoteRole.CONTROLLER
@@ -192,7 +252,11 @@ public final class RemoteSessionManager implements AutoCloseable
 				"Cancel the current post-session lock before creating another"
 			);
 		}
-		controllerLockProposal = settingsLockService.createProposal(password);
+		SettingsLockProposal proposal = settingsLockService.createProposal(password);
+		char[] pendingKey = Arrays.copyOf(password, password.length);
+		clearPendingControllerUnlockKey();
+		controllerLockProposal = proposal;
+		pendingControllerUnlockKey = pendingKey;
 		lastLockProposalNanos = 0;
 		publishLock(
 			RemoteLockState.AWAITING_APPROVAL,
@@ -209,6 +273,7 @@ public final class RemoteSessionManager implements AutoCloseable
 		}
 		if (lockSnapshot.getState() == RemoteLockState.DECLINED)
 		{
+			clearPendingControllerUnlockKey();
 			controllerLockProposal = null;
 			publishLock(RemoteLockState.INACTIVE, "No post-session lock requested");
 			return;
@@ -714,7 +779,38 @@ public final class RemoteSessionManager implements AutoCloseable
 		if (role == RemoteRole.CONTROLLER
 			&& matchesControllerLockProposal(message.getPayload()))
 		{
-			publishLock(RemoteLockState.ARMED, "Participant accepted; settings lock armed");
+			String status = "Participant accepted; settings lock armed";
+			try
+			{
+				if (pendingControllerUnlockKey == null)
+				{
+					status = savedUnlockKeyStore.findByLockId(message.getPayload()).isPresent()
+						? "Participant accepted; unlock key saved"
+						: "Participant accepted; unlock key is not available";
+				}
+				else if (savedUnlockKeyStore.isAvailable())
+				{
+					savedUnlockKeyStore.saveAcceptedKey(
+						message.getPayload(),
+						pendingControllerUnlockKey
+					);
+					status = "Participant accepted; unlock key saved";
+				}
+				else
+				{
+					status = "Participant accepted; secure key vault unavailable";
+				}
+			}
+			catch (RuntimeException e)
+			{
+				status = "Participant accepted; unlock key could not be saved";
+				LOG.log(Level.WARNING, "Unable to save accepted unlock key", e);
+			}
+			finally
+			{
+				clearPendingControllerUnlockKey();
+			}
+			publishLock(RemoteLockState.ARMED, status);
 		}
 	}
 
@@ -723,6 +819,7 @@ public final class RemoteSessionManager implements AutoCloseable
 		if (role == RemoteRole.CONTROLLER
 			&& matchesControllerLockProposal(message.getPayload()))
 		{
+			clearPendingControllerUnlockKey();
 			publishLock(RemoteLockState.DECLINED, "Participant declined the settings lock");
 		}
 	}
@@ -757,8 +854,20 @@ public final class RemoteSessionManager implements AutoCloseable
 		if (role == RemoteRole.CONTROLLER
 			&& matchesControllerLockProposal(message.getPayload()))
 		{
+			String lockId = controllerLockProposal.getProposalId();
+			clearPendingControllerUnlockKey();
 			controllerLockProposal = null;
-			publishLock(RemoteLockState.INACTIVE, "Post-session settings lock cancelled");
+			String status = "Post-session settings lock cancelled";
+			try
+			{
+				savedUnlockKeyStore.forgetByLockId(lockId);
+			}
+			catch (RuntimeException e)
+			{
+				status = "Settings lock cancelled; saved key could not be removed";
+				LOG.log(Level.WARNING, "Unable to remove cancelled unlock key", e);
+			}
+			publishLock(RemoteLockState.INACTIVE, status);
 		}
 	}
 
@@ -936,6 +1045,9 @@ public final class RemoteSessionManager implements AutoCloseable
 		}
 		else
 		{
+			clearPendingControllerUnlockKey();
+			controllerLockProposal = null;
+			publishLock(RemoteLockState.INACTIVE, "Pending unlock key discarded");
 			publish(RemoteSessionState.DISCONNECTED, "Remote connection lost");
 		}
 	}
@@ -1006,6 +1118,7 @@ public final class RemoteSessionManager implements AutoCloseable
 		lastReceivedSettingsVersion = 0;
 		lastAcknowledgedVersion = 0;
 		controllerLockProposal = null;
+		clearPendingControllerUnlockKey();
 		participantLockProposal = null;
 		participantArmedLockId = null;
 		participantDeclinedLockId = null;
@@ -1022,6 +1135,15 @@ public final class RemoteSessionManager implements AutoCloseable
 			listener.onRemoteSessionChanged(snapshot);
 			listener.onRemoteSettingsChanged(effectiveSettings.current());
 			listener.onRemoteLockChanged(lockSnapshot);
+		}
+	}
+
+	private void clearPendingControllerUnlockKey()
+	{
+		if (pendingControllerUnlockKey != null)
+		{
+			Arrays.fill(pendingControllerUnlockKey, '\0');
+			pendingControllerUnlockKey = null;
 		}
 	}
 
