@@ -1334,10 +1334,12 @@ public final class HapticScapePanel extends PluginPanel
 		}
 	}
 
-	private void setRemoteReadOnly(boolean remoteReadOnly)
+	private void applySettingsAccessMode(SettingsAccessPolicy.Mode mode)
 	{
-		this.remoteReadOnly = remoteReadOnly;
-		boolean editable = !remoteReadOnly;
+		boolean feedbackReadOnly = mode.isFeedbackReadOnly();
+		boolean forgeAndMusicReadOnly = mode.areForgeAndMusicReadOnly();
+		this.remoteReadOnly = feedbackReadOnly;
+		boolean editable = !feedbackReadOnly;
 		minimumXpSpinner.setEnabled(editable);
 		intensitySlider.setEnabled(editable);
 		intensityValueLabel.setEnabled(editable);
@@ -1348,26 +1350,29 @@ public final class HapticScapePanel extends PluginPanel
 		milestoneCheckBox.setEnabled(editable);
 		milestonePatternComboBox.setEnabled(editable);
 		level99CheckBox.setEnabled(editable);
-		skillsPanel.setRemoteReadOnly(remoteReadOnly);
-		profilesPanel.setRemoteReadOnly(remoteReadOnly);
-		alertsPanel.setRemoteReadOnly(remoteReadOnly);
-		customPatternsPanel.setRemoteReadOnly(remoteReadOnly);
-		musicPanel.setRemoteReadOnly(remoteReadOnly);
-		clickerPanel.setRemoteReadOnly(remoteReadOnly);
+		skillsPanel.setRemoteReadOnly(feedbackReadOnly);
+		profilesPanel.setRemoteReadOnly(feedbackReadOnly);
+		alertsPanel.setRemoteReadOnly(feedbackReadOnly);
+		customPatternsPanel.setRemoteReadOnly(forgeAndMusicReadOnly);
+		musicPanel.setRemoteReadOnly(forgeAndMusicReadOnly);
+		clickerPanel.setRemoteReadOnly(feedbackReadOnly);
 		// Tabs, navigation selectors, Casino/Rogue, Updates, Intiface connection,
 		// Remote Control controls, and Emergency Off intentionally remain usable.
 	}
 
-	private void setLocalSettingsLocked(boolean locked)
+	private void refreshSettingsAccessMode()
 	{
-		setRemoteReadOnly(locked);
-		if (locked)
-		{
-			// These remain participant-owned after a session. In particular, music
-			// sync can always be disabled or retuned locally.
-			customPatternsPanel.setRemoteReadOnly(false);
-			musicPanel.setRemoteReadOnly(false);
-		}
+		// Always resolve against the latest manager state. Remote callbacks are
+		// queued onto Swing's EDT and an older callback must not reapply the active
+		// session lock after End session has already returned the subject to LOCAL.
+		RemoteSessionSnapshot current = remoteSessionManager.getSnapshot();
+		SettingsAccessPolicy.Mode mode = SettingsAccessPolicy.resolve(
+			current,
+			isSubjectWorkspaceActive(current),
+			remoteSessionManager.getPeerPermissions().isSettingsAllowed(),
+			settingsLockService.isLocked()
+		);
+		applySettingsAccessMode(mode);
 	}
 
 	private boolean isSubjectWorkspaceActive()
@@ -1443,10 +1448,6 @@ public final class HapticScapePanel extends PluginPanel
 		boolean participantControlled = snapshot.isParticipantControlled();
 		boolean controllerSession = snapshot.getRole() == RemoteRole.CONTROLLER
 			&& snapshot.getState() != RemoteSessionState.LOCAL;
-		boolean controllerEditable = controllerSession
-			&& remoteSessionManager.getPeerPermissions().isSettingsAllowed()
-			&& (snapshot.getState() == RemoteSessionState.ACTIVE
-				|| snapshot.getState() == RemoteSessionState.PEER_EMERGENCY_PAUSED);
 		boolean workspaceVisible = controllerSession
 			&& snapshot.getState() != RemoteSessionState.DISCONNECTED;
 		boolean subjectAvailable = isControllerSubjectAvailable(snapshot);
@@ -1490,28 +1491,16 @@ public final class HapticScapePanel extends PluginPanel
 		// participant can navigate it and watch remote values change, but cannot
 		// mutate remotely authoritative feedback settings.
 		feedbackLayout.show(feedbackHost, LOCAL_FEEDBACK_CARD);
-		if (participantControlled)
+		if (!participantControlled
+			&& !(controllerSession && subjectWorkspaceSelected && subjectAvailable))
 		{
-			setRemoteReadOnly(true);
-		}
-		else if (controllerSession && subjectWorkspaceSelected && subjectAvailable)
-		{
-			setRemoteReadOnly(!controllerEditable);
-		}
-		else if (controllerSession)
-		{
-			setLocalSettingsLocked(settingsLockService.isLocked());
-		}
-		else
-		{
-			if (displayingRemoteSettings)
+			if (!controllerSession && displayingRemoteSettings)
 			{
 				applyDisplayedSettings(RemoteSettingsSnapshot.capture(config));
 			}
-			displayingRemoteSettings = false;
-			setLocalSettingsLocked(settingsLockService.isLocked());
 			if (!controllerSession)
 			{
+				displayingRemoteSettings = false;
 				subjectWorkspaceSelected = true;
 				setControllerWorkspaceTab(true);
 			}
@@ -1568,10 +1557,7 @@ public final class HapticScapePanel extends PluginPanel
 		unlockSettingsButton.setVisible(locked && localWorkspace);
 		unlockSettingsButton.setEnabled(locked && localWorkspace);
 		clearSettingsLockButton.setEnabled(locked);
-		if (localWorkspace)
-		{
-			setLocalSettingsLocked(locked);
-		}
+		refreshSettingsAccessMode();
 		revalidate();
 		repaint();
 	}
