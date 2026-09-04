@@ -149,6 +149,7 @@ public final class HapticScapePanel extends PluginPanel
 	private final RemoteSessionManager remoteSessionManager;
 	private final SettingsLockService settingsLockService;
 	private final RemoteControlPanel remoteControlPanel;
+	private final SidebarScrollRouter pageScrollRouter;
 	private final RoguePanel roguePanel;
 	private final RogueLauncherPanel rogueLauncher;
 	private boolean rogueModeUnlocked;
@@ -488,20 +489,18 @@ public final class HapticScapePanel extends PluginPanel
 		JPanel remoteView = new JPanel(new BorderLayout(0, 6));
 		remoteBackButton.setToolTipText("Return to the main HapticScape controls");
 		remoteView.add(remoteBackButton, BorderLayout.NORTH);
-		JScrollPane remoteScrollPane = new JScrollPane(
-			remoteControlPanel,
-			JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
-			JScrollPane.HORIZONTAL_SCROLLBAR_NEVER
-		);
-		remoteScrollPane.setBorder(BorderFactory.createEmptyBorder());
-		remoteScrollPane.getVerticalScrollBar().setUnitIncrement(16);
-		remoteView.add(remoteScrollPane, BorderLayout.CENTER);
+		remoteView.add(remoteControlPanel, BorderLayout.CENTER);
 
 		contentHost.add(normalView, NORMAL_CARD);
 		contentHost.add(remoteView, REMOTE_CARD);
 		contentHost.add(roguePanel, ROGUE_CARD);
 		add(rogueLauncher, BorderLayout.NORTH);
 		add(contentHost, BorderLayout.CENTER);
+		// PluginPanel already owns the scroll pane displayed by RuneLite. A second
+		// full-page scroll pane expands inside that wrapper and has no range to move.
+		JScrollPane pageScrollPane = getScrollPane();
+		pageScrollPane.getVerticalScrollBar().setUnitIncrement(16);
+		pageScrollRouter = SidebarScrollRouter.install(pageScrollPane, this);
 		contentLayout.show(contentHost, NORMAL_CARD);
 
 		if (Boolean.parseBoolean(configManager.getConfiguration(HapticScapeConfig.GROUP, ROGUE_UNLOCKED_KEY)))
@@ -942,6 +941,7 @@ public final class HapticScapePanel extends PluginPanel
 
 	public void close()
 	{
+		pageScrollRouter.close();
 		remoteSessionManager.removeListener(this);
 		settingsLockService.removeListener(this);
 		remoteControlPanel.close();
@@ -1628,4 +1628,5 @@ public final class HapticScapePanel extends PluginPanel
 	{
 		return Math.max(minimum, Math.min(maximum, value));
 	}
+
 }
