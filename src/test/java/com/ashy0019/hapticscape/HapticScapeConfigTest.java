@@ -1,6 +1,7 @@
 package com.ashy0019.hapticscape;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 
 import org.junit.Test;
 
@@ -36,5 +37,14 @@ public class HapticScapeConfigTest
 				"  wss://relay.example/relay  "
 			)
 		);
+	}
+
+	@Test
+	public void liveForgeRequiresExplicitParticipantOptIn()
+	{
+		HapticScapeConfig config = new HapticScapeConfig() { };
+
+		assertFalse(config.remoteLiveHapticsAllowed());
+		assertEquals(30_000, config.remoteMaximumLiveDurationMillis());
 	}
 }

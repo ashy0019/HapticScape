@@ -84,6 +84,27 @@ public final class GatedIntifaceService implements IntifaceService
 	}
 
 	@Override
+	public void setRemoteLiveIntensity(double intensity)
+	{
+		if (!outputPaused.get())
+		{
+			delegate.setRemoteLiveIntensity(intensity);
+		}
+	}
+
+	@Override
+	public void releaseRemoteLiveOutput(Duration decayDuration)
+	{
+		delegate.releaseRemoteLiveOutput(decayDuration);
+	}
+
+	@Override
+	public void stopRemoteLiveOutput()
+	{
+		delegate.stopRemoteLiveOutput();
+	}
+
+	@Override
 	public void stopAll()
 	{
 		delegate.stopAll();

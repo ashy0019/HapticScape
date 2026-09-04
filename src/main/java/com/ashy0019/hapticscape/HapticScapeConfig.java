@@ -48,11 +48,13 @@ public interface HapticScapeConfig extends Config
 		"wss://hapticscape-remote-relay.hapticscape.workers.dev/relay";
 	String REMOTE_SETTINGS_ALLOWED_KEY = "remoteSettingsAllowed";
 	String REMOTE_HAPTICS_ALLOWED_KEY = "remoteHapticsAllowed";
+	String REMOTE_LIVE_HAPTICS_ALLOWED_KEY = "remoteLiveHapticsAllowed";
 	String REMOTE_CLICKS_ALLOWED_KEY = "remoteClicksAllowed";
 	String REMOTE_DESKTOP_NOTIFICATIONS_ALLOWED_KEY = "remoteDesktopNotificationsAllowed";
 	String REMOTE_LOCAL_CHATBOX_MESSAGES_ALLOWED_KEY = "remoteLocalChatboxMessagesAllowed";
 	String REMOTE_MAXIMUM_INTENSITY_PERCENT_KEY = "remoteMaximumIntensityPercent";
 	String REMOTE_MAXIMUM_DURATION_MILLIS_KEY = "remoteMaximumDurationMillis";
+	String REMOTE_MAXIMUM_LIVE_DURATION_MILLIS_KEY = "remoteMaximumLiveDurationMillis";
 
 	@ConfigItem(
 		keyName = "intifaceServer",
@@ -531,6 +533,18 @@ public interface HapticScapeConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = REMOTE_LIVE_HAPTICS_ALLOWED_KEY,
+		name = "Allow live remote haptics",
+		description = "Allow a connected controller to continuously control haptic intensity while holding the Live Forge",
+		position = 43,
+		hidden = true
+	)
+	default boolean remoteLiveHapticsAllowed()
+	{
+		return false;
+	}
+
+	@ConfigItem(
 		keyName = REMOTE_CLICKS_ALLOWED_KEY,
 		name = "Allow remote clicks",
 		description = "Allow a connected controller to play the local click sound",
@@ -590,5 +604,18 @@ public interface HapticScapeConfig extends Config
 	default int remoteMaximumDurationMillis()
 	{
 		return 3_000;
+	}
+
+	@Range(min = 1_000, max = 300_000)
+	@ConfigItem(
+		keyName = REMOTE_MAXIMUM_LIVE_DURATION_MILLIS_KEY,
+		name = "Maximum live hold",
+		description = "Participant-owned maximum duration of one continuous Live Forge gesture",
+		position = 44,
+		hidden = true
+	)
+	default int remoteMaximumLiveDurationMillis()
+	{
+		return 30_000;
 	}
 }

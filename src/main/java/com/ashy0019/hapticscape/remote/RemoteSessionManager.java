@@ -28,7 +28,7 @@ import okhttp3.OkHttpClient;
 public final class RemoteSessionManager implements AutoCloseable
 {
 	private static final Logger LOG = Logger.getLogger(RemoteSessionManager.class.getName());
-	private static final long HOUSEKEEPING_INTERVAL_MILLIS = 500;
+	private static final long HOUSEKEEPING_INTERVAL_MILLIS = 100;
 	private static final long SETTINGS_DEBOUNCE_MILLIS = 40;
 	private static final long SETTINGS_RECONCILE_INTERVAL_MILLIS = 5_000;
 	private static final long HELLO_INTERVAL_MILLIS = 1_000;
@@ -42,6 +42,7 @@ public final class RemoteSessionManager implements AutoCloseable
 	private final SavedUnlockKeyStore savedUnlockKeyStore;
 	private final RemotePermissionsStore permissionsStore;
 	private final RemoteActionService remoteActionService;
+	private final RemoteLiveHapticService remoteLiveHapticService;
 	private final Clock clock;
 	private final RemoteTransportFactory transportFactory;
 	private final SettingsLockListener settingsLockListener = this::handleLocalSettingsLockChanged;
@@ -71,6 +72,8 @@ public final class RemoteSessionManager implements AutoCloseable
 	private volatile String participantArmedLockId;
 	private volatile String participantDeclinedLockId;
 	private volatile long lastLockProposalNanos;
+	private String controllerLiveStreamId;
+	private long controllerLiveSequence;
 	private ScheduledFuture<?> pendingSettingsSync;
 	private volatile boolean closed;
 
@@ -181,7 +184,12 @@ public final class RemoteSessionManager implements AutoCloseable
 		this.localPermissions = permissionsStore.capture();
 		this.localPermissions.validate();
 		this.clock = Objects.requireNonNull(clock, "clock");
-		this.remoteActionService = new RemoteActionService(remoteActionExecutor, clock);
+		RemoteActionExecutor actionExecutor = Objects.requireNonNull(
+			remoteActionExecutor,
+			"remoteActionExecutor"
+		);
+		this.remoteActionService = new RemoteActionService(actionExecutor, clock);
+		this.remoteLiveHapticService = new RemoteLiveHapticService(actionExecutor, clock);
 		this.transportFactory = Objects.requireNonNull(transportFactory, "transportFactory");
 		this.settingsLockService.addListener(settingsLockListener);
 		this.scheduler = Executors.newSingleThreadScheduledExecutor(task ->
@@ -242,6 +250,10 @@ public final class RemoteSessionManager implements AutoCloseable
 		);
 		saved.validate();
 		localPermissions = saved;
+		remoteLiveHapticService.permissionsChanged(
+			saved,
+			snapshot.getState() != RemoteSessionState.ACTIVE
+		);
 		publishPermissions(saved);
 		if (role == RemoteRole.PARTICIPANT)
 		{
@@ -283,7 +295,75 @@ public final class RemoteSessionManager implements AutoCloseable
 
 	public synchronized String stopRemoteOutput()
 	{
+		clearControllerLiveStream();
 		return sendRemoteAction(RemoteAction.stop(clock));
+	}
+
+	public synchronized void beginRemoteLiveHaptic(int intensityPercent)
+	{
+		requireLiveController();
+		if (controllerLiveStreamId != null)
+		{
+			endRemoteLiveHaptic();
+		}
+		byte[] streamBytes = new byte[12];
+		random.nextBytes(streamBytes);
+		String streamId = ENCODER.encodeToString(streamBytes);
+		RemoteLiveHapticFrame frame = RemoteLiveHapticFrame.start(
+			streamId,
+			clampLiveIntensity(intensityPercent),
+			clock
+		);
+		controllerLiveStreamId = streamId;
+		controllerLiveSequence = 0;
+		if (!send(RemoteMessageType.REMOTE_LIVE_HAPTIC, 0, gson.toJson(frame)))
+		{
+			clearControllerLiveStream();
+			throw new IllegalStateException("Live haptic stream could not be started");
+		}
+	}
+
+	public synchronized void updateRemoteLiveHaptic(int intensityPercent)
+	{
+		requireLiveController();
+		if (controllerLiveStreamId == null)
+		{
+			throw new IllegalStateException("Live haptic stream is not active");
+		}
+		long sequence = controllerLiveSequence + 1;
+		RemoteLiveHapticFrame frame = RemoteLiveHapticFrame.update(
+			controllerLiveStreamId,
+			sequence,
+			clampLiveIntensity(intensityPercent),
+			clock
+		);
+		controllerLiveSequence = sequence;
+		if (!send(RemoteMessageType.REMOTE_LIVE_HAPTIC, 0, gson.toJson(frame)))
+		{
+			clearControllerLiveStream();
+			throw new IllegalStateException("Live haptic update could not be sent");
+		}
+	}
+
+	public synchronized void endRemoteLiveHaptic()
+	{
+		String streamId = controllerLiveStreamId;
+		if (streamId == null)
+		{
+			return;
+		}
+		long sequence = controllerLiveSequence + 1;
+		clearControllerLiveStream();
+		if (role == RemoteRole.CONTROLLER
+			&& snapshot.getState() == RemoteSessionState.ACTIVE)
+		{
+			RemoteLiveHapticFrame frame = RemoteLiveHapticFrame.end(
+				streamId,
+				sequence,
+				clock
+			);
+			send(RemoteMessageType.REMOTE_LIVE_HAPTIC, 0, gson.toJson(frame));
+		}
 	}
 
 	public void addListener(RemoteSessionListener listener)
@@ -514,6 +594,7 @@ public final class RemoteSessionManager implements AutoCloseable
 		{
 			return;
 		}
+		remoteLiveHapticService.stopImmediately();
 		remoteActionService.stopOutputSafely();
 		publish(RemoteSessionState.EMERGENCY_PAUSED, "Emergency Off active");
 		send(RemoteMessageType.EMERGENCY_PAUSED, lastReceivedSettingsVersion, "");
@@ -570,6 +651,8 @@ public final class RemoteSessionManager implements AutoCloseable
 		localPermissions.validate();
 		peerPermissions = RemotePermissions.none();
 		remoteActionService.reset();
+		remoteLiveHapticService.reset();
+		clearControllerLiveStream();
 		invitation = nextInvitation;
 		crypto = new RemoteCrypto(nextInvitation.getKey());
 		lastSentSettings = null;
@@ -610,6 +693,13 @@ public final class RemoteSessionManager implements AutoCloseable
 
 	private synchronized void tick()
 	{
+		if (role == RemoteRole.PARTICIPANT)
+		{
+			remoteLiveHapticService.tick(
+				localPermissions,
+				snapshot.getState() != RemoteSessionState.ACTIVE
+			);
+		}
 		if (closed || role == RemoteRole.NONE || relayClient == null || !relayClient.isOpen())
 		{
 			return;
@@ -826,6 +916,9 @@ public final class RemoteSessionManager implements AutoCloseable
 			case REMOTE_ACTION_ACK:
 				handleRemoteActionAcknowledgement(message);
 				break;
+			case REMOTE_LIVE_HAPTIC:
+				handleRemoteLiveHaptic(message);
+				break;
 			case LOCK_PROPOSAL:
 				handleLockProposal(message);
 				break;
@@ -844,6 +937,7 @@ public final class RemoteSessionManager implements AutoCloseable
 			case EMERGENCY_PAUSED:
 				if (role == RemoteRole.CONTROLLER)
 				{
+					clearControllerLiveStream();
 					publish(RemoteSessionState.PEER_EMERGENCY_PAUSED, "Participant used Emergency Off");
 				}
 				break;
@@ -1002,6 +1096,10 @@ public final class RemoteSessionManager implements AutoCloseable
 			}
 			permissions.validate();
 			peerPermissions = permissions;
+			if (!permissions.isLiveHapticsAllowed())
+			{
+				clearControllerLiveStream();
+			}
 			publishPermissions(permissions);
 			if (!permissions.isSettingsAllowed())
 			{
@@ -1030,6 +1128,10 @@ public final class RemoteSessionManager implements AutoCloseable
 			LOG.log(Level.FINE, "Ignored malformed remote action", e);
 			return;
 		}
+		if (action != null && action.getType() == RemoteActionType.STOP)
+		{
+			remoteLiveHapticService.stopImmediately();
+		}
 		RemoteActionAcknowledgement acknowledgement = remoteActionService.process(
 			action,
 			localPermissions,
@@ -1038,6 +1140,30 @@ public final class RemoteSessionManager implements AutoCloseable
 		if (acknowledgement != null)
 		{
 			send(RemoteMessageType.REMOTE_ACTION_ACK, 0, gson.toJson(acknowledgement));
+		}
+	}
+
+	private void handleRemoteLiveHaptic(RemoteProtocolMessage message)
+	{
+		if (role != RemoteRole.PARTICIPANT)
+		{
+			return;
+		}
+		try
+		{
+			RemoteLiveHapticFrame frame = gson.fromJson(
+				message.getPayload(),
+				RemoteLiveHapticFrame.class
+			);
+			remoteLiveHapticService.process(
+				frame,
+				localPermissions,
+				snapshot.getState() != RemoteSessionState.ACTIVE
+			);
+		}
+		catch (RuntimeException e)
+		{
+			LOG.log(Level.FINE, "Ignored malformed remote live-haptic frame", e);
 		}
 	}
 
@@ -1405,6 +1531,7 @@ public final class RemoteSessionManager implements AutoCloseable
 
 		if (role == RemoteRole.PARTICIPANT)
 		{
+			remoteLiveHapticService.stopImmediately();
 			remoteActionService.stopOutputSafely();
 			publish(
 				RemoteSessionState.EMERGENCY_PAUSED,
@@ -1413,6 +1540,7 @@ public final class RemoteSessionManager implements AutoCloseable
 		}
 		else
 		{
+			clearControllerLiveStream();
 			clearPendingControllerUnlockKey();
 			controllerLockProposal = null;
 			publishLock(RemoteLockState.INACTIVE, "Pending unlock key discarded");
@@ -1487,11 +1615,14 @@ public final class RemoteSessionManager implements AutoCloseable
 		}
 		if (role == RemoteRole.PARTICIPANT)
 		{
+			remoteLiveHapticService.stopImmediately();
 			remoteActionService.stopOutputSafely();
 			effectiveSettings.clearRemote();
 		}
 		role = RemoteRole.NONE;
 		remoteActionService.reset();
+		remoteLiveHapticService.reset();
+		clearControllerLiveStream();
 		pendingRemoteActions.clear();
 		crypto = null;
 		invitation = null;
@@ -1532,6 +1663,36 @@ public final class RemoteSessionManager implements AutoCloseable
 			Arrays.fill(pendingControllerUnlockKey, '\0');
 			pendingControllerUnlockKey = null;
 		}
+	}
+
+	private void requireLiveController()
+	{
+		if (role != RemoteRole.CONTROLLER || snapshot.getState() != RemoteSessionState.ACTIVE)
+		{
+			throw new IllegalStateException("A participant must be connected and active");
+		}
+		if (!peerPermissions.isLiveHapticsAllowed())
+		{
+			throw new IllegalStateException("The participant has not allowed live haptics");
+		}
+		if (peerPermissions.getMaximumIntensityPercent() <= 0)
+		{
+			throw new IllegalStateException("The participant's maximum remote intensity is 0%");
+		}
+	}
+
+	private int clampLiveIntensity(int intensityPercent)
+	{
+		return Math.max(
+			0,
+			Math.min(intensityPercent, peerPermissions.getMaximumIntensityPercent())
+		);
+	}
+
+	private void clearControllerLiveStream()
+	{
+		controllerLiveStreamId = null;
+		controllerLiveSequence = 0;
 	}
 
 	private void requireOpen()

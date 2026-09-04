@@ -116,6 +116,10 @@ public class MusicSyncServiceTest
 			liveStopped = true;
 		}
 
+		@Override public void setRemoteLiveIntensity(double intensity) { }
+		@Override public void releaseRemoteLiveOutput(Duration decayDuration) { }
+		@Override public void stopRemoteLiveOutput() { }
+
 		@Override public void connect(URI serverUri) { }
 		@Override public void disconnect() { }
 		@Override public void pulse(double intensity, Duration duration) { }

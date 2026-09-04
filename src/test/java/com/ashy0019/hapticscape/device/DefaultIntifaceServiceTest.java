@@ -118,6 +118,90 @@ public class DefaultIntifaceServiceTest
 	}
 
 	@Test
+	public void remoteLiveControlInterruptsAndBlocksOrdinaryFeedback() throws Exception
+	{
+		connect();
+		service.play(request(HapticEventType.XP_GAIN, new HapticPattern(Arrays.asList(
+			new HapticPattern.Step(0.2, Duration.ofMillis(250)),
+			new HapticPattern.Step(0.4, Duration.ofMillis(10))
+		))));
+		assertEquals(0.2, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+
+		service.setRemoteLiveIntensity(0.7);
+		assertEquals(0.7, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+		service.play(request(
+			HapticEventType.DIRECT_MESSAGE,
+			HapticPattern.single(0.5, Duration.ofMillis(20))
+		));
+
+		assertNull(gateway.vibrationCommands.poll(300, TimeUnit.MILLISECONDS));
+	}
+
+	@Test
+	public void criticalFeedbackTemporarilyOverridesRemoteLiveControl() throws Exception
+	{
+		connect();
+		service.setRemoteLiveIntensity(0.4);
+		assertEquals(0.4, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+
+		service.play(request(
+			HapticEventType.PLAYER_DEATH,
+			HapticPattern.single(0.95, Duration.ofMillis(20))
+		));
+
+		assertEquals(0.95, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+		assertEquals(0.4, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+	}
+
+	@Test
+	public void remoteLiveReleaseDecaysThenRestoresMusic() throws Exception
+	{
+		connect();
+		service.setLiveIntensity(0.2);
+		assertEquals(0.2, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+		service.setRemoteLiveIntensity(0.8);
+		assertEquals(0.8, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+
+		service.releaseRemoteLiveOutput(Duration.ofMillis(75));
+
+		boolean sawDecay = false;
+		boolean restoredMusic = false;
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
+		while (System.nanoTime() < deadline && !restoredMusic)
+		{
+			Double command = gateway.vibrationCommands.poll(100, TimeUnit.MILLISECONDS);
+			if (command == null)
+			{
+				continue;
+			}
+			if (command > 0.2 && command < 0.8)
+			{
+				sawDecay = true;
+			}
+			if (Math.abs(command - 0.2) < 0.0001)
+			{
+				restoredMusic = true;
+			}
+		}
+		assertTrue(sawDecay);
+		assertTrue(restoredMusic);
+	}
+
+	@Test
+	public void immediateRemoteLiveStopRestoresMusic() throws Exception
+	{
+		connect();
+		service.setLiveIntensity(0.25);
+		assertEquals(0.25, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+		service.setRemoteLiveIntensity(0.75);
+		assertEquals(0.75, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+
+		service.stopRemoteLiveOutput();
+
+		assertEquals(0.25, gateway.vibrationCommands.poll(1, TimeUnit.SECONDS), 0.0001);
+	}
+
+	@Test
 	public void stopNowDisablesLiveOutput() throws Exception
 	{
 		connect();

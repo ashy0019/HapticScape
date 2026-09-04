@@ -105,6 +105,13 @@ final class HapticArbiter
 		return active != null;
 	}
 
+	Optional<HapticPriority> getActivePriority()
+	{
+		return active == null
+			? Optional.empty()
+			: Optional.of(active.getEventType().getPriority());
+	}
+
 	int getPendingCount()
 	{
 		removeExpired(nanoClock.getAsLong());

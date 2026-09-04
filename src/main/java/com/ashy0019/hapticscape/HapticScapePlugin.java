@@ -1084,6 +1084,36 @@ public class HapticScapePlugin extends Plugin
 			}
 
 			@Override
+			public void setRemoteLiveIntensity(int intensityPercent)
+			{
+				GatedIntifaceService haptics = intifaceService;
+				if (haptics != null)
+				{
+					haptics.setRemoteLiveIntensity(intensityPercent / 100.0);
+				}
+			}
+
+			@Override
+			public void releaseRemoteLiveHaptic()
+			{
+				GatedIntifaceService haptics = intifaceService;
+				if (haptics != null)
+				{
+					haptics.releaseRemoteLiveOutput(Duration.ofMillis(300));
+				}
+			}
+
+			@Override
+			public void stopRemoteLiveHaptic()
+			{
+				GatedIntifaceService haptics = intifaceService;
+				if (haptics != null)
+				{
+					haptics.stopRemoteLiveOutput();
+				}
+			}
+
+			@Override
 			public void playClick()
 			{
 				ClickerService clicks = clickerService;

@@ -221,7 +221,8 @@ FFT analysis.
 - Set independent minimum and maximum haptic output levels.
 - View the mapped output on a live meter.
 - Scale output with the Windows master volume and mute state.
-- Allow finite XP, alert, preview, and remote patterns to interrupt Music sync.
+- Allow finite XP, alert, preview, remote patterns, and Remote Live Forge to
+  interrupt Music sync.
 - Resume Music sync automatically after the interrupting pattern ends.
 
 Music sync listens to the complete output mix of the selected Windows audio
@@ -313,20 +314,43 @@ protection, validation, rate limits, and delivery acknowledgements. The
 participant's client enforces the permissions and limits even if the controller
 requests a value outside them.
 
+#### Remote Live Forge
+
+When the participant separately enables Live Forge control, the controller can
+draw continuous haptic output on a moving timeline.
+
+- Holding and moving vertically inside the graph controls current intensity.
+- The graph retains a short visual history of the current gesture.
+- Encrypted intensity samples are sent 20 times per second.
+- The participant's maximum remote intensity is enforced on every sample.
+- Releasing the mouse fades output to zero over 300 milliseconds.
+- A participant-owned maximum hold duration ends overly long gestures.
+- Missing samples automatically trigger a receiver-side release after roughly
+  350 milliseconds.
+- Emergency Off, session end, connection loss, and plugin shutdown stop the
+  live output immediately.
+- Music sync resumes after Live Forge releases the haptic channel.
+
+Live Forge gestures are temporary. They are not added to the participant's
+saved custom pattern library.
+
 #### Participant permissions and safety controls
 
 Only the participant can change:
 
 - Permission to change HapticScape settings.
 - Permission to request haptic actions.
+- Permission to use continuous Live Forge control.
 - Permission to play click sounds.
 - Permission to display desktop notifications.
 - Permission to display local chatbox notices.
 - Maximum remote haptic intensity.
 - Maximum remote haptic duration.
+- Maximum duration of one Live Forge gesture.
 
-Local chatbox notices are disabled by default. The default maximum remote
-intensity is 60%, and the default maximum remote duration is 3 seconds.
+Local chatbox notices and Live Forge control are disabled by default. The
+default maximum remote intensity is 60%, the default maximum remote action
+duration is 3 seconds, and the default maximum Live Forge hold is 30 seconds.
 
 The participant always retains these local controls:
 
