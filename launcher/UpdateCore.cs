@@ -33,10 +33,11 @@ internal sealed class ReleaseManifest
 		string architecture = JsonValues.RequiredString(values, "architecture");
 		string repository = JsonValues.RequiredString(values, "repository");
 
-		System.Version parsedVersion;
-		if (!VersionUtility.TryParseStable(version, out parsedVersion))
+		string normalizedVersion;
+
+		if (!VersionUtility.TryParse(version, out normalizedVersion))
 		{
-			throw new InvalidDataException("The installed HapticScape version is invalid.");
+				throw new InvalidDataException("The installed HapticScape version is invalid.");
 		}
 		if (string.IsNullOrWhiteSpace(architecture))
 		{
@@ -468,36 +469,156 @@ internal static class UpdatePackagePreparer
 
 internal static class VersionUtility
 {
-	internal static bool TryParseStable(string value, out Version version)
-	{
-		version = null;
-		if (string.IsNullOrWhiteSpace(value))
-		{
-			return false;
-		}
-		string normalized = WithoutPrefix(value.Trim());
-		if (normalized.IndexOf('-') >= 0 || normalized.IndexOf('+') >= 0)
-		{
-			return false;
-		}
-		return Version.TryParse(normalized, out version);
-	}
+    internal static bool TryParse(string value, out string normalized)
+    {
+        normalized = null;
 
-	internal static string WithoutPrefix(string value)
-	{
-		return value.StartsWith("v", StringComparison.OrdinalIgnoreCase)
-			? value.Substring(1)
-			: value;
-	}
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
 
-	internal static bool IsNewer(string candidate, string installed)
-	{
-		Version candidateVersion;
-		Version installedVersion;
-		return TryParseStable(candidate, out candidateVersion)
-			&& TryParseStable(installed, out installedVersion)
-			&& candidateVersion.CompareTo(installedVersion) > 0;
-	}
+        string candidate = WithoutPrefix(value.Trim());
+
+        string[] metadataSplit = candidate.Split(new[] { '+' }, 2);
+        string versionAndPrerelease = metadataSplit[0];
+
+        string[] prereleaseSplit = versionAndPrerelease.Split(new[] { '-' }, 2);
+        string numericPart = prereleaseSplit[0];
+
+        Version numericVersion;
+        if (!Version.TryParse(numericPart, out numericVersion))
+        {
+            return false;
+        }
+
+        if (prereleaseSplit.Length == 2 &&
+            string.IsNullOrWhiteSpace(prereleaseSplit[1]))
+        {
+            return false;
+        }
+
+        normalized = candidate;
+        return true;
+    }
+
+    internal static bool TryParseStable(string value, out Version version)
+    {
+        version = null;
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        string normalized = WithoutPrefix(value.Trim());
+
+        if (normalized.IndexOf('-') >= 0 || normalized.IndexOf('+') >= 0)
+        {
+            return false;
+        }
+
+        return Version.TryParse(normalized, out version);
+    }
+
+    internal static string WithoutPrefix(string value)
+    {
+        return value.StartsWith("v", StringComparison.OrdinalIgnoreCase)
+            ? value.Substring(1)
+            : value;
+    }
+
+    internal static bool IsNewer(string candidate, string installed)
+    {
+        string candidateNormalized;
+        string installedNormalized;
+
+        if (!TryParse(candidate, out candidateNormalized) ||
+            !TryParse(installed, out installedNormalized))
+        {
+            return false;
+        }
+
+        return Compare(candidateNormalized, installedNormalized) > 0;
+    }
+
+    private static int Compare(string left, string right)
+    {
+        string[] leftParts = left.Split(new[] { '-' }, 2);
+        string[] rightParts = right.Split(new[] { '-' }, 2);
+
+        Version leftVersion = Version.Parse(leftParts[0]);
+        Version rightVersion = Version.Parse(rightParts[0]);
+
+        int numeric = leftVersion.CompareTo(rightVersion);
+        if (numeric != 0)
+        {
+            return numeric;
+        }
+
+        bool leftPrerelease = leftParts.Length == 2;
+        bool rightPrerelease = rightParts.Length == 2;
+
+        if (!leftPrerelease && !rightPrerelease)
+        {
+            return 0;
+        }
+
+        if (!leftPrerelease)
+        {
+            return 1;
+        }
+
+        if (!rightPrerelease)
+        {
+            return -1;
+        }
+
+        return ComparePrerelease(leftParts[1], rightParts[1]);
+    }
+
+    private static int ComparePrerelease(string left, string right)
+    {
+        string[] leftIds = left.Split('.');
+        string[] rightIds = right.Split('.');
+
+        int count = Math.Min(leftIds.Length, rightIds.Length);
+
+        for (int i = 0; i < count; i++)
+        {
+            int leftNumber;
+            int rightNumber;
+
+            bool leftNumeric = int.TryParse(leftIds[i], out leftNumber);
+            bool rightNumeric = int.TryParse(rightIds[i], out rightNumber);
+
+            int result;
+
+            if (leftNumeric && rightNumeric)
+            {
+                result = leftNumber.CompareTo(rightNumber);
+            }
+            else if (leftNumeric)
+            {
+                result = -1;
+            }
+            else if (rightNumeric)
+            {
+                result = 1;
+            }
+            else
+            {
+                result = string.CompareOrdinal(leftIds[i], rightIds[i]);
+            }
+
+            if (result != 0)
+            {
+                return result;
+            }
+        }
+
+        return leftIds.Length.CompareTo(rightIds.Length);
+    }
 }
 
 internal static class UpdatePolicy

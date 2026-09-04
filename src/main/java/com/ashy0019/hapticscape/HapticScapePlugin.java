@@ -4,6 +4,7 @@ import com.ashy0019.hapticscape.clicker.AudioPlayerClickPlayback;
 import com.ashy0019.hapticscape.clicker.ClickerService;
 import com.ashy0019.hapticscape.clicker.ClickerSettings;
 import com.ashy0019.hapticscape.device.DefaultIntifaceService;
+import com.ashy0019.hapticscape.device.GatedIntifaceService;
 import com.ashy0019.hapticscape.device.HapticEventType;
 import com.ashy0019.hapticscape.device.HapticPattern;
 import com.ashy0019.hapticscape.device.HapticRequest;
@@ -13,6 +14,13 @@ import com.ashy0019.hapticscape.music.MusicSyncService;
 import com.ashy0019.hapticscape.music.MusicSyncSettings;
 import com.ashy0019.hapticscape.music.WasapiLoopbackCapture;
 import com.ashy0019.hapticscape.rogue.RogueFeedbackEvent;
+import com.ashy0019.hapticscape.remote.EffectiveSettingsService;
+import com.ashy0019.hapticscape.remote.RemoteRole;
+import com.ashy0019.hapticscape.remote.RemoteSessionListener;
+import com.ashy0019.hapticscape.remote.RemoteSessionManager;
+import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
+import com.ashy0019.hapticscape.remote.RemoteSessionState;
+import com.ashy0019.hapticscape.remote.RemoteSettingsSnapshot;
 import com.ashy0019.hapticscape.rogue.feedback.CasinoFeedbackMapper;
 import com.ashy0019.hapticscape.ui.HapticScapePanel;
 import com.ashy0019.hapticscape.ui.Level99CelebrationOverlay;
@@ -52,6 +60,7 @@ import net.runelite.client.config.ConfigManager;
 import net.runelite.client.chat.ChatMessageManager;
 import net.runelite.client.chat.QueuedMessage;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.events.NotificationFired;
 import net.runelite.client.events.NpcLootReceived;
 import net.runelite.client.events.PlayerLootReceived;
@@ -87,7 +96,9 @@ public class HapticScapePlugin extends Plugin
 	private final AlertDeduplicator alertDeduplicator = new AlertDeduplicator();
 	private final Level99CelebrationController level99CelebrationController =
 		new Level99CelebrationController();
-	private IntifaceService intifaceService;
+	private GatedIntifaceService intifaceService;
+	private EffectiveSettingsService effectiveSettingsService;
+	private RemoteSessionManager remoteSessionManager;
 	private MusicSyncService musicSyncService;
 	private ClickerService clickerService;
 	private HapticScapePanel panel;
@@ -133,6 +144,21 @@ public class HapticScapePlugin extends Plugin
 	@Inject
 	private Gson gson;
 
+	@Subscribe
+	public void onConfigChanged(ConfigChanged event)
+	{
+		if (!HapticScapeConfig.GROUP.equals(event.getGroup()))
+		{
+			return;
+		}
+
+		RemoteSessionManager manager = remoteSessionManager;
+		if (manager != null)
+		{
+			manager.onLocalSettingsChanged();
+		}
+	}
+
 	@Override
 	protected void startUp()
 	{
@@ -152,7 +178,30 @@ public class HapticScapePlugin extends Plugin
 		);
 		overlayManager.add(level99CelebrationOverlay);
 
-		intifaceService = new DefaultIntifaceService(httpClient, gson);
+		intifaceService = new GatedIntifaceService(
+			new DefaultIntifaceService(httpClient, gson)
+		);
+		effectiveSettingsService = new EffectiveSettingsService(config);
+		remoteSessionManager = new RemoteSessionManager(
+			httpClient,
+			gson,
+			config,
+			effectiveSettingsService
+		);
+		remoteSessionManager.addListener(new RemoteSessionListener()
+		{
+			@Override
+			public void onRemoteSessionChanged(RemoteSessionSnapshot snapshot)
+			{
+				handleRemoteSessionChanged(snapshot);
+			}
+
+			@Override
+			public void onRemoteSettingsChanged(RemoteSettingsSnapshot settings)
+			{
+				handleRemoteSettingsChanged(settings);
+			}
+		});
 		musicSyncService = new MusicSyncService(
 			intifaceService,
 			WasapiLoopbackCapture::new,
@@ -181,13 +230,14 @@ public class HapticScapePlugin extends Plugin
 			clickerService::click,
 			updatePreferencesStore,
 			updateCheckService,
+			remoteSessionManager,
 			this::dispatchRogueFeedback,
 			this::playRogueUnlockStingAsync,
 			intifaceService::stopAll
 		);
 		intifaceService.setConnectionListener(panel::updateConnection);
 		musicSyncService.setListener(panel::updateMusicSync);
-		musicSyncService.updateSettings(panel.getMusicSyncSettings());
+		musicSyncService.updateSettings(effectiveSettingsService.current().getMusicSyncSettings());
 		if (client.getGameState() == GameState.LOGGED_IN)
 		{
 			seedCurrentXp();
@@ -230,6 +280,12 @@ public class HapticScapePlugin extends Plugin
 			musicSyncService.close();
 			musicSyncService = null;
 		}
+		if (remoteSessionManager != null)
+		{
+			remoteSessionManager.close();
+			remoteSessionManager = null;
+		}
+		effectiveSettingsService = null;
 		if (clickerService != null)
 		{
 			clickerService.close();
@@ -297,22 +353,17 @@ public class HapticScapePlugin extends Plugin
 		handleThresholdAlert(event);
 
 		XpChange change = xpTracker.update(event.getSkill(), event.getXp());
-		HapticScapePanel currentPanel = panel;
-		if (currentPanel == null)
-		{
-			return;
-		}
-
-		XpFeedbackSettings skillXpSettings = currentPanel.getXpFeedbackSettings(change.getSkill());
+		RemoteSettingsSnapshot settings = effectiveSettings();
+		XpFeedbackSettings skillXpSettings = settings.getXpFeedbackSettings(change.getSkill());
 		XpOutputDecision decision = XpOutputDecision.classify(
 			change,
-			currentPanel.isHapticSkillEnabled(change.getSkill()),
+			settings.isHapticSkillEnabled(change.getSkill()),
 			skillXpSettings,
-			currentPanel.isLevelUpFeedbackEnabled(),
-			currentPanel.isMilestoneFeedbackEnabled(),
-			currentPanel.isLevel99CelebrationEnabled(),
-			currentPanel.isClickSkillEnabled(change.getSkill()),
-			currentPanel.getClickerXpSettings()
+			settings.isLevelUpFeedbackEnabled(),
+			settings.isMilestoneFeedbackEnabled(),
+			settings.isLevel99CelebrationEnabled(),
+			settings.isClickSkillEnabled(change.getSkill()),
+			settings.getClickerXpSettings()
 		);
 		if (decision.shouldClick() && clickerService != null)
 		{
@@ -321,7 +372,7 @@ public class HapticScapePlugin extends Plugin
 		handleFeedbackTrigger(
 			change,
 			decision.getHapticTrigger(),
-			currentPanel,
+			settings,
 			skillXpSettings
 		);
 	}
@@ -401,12 +452,7 @@ public class HapticScapePlugin extends Plugin
 		else if (event.getVarpId() == VarPlayerID.SA_ENERGY)
 		{
 			int energyPercent = clamp(event.getValue() / 10, 0, 100);
-			HapticScapePanel currentPanel = panel;
-			if (currentPanel == null)
-			{
-				return;
-			}
-			int readyAt = currentPanel.getAlertTriggerSettings()
+			int readyAt = effectiveSettings().getAlertTriggerSettings()
 				.get(AlertCategory.SPECIAL_ATTACK_READY);
 			if (thresholdAlertTracker.update(
 				AlertCategory.SPECIAL_ATTACK_READY,
@@ -444,15 +490,10 @@ public class HapticScapePlugin extends Plugin
 	@Subscribe
 	public void onNotificationFired(NotificationFired event)
 	{
-		HapticScapePanel currentPanel = panel;
-		if (currentPanel == null)
-		{
-			return;
-		}
-
+		RemoteSettingsSnapshot effective = effectiveSettings();
 		NotificationFeedbackSettings settings =
-			currentPanel.getNotificationFeedbackSettings();
-		boolean genericClickEnabled = currentPanel.isGenericNotificationClickEnabled();
+			effective.getNotificationFeedbackSettings();
+		boolean genericClickEnabled = effective.isGenericNotificationClickEnabled();
 		if (!GenericNotificationDecision.shouldDispatch(
 			settings,
 			genericClickEnabled,
@@ -551,12 +592,7 @@ public class HapticScapePlugin extends Plugin
 			return;
 		}
 
-		HapticScapePanel currentPanel = panel;
-		if (currentPanel == null)
-		{
-			return;
-		}
-		int threshold = currentPanel.getAlertTriggerSettings().get(category);
+		int threshold = effectiveSettings().getAlertTriggerSettings().get(category);
 		if (thresholdAlertTracker.update(category, event.getBoostedLevel(), threshold))
 		{
 			dispatchSpecificAlert(category);
@@ -565,8 +601,7 @@ public class HapticScapePlugin extends Plugin
 
 	private boolean shouldClickForPhrase(String rawMessage)
 	{
-		HapticScapePanel currentPanel = panel;
-		if (currentPanel == null || rawMessage == null)
+		if (rawMessage == null)
 		{
 			return false;
 		}
@@ -576,7 +611,7 @@ public class HapticScapePlugin extends Plugin
 			.trim();
 
 		return !message.isEmpty()
-			&& currentPanel.getClickerPhraseRules().matches(message);
+			&& effectiveSettings().getClickerPhraseRules().matches(message);
 	}
 
 	private void dispatchSpecificAlert(AlertCategory category)
@@ -594,14 +629,10 @@ public class HapticScapePlugin extends Plugin
 
 	private void dispatchGenericAlert()
 	{
-		HapticScapePanel currentPanel = panel;
-		if (currentPanel == null)
-		{
-			return;
-		}
+		RemoteSettingsSnapshot effective = effectiveSettings();
 		NotificationFeedbackSettings settings =
-			currentPanel.getNotificationFeedbackSettings();
-		if (currentPanel.isGenericNotificationClickEnabled() && clickerService != null)
+			effective.getNotificationFeedbackSettings();
+		if (effective.isGenericNotificationClickEnabled() && clickerService != null)
 		{
 			log.debug("Generic notification click requested");
 			clickerService.click();
@@ -624,22 +655,18 @@ public class HapticScapePlugin extends Plugin
 		AlertCategory category,
 		boolean allowClick)
 	{
-		HapticScapePanel currentPanel = panel;
-		if (currentPanel == null)
-		{
-			return;
-		}
+		RemoteSettingsSnapshot effective = effectiveSettings();
 
 		if (allowClick
-			&& currentPanel.isAlertClickEnabled(category)
+			&& effective.isAlertClickEnabled(category)
 			&& clickerService != null)
 		{
 			log.debug("{} click requested", category);
 			clickerService.click();
 		}
 
-		currentPanel.getAlertProfiles()
-			.resolve(category, currentPanel.getNotificationFeedbackSettings())
+		effective.getAlertProfiles()
+			.resolve(category, effective.getNotificationFeedbackSettings())
 			.ifPresent(playback ->
 			{
 				log.debug("{} haptic requested", category);
@@ -655,15 +682,13 @@ public class HapticScapePlugin extends Plugin
 
 	private void handleValuableLoot(Collection<ItemStack> items)
 	{
-		HapticScapePanel currentPanel = panel;
-		if (currentPanel == null
-			|| items == null
+		if (items == null
 			|| client.getGameState() != GameState.LOGGED_IN)
 		{
 			return;
 		}
 
-		long minimumValue = currentPanel.getAlertTriggerSettings()
+		long minimumValue = effectiveSettings().getAlertTriggerSettings()
 			.get(AlertCategory.VALUABLE_DROP);
 		long totalValue = 0;
 		for (ItemStack item : items)
@@ -691,11 +716,15 @@ public class HapticScapePlugin extends Plugin
 	private void handleFeedbackTrigger(
 		XpChange change,
 		XpFeedbackTrigger trigger,
-		HapticScapePanel currentPanel,
+		RemoteSettingsSnapshot settings,
 		XpFeedbackSettings skillXpSettings)
 	{
 		if (trigger == XpFeedbackTrigger.LEVEL_99)
 		{
+			if (isRemoteOutputPaused())
+			{
+				return;
+			}
 			log.debug(
 				"Level 99 ceremony for {}: level {} -> {}",
 				change.getSkill(),
@@ -713,10 +742,10 @@ public class HapticScapePlugin extends Plugin
 				preset = skillXpSettings.getPatternSelection();
 				break;
 			case LEVEL_UP:
-				preset = currentPanel.getLevelUpPatternPreset();
+				preset = settings.getLevelUpPatternPreset();
 				break;
 			case MILESTONE:
-				preset = currentPanel.getMilestonePatternPreset();
+				preset = settings.getMilestonePatternPreset();
 				break;
 			case NONE:
 			case LEVEL_99:
@@ -982,10 +1011,8 @@ public class HapticScapePlugin extends Plugin
 			return;
 		}
 
-		HapticScapePanel currentPanel = panel;
-		double scale = currentPanel == null
-			? 1.0
-			: currentPanel.getIntensityPercent() / 100.0;
+		double scale = effectiveSettings().getGlobalXpFeedbackSettings()
+			.getIntensityPercent() / 100.0;
 		intifaceService.play(CasinoFeedbackMapper.toRequest(event, scale));
 	}
 
@@ -994,14 +1021,14 @@ public class HapticScapePlugin extends Plugin
 		HapticPatternSelection preset,
 		String triggerName)
 	{
-		HapticScapePanel currentPanel = panel;
-		if (intifaceService == null || currentPanel == null)
+		if (intifaceService == null)
 		{
 			return;
 		}
 
-		int intensityPercent = currentPanel.getIntensityPercent();
-		int durationMillis = currentPanel.getPulseDurationMillis();
+		XpFeedbackSettings global = effectiveSettings().getGlobalXpFeedbackSettings();
+		int intensityPercent = global.getIntensityPercent();
+		int durationMillis = global.getDurationMillis();
 		sendPattern(eventType, preset, triggerName, intensityPercent, durationMillis);
 	}
 
@@ -1019,13 +1046,8 @@ public class HapticScapePlugin extends Plugin
 
 		double intensity = intensityPercent / 100.0;
 		Duration duration = Duration.ofMillis(durationMillis);
-		HapticScapePanel currentPanel = panel;
-		if (currentPanel == null)
-		{
-			return;
-		}
 		HapticPattern pattern = preset.createPattern(
-			currentPanel.getCustomPatterns(),
+			effectiveSettings().getCustomPatterns(),
 			intensity,
 			duration
 		);
@@ -1083,6 +1105,75 @@ public class HapticScapePlugin extends Plugin
 	private static int clamp(int value, int minimum, int maximum)
 	{
 		return Math.max(minimum, Math.min(maximum, value));
+	}
+
+	private RemoteSettingsSnapshot effectiveSettings()
+	{
+		EffectiveSettingsService service = effectiveSettingsService;
+		return service == null
+			? RemoteSettingsSnapshot.capture(config)
+			: service.current();
+	}
+
+	private boolean isRemoteOutputPaused()
+	{
+		RemoteSessionManager manager = remoteSessionManager;
+		if (manager == null)
+		{
+			return false;
+		}
+		RemoteSessionSnapshot current = manager.getSnapshot();
+		return current.getRole() == RemoteRole.PARTICIPANT
+			&& current.getState() != RemoteSessionState.ACTIVE
+			&& current.getState() != RemoteSessionState.LOCAL;
+	}
+
+	private void handleRemoteSessionChanged(RemoteSessionSnapshot snapshot)
+	{
+		boolean pauseOutput = snapshot.getRole() == RemoteRole.PARTICIPANT
+			&& snapshot.getState() != RemoteSessionState.ACTIVE
+			&& snapshot.getState() != RemoteSessionState.LOCAL;
+
+		GatedIntifaceService hapticGate = intifaceService;
+		if (hapticGate != null)
+		{
+			hapticGate.setOutputPaused(pauseOutput);
+		}
+		ClickerService clicks = clickerService;
+		if (clicks != null)
+		{
+			clicks.setPaused(pauseOutput);
+			if (!pauseOutput)
+			{
+				clicks.updateSettings(effectiveSettings().getClickerSettings());
+			}
+		}
+		MusicSyncService music = musicSyncService;
+		if (music != null)
+		{
+			if (pauseOutput)
+			{
+				music.stopNow();
+			}
+			else
+			{
+				music.updateSettings(effectiveSettings().getMusicSyncSettings());
+			}
+		}
+	}
+
+	private void handleRemoteSettingsChanged(RemoteSettingsSnapshot settings)
+	{
+		ClickerService clicks = clickerService;
+		if (clicks != null)
+		{
+			clicks.updateSettings(settings.getClickerSettings());
+		}
+		MusicSyncService music = musicSyncService;
+		if (music != null && !isRemoteOutputPaused())
+		{
+			music.updateSettings(settings.getMusicSyncSettings());
+		}
 	}
 
 	private MusicSyncSettings musicSettingsFromConfig()

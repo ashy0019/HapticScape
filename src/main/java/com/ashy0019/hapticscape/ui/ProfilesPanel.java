@@ -44,6 +44,7 @@ final class ProfilesPanel extends JPanel
 	private boolean updatingControls;
 	private boolean updatingPatternChoices;
 	private boolean connected;
+	private boolean remoteReadOnly;
 
 	ProfilesPanel(
 		SkillFeedbackProfiles profiles,
@@ -181,6 +182,33 @@ final class ProfilesPanel extends JPanel
 		return selectedSkill;
 	}
 
+	void applyDisplayedSettings(
+		SkillFeedbackProfiles displayedProfiles,
+		CustomPatternLibrary library)
+	{
+		profiles = displayedProfiles.replaceMissingCustomPatterns(library);
+		updatingPatternChoices = true;
+		try
+		{
+			PanelUi.setPatternChoices(
+				patternComboBox,
+				getSettings(selectedSkill).getPatternSelection(),
+				library
+			);
+		}
+		finally
+		{
+			updatingPatternChoices = false;
+		}
+		loadSelectedProfile();
+	}
+
+	void setRemoteReadOnly(boolean remoteReadOnly)
+	{
+		this.remoteReadOnly = remoteReadOnly;
+		updateControlState();
+	}
+
 	void refreshInheritedProfile()
 	{
 		if (selectedSkill != null && !profiles.getOverride(selectedSkill).isPresent())
@@ -221,7 +249,7 @@ final class ProfilesPanel extends JPanel
 
 	private void toggleOverride()
 	{
-		if (updatingControls || selectedSkill == null)
+		if (remoteReadOnly || updatingControls || selectedSkill == null)
 		{
 			return;
 		}
@@ -267,7 +295,8 @@ final class ProfilesPanel extends JPanel
 
 	private void updateSelectedProfile()
 	{
-		if (updatingControls
+		if (remoteReadOnly
+			|| updatingControls
 			|| updatingPatternChoices
 			|| selectedSkill == null
 			|| useGlobalCheckBox.isSelected())
@@ -294,16 +323,20 @@ final class ProfilesPanel extends JPanel
 
 	private void updateControlState()
 	{
+		boolean editable = !remoteReadOnly;
 		boolean overridden = !useGlobalCheckBox.isSelected();
 		HapticPatternSelection pattern =
 			(HapticPatternSelection) patternComboBox.getSelectedItem();
 		boolean externallyScaled = pattern == null || !pattern.isCustom();
-		minimumXpSpinner.setEnabled(overridden);
-		patternComboBox.setEnabled(overridden);
-		intensitySlider.setEnabled(overridden && externallyScaled);
-		intensityValueLabel.setEnabled(overridden && externallyScaled);
-		durationSpinner.setEnabled(overridden && externallyScaled);
-		testButton.setEnabled(connected);
+		// Skill selection is navigation only and remains available in remote mode.
+		skillComboBox.setEnabled(true);
+		useGlobalCheckBox.setEnabled(editable);
+		minimumXpSpinner.setEnabled(editable && overridden);
+		patternComboBox.setEnabled(editable && overridden);
+		intensitySlider.setEnabled(editable && overridden && externallyScaled);
+		intensityValueLabel.setEnabled(editable && overridden && externallyScaled);
+		durationSpinner.setEnabled(editable && overridden && externallyScaled);
+		testButton.setEnabled(editable && connected);
 	}
 
 	private void persist()

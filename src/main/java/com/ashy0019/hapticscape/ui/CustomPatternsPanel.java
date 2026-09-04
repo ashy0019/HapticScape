@@ -31,6 +31,16 @@ final class CustomPatternsPanel extends JPanel
 		add(forgePanel, BorderLayout.CENTER);
 	}
 
+	void applyDisplayedLibrary(CustomPatternLibrary library)
+	{
+		forgePanel.applyDisplayedLibrary(library);
+	}
+
+	void setRemoteReadOnly(boolean remoteReadOnly)
+	{
+		forgePanel.setRemoteReadOnly(remoteReadOnly);
+	}
+
 	void setConnected(boolean connected)
 	{
 		forgePanel.setConnected(connected);

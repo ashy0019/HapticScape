@@ -33,6 +33,7 @@ final class MusicPanel extends JPanel
 	private final JLabel statusLabel = new JLabel("Music sync is off");
 	private final JProgressBar outputMeter = new JProgressBar(0, 100);
 	private boolean updating;
+	private boolean remoteReadOnly;
 
 	MusicPanel(
 		HapticScapeConfig config,
@@ -85,6 +86,31 @@ final class MusicPanel extends JPanel
 		);
 	}
 
+	void applyDisplayedSettings(MusicSyncSettings displayed)
+	{
+		updating = true;
+		try
+		{
+			enabledCheckBox.setSelected(displayed.isEnabled());
+			responseComboBox.setSelectedItem(displayed.getResponse());
+			sensitivitySlider.setValue(displayed.getSensitivityPercent());
+			minimumSlider.setValue(displayed.getMinimumIntensityPercent());
+			maximumSlider.setValue(displayed.getMaximumIntensityPercent());
+			refreshLabels();
+		}
+		finally
+		{
+			updating = false;
+		}
+		refreshEnabledState();
+	}
+
+	void setRemoteReadOnly(boolean remoteReadOnly)
+	{
+		this.remoteReadOnly = remoteReadOnly;
+		refreshEnabledState();
+	}
+
 	void disableMusicSync()
 	{
 		if (!enabledCheckBox.isSelected())
@@ -113,12 +139,20 @@ final class MusicPanel extends JPanel
 	{
 		enabledCheckBox.addActionListener(event ->
 		{
+			if (updating || remoteReadOnly)
+			{
+				return;
+			}
 			persist(HapticScapeConfig.MUSIC_SYNC_ENABLED_KEY, enabledCheckBox.isSelected());
 			refreshEnabledState();
 			fireSettings();
 		});
 		responseComboBox.addActionListener(event ->
 		{
+			if (updating || remoteReadOnly)
+			{
+				return;
+			}
 			MusicResponse response = (MusicResponse) responseComboBox.getSelectedItem();
 			persist(HapticScapeConfig.MUSIC_RESPONSE_KEY, response.name());
 			fireSettings();
@@ -126,6 +160,10 @@ final class MusicPanel extends JPanel
 		sensitivitySlider.addChangeListener(event ->
 		{
 			refreshLabels();
+			if (updating || remoteReadOnly)
+			{
+				return;
+			}
 			if (!sensitivitySlider.getValueIsAdjusting())
 			{
 				persist(HapticScapeConfig.MUSIC_SENSITIVITY_PERCENT_KEY,
@@ -135,7 +173,7 @@ final class MusicPanel extends JPanel
 		});
 		minimumSlider.addChangeListener(event ->
 		{
-			if (updating)
+			if (updating || remoteReadOnly)
 			{
 				return;
 			}
@@ -157,7 +195,7 @@ final class MusicPanel extends JPanel
 		});
 		maximumSlider.addChangeListener(event ->
 		{
-			if (updating)
+			if (updating || remoteReadOnly)
 			{
 				return;
 			}
@@ -202,11 +240,13 @@ final class MusicPanel extends JPanel
 
 	private void refreshEnabledState()
 	{
+		boolean editable = !remoteReadOnly;
 		boolean enabled = enabledCheckBox.isSelected();
-		responseComboBox.setEnabled(enabled);
-		sensitivitySlider.setEnabled(enabled);
-		minimumSlider.setEnabled(enabled);
-		maximumSlider.setEnabled(enabled);
+		enabledCheckBox.setEnabled(editable);
+		responseComboBox.setEnabled(editable && enabled);
+		sensitivitySlider.setEnabled(editable && enabled);
+		minimumSlider.setEnabled(editable && enabled);
+		maximumSlider.setEnabled(editable && enabled);
 	}
 
 	private void fireSettings()

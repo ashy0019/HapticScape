@@ -1,0 +1,11 @@
+name = "hapticscape-remote-relay"
+main = "worker.js"
+compatibility_date = "2026-09-03"
+
+[[durable_objects.bindings]]
+name = "SESSION_ROOMS"
+class_name = "SessionRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SessionRoom"]

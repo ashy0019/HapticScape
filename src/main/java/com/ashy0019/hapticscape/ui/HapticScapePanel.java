@@ -21,6 +21,12 @@ import com.ashy0019.hapticscape.music.MusicSyncSettings;
 import com.ashy0019.hapticscape.music.MusicSyncSnapshot;
 import com.ashy0019.hapticscape.rogue.KonamiCodeDetector;
 import com.ashy0019.hapticscape.rogue.RogueFeedbackEvent;
+import com.ashy0019.hapticscape.remote.RemoteRole;
+import com.ashy0019.hapticscape.remote.RemoteSessionListener;
+import com.ashy0019.hapticscape.remote.RemoteSessionManager;
+import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
+import com.ashy0019.hapticscape.remote.RemoteSettingsSnapshot;
+import com.ashy0019.hapticscape.remote.RemoteSessionState;
 import com.ashy0019.hapticscape.rogue.ui.RogueLauncherPanel;
 import com.ashy0019.hapticscape.rogue.ui.RoguePanel;
 import com.ashy0019.hapticscape.update.UpdateCheckService;
@@ -61,7 +67,7 @@ import net.runelite.api.Skill;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.ui.PluginPanel;
 
-public final class HapticScapePanel extends PluginPanel
+public final class HapticScapePanel extends PluginPanel implements RemoteSessionListener
 {
 	private static final int DEVELOPER_UNLOCK_CLICKS = 9;
 	private static final long DEVELOPER_UNLOCK_WINDOW_NANOS = TimeUnit.SECONDS.toNanos(4);
@@ -69,7 +75,10 @@ public final class HapticScapePanel extends PluginPanel
 	private static final String ROGUE_UNLOCK_STING_PLAYED_KEY = "rogueUnlockStingPlayed";
 	private static final String NORMAL_CARD = "normal";
 	private static final String ROGUE_CARD = "rogue";
+	private static final String LOCAL_FEEDBACK_CARD = "localFeedback";
+	private static final String REMOTE_FEEDBACK_CARD = "remoteFeedback";
 
+	private final HapticScapeConfig config;
 	private final ConfigManager configManager;
 	private final Consumer<RogueFeedbackEvent> rogueFeedbackAction;
 	private final Runnable rogueUnlockSoundAction;
@@ -78,6 +87,8 @@ public final class HapticScapePanel extends PluginPanel
 	private final JTabbedPane tabs;
 	private final CardLayout contentLayout = new CardLayout();
 	private final JPanel contentHost = new JPanel(contentLayout);
+	private final CardLayout feedbackLayout = new CardLayout();
+	private final JPanel feedbackHost = new JPanel(feedbackLayout);
 	private final JLabel statusLabel = new JLabel("Disconnected", SwingConstants.CENTER);
 	private final DefaultListModel<DeviceInfo> deviceModel = new DefaultListModel<>();
 	private final JButton connectButton = new JButton("Connect");
@@ -88,6 +99,12 @@ public final class HapticScapePanel extends PluginPanel
 	private final JButton resetRogueDiscoveryButton = new JButton("Reset Rogue");
 	private final JButton stopButton = new JButton("Stop now");
 	private final JButton updatesButton = new JButton("Updates");
+	private final JButton remoteButton = new JButton("Remote");
+	private final JPanel remoteBanner = new JPanel(new BorderLayout(6, 0));
+	private final JLabel remoteBannerLabel = new JLabel();
+	private final JButton remoteEmergencyButton = new JButton("Emergency Off");
+	private final JButton remoteResumeButton = new JButton("Resume");
+	private final JButton remoteEndButton = new JButton("End");
 	private final JCheckBox levelUpCheckBox = new JCheckBox("Level-ups");
 	private final JCheckBox milestoneCheckBox = new JCheckBox("Milestones");
 	private final JCheckBox level99CheckBox = new JCheckBox("Celebrate level 99");
@@ -100,6 +117,7 @@ public final class HapticScapePanel extends PluginPanel
 	private final JComboBox<HapticPatternSelection> milestonePatternComboBox;
 	private final JPanel level99Row = new JPanel(new BorderLayout(8, 0));
 	private final JPanel developerControlsRow = new JPanel(new GridLayout(1, 2, 6, 0));
+	private final JPanel settingsPanel;
 	private final SkillsPanel skillsPanel;
 	private final ProfilesPanel profilesPanel;
 	private final AlertsPanel alertsPanel;
@@ -107,6 +125,8 @@ public final class HapticScapePanel extends PluginPanel
 	private final MusicPanel musicPanel;
 	private final ClickerPanel clickerPanel;
 	private final UpdatesPanel updatesPanel;
+	private final RemoteSessionManager remoteSessionManager;
+	private final RemoteControlPanel remoteControlPanel;
 	private final RoguePanel roguePanel;
 	private final RogueLauncherPanel rogueLauncher;
 	private boolean rogueModeUnlocked;
@@ -128,6 +148,8 @@ public final class HapticScapePanel extends PluginPanel
 	private int developerUnlockClickCount;
 	private long developerUnlockStartedNanos;
 	private ConnectionSnapshot latestConnectionSnapshot = ConnectionSnapshot.disconnected();
+	private boolean remoteReadOnly;
+	private boolean updatingDisplayedSettings;
 
 	public HapticScapePanel(
 		HapticScapeConfig config,
@@ -146,12 +168,15 @@ public final class HapticScapePanel extends PluginPanel
 		Runnable testClickAction,
 		UpdatePreferencesStore updatePreferencesStore,
 		UpdateCheckService updateCheckService,
+		RemoteSessionManager remoteSessionManager,
 		Consumer<RogueFeedbackEvent> rogueFeedbackAction,
 		Runnable rogueUnlockSoundAction,
 		Runnable stopAction)
 	{
 		super();
+		this.config = config;
 		this.configManager = configManager;
+		this.remoteSessionManager = remoteSessionManager;
 		this.rogueFeedbackAction = rogueFeedbackAction;
 		this.rogueUnlockSoundAction = rogueUnlockSoundAction;
 		setLayout(new BorderLayout(0, 6));
@@ -160,6 +185,8 @@ public final class HapticScapePanel extends PluginPanel
 		statusLabel.setBorder(BorderFactory.createEmptyBorder(4, 2, 4, 2));
 		updatesButton.setMargin(new java.awt.Insets(2, 5, 2, 5));
 		updatesButton.setToolTipText("Configure HapticScape client updates");
+		remoteButton.setMargin(new java.awt.Insets(2, 5, 2, 5));
+		remoteButton.setToolTipText("Create or join an opt-in encrypted Remote Control session");
 		developerStatusTimer = new Timer(1600, event ->
 			statusLabel.setText(latestConnectionSnapshot.getMessage()));
 		developerStatusTimer.setRepeats(false);
@@ -240,7 +267,7 @@ public final class HapticScapePanel extends PluginPanel
 		developerControlsRow.setVisible(false);
 
 		configureGlobalListeners();
-		JPanel settingsPanel = createGlobalSettingsPanel();
+		settingsPanel = createGlobalSettingsPanel();
 
 		skillsPanel = new SkillsPanel(
 			SkillSelection.fromConfigValue(config.disabledSkills()),
@@ -276,6 +303,7 @@ public final class HapticScapePanel extends PluginPanel
 			testClickAction
 		);
 		updatesPanel = new UpdatesPanel(updatePreferencesStore, updateCheckService);
+		remoteControlPanel = new RemoteControlPanel(config, configManager, remoteSessionManager);
 		roguePanel = new RoguePanel(configManager, rogueFeedbackAction);
 		rogueLauncher = new RogueLauncherPanel(this::toggleRogueView);
 
@@ -293,8 +321,33 @@ public final class HapticScapePanel extends PluginPanel
 		JPanel topPanel = new JPanel();
 		topPanel.setLayout(new BoxLayout(topPanel, BoxLayout.Y_AXIS));
 		PanelUi.addVerticalComponent(topPanel, statusLabel);
-		PanelUi.addVerticalComponent(topPanel, settingsPanel);
-		PanelUi.addVerticalComponent(topPanel, tabs);
+
+		remoteBanner.setBorder(BorderFactory.createTitledBorder("Remote Control"));
+		remoteBanner.add(remoteBannerLabel, BorderLayout.CENTER);
+		JPanel remoteBannerButtons = new JPanel(new GridLayout(1, 3, 3, 0));
+		remoteBannerButtons.add(remoteEmergencyButton);
+		remoteBannerButtons.add(remoteResumeButton);
+		remoteBannerButtons.add(remoteEndButton);
+		remoteBanner.add(remoteBannerButtons, BorderLayout.SOUTH);
+		remoteBanner.setVisible(false);
+		PanelUi.addVerticalComponent(topPanel, remoteBanner);
+
+		JPanel localFeedback = new JPanel();
+		localFeedback.setLayout(new BoxLayout(localFeedback, BoxLayout.Y_AXIS));
+		PanelUi.addVerticalComponent(localFeedback, settingsPanel);
+		PanelUi.addVerticalComponent(localFeedback, tabs);
+
+		JPanel remoteFeedback = new JPanel(new BorderLayout());
+		remoteFeedback.setBorder(BorderFactory.createTitledBorder("Feedback settings"));
+		JLabel remoteFeedbackLabel = new JLabel(
+			"<html><center>Settings are controlled by the paired controller.<br>"
+				+ "Intiface connection and Emergency Off remain local.</center></html>",
+			SwingConstants.CENTER
+		);
+		remoteFeedback.add(remoteFeedbackLabel, BorderLayout.CENTER);
+		feedbackHost.add(localFeedback, LOCAL_FEEDBACK_CARD);
+		feedbackHost.add(remoteFeedback, REMOTE_FEEDBACK_CARD);
+		PanelUi.addVerticalComponent(topPanel, feedbackHost);
 
 		JList<DeviceInfo> deviceList = new JList<>(deviceModel);
 		JScrollPane scrollPane = new JScrollPane(deviceList);
@@ -314,9 +367,23 @@ public final class HapticScapePanel extends PluginPanel
 		resetRogueDiscoveryButton.addActionListener(event -> resetRogueDiscovery());
 		stopButton.addActionListener(event ->
 		{
+			if (remoteSessionManager.getSnapshot().isParticipantControlled())
+			{
+				remoteSessionManager.emergencyPause();
+				return;
+			}
 			musicPanel.disableMusicSync();
 			stopAction.run();
 		});
+		remoteButton.addActionListener(event -> JOptionPane.showMessageDialog(
+			this,
+			remoteControlPanel,
+			"HapticScape Remote Control",
+			JOptionPane.PLAIN_MESSAGE));
+		remoteEmergencyButton.addActionListener(event -> remoteSessionManager.emergencyPause());
+		remoteResumeButton.addActionListener(event -> remoteSessionManager.resumeParticipant());
+		remoteEndButton.addActionListener(event -> remoteSessionManager.endSession());
+
 		updatesButton.addActionListener(event -> JOptionPane.showMessageDialog(
 			this,
 			updatesPanel,
@@ -333,6 +400,7 @@ public final class HapticScapePanel extends PluginPanel
 		buttons.setLayout(new BoxLayout(buttons, BoxLayout.Y_AXIS));
 		PanelUi.addVerticalComponent(buttons, primaryButtons);
 		PanelUi.addVerticalComponent(buttons, updatesButton);
+		PanelUi.addVerticalComponent(buttons, remoteButton);
 
 		JPanel normalView = new JPanel(new BorderLayout(0, 8));
 		normalView.add(topPanel, BorderLayout.NORTH);
@@ -350,6 +418,8 @@ public final class HapticScapePanel extends PluginPanel
 			ensureRogueAccess(false, false);
 		}
 
+		remoteSessionManager.addListener(this);
+		applyRemoteSessionState(remoteSessionManager.getSnapshot());
 		applyState(ConnectionSnapshot.disconnected());
 		rogueKeyDispatcher = this::handleRogueKeyEvent;
 		KeyboardFocusManager.getCurrentKeyboardFocusManager()
@@ -494,6 +564,10 @@ public final class HapticScapePanel extends PluginPanel
 	{
 		intensitySlider.addChangeListener(event ->
 		{
+			if (updatingDisplayedSettings || remoteReadOnly)
+			{
+				return;
+			}
 			intensityPercent = intensitySlider.getValue();
 			intensityValueLabel.setText(intensityPercent + "%");
 			refreshInheritedProfileIfReady();
@@ -508,6 +582,10 @@ public final class HapticScapePanel extends PluginPanel
 		});
 		minimumXpSpinner.addChangeListener(event ->
 		{
+			if (updatingDisplayedSettings || remoteReadOnly)
+			{
+				return;
+			}
 			minimumXpGain = ((Number) minimumXpSpinner.getValue()).intValue();
 			configManager.setConfiguration(
 				HapticScapeConfig.GROUP,
@@ -518,6 +596,10 @@ public final class HapticScapePanel extends PluginPanel
 		});
 		durationSpinner.addChangeListener(event ->
 		{
+			if (updatingDisplayedSettings || remoteReadOnly)
+			{
+				return;
+			}
 			durationMillis = ((Number) durationSpinner.getValue()).intValue();
 			configManager.setConfiguration(
 				HapticScapeConfig.GROUP,
@@ -528,6 +610,10 @@ public final class HapticScapePanel extends PluginPanel
 		});
 		patternComboBox.addActionListener(event ->
 		{
+			if (updatingDisplayedSettings || remoteReadOnly)
+			{
+				return;
+			}
 			if (updatingPatternSelectors)
 			{
 				return;
@@ -547,6 +633,10 @@ public final class HapticScapePanel extends PluginPanel
 		});
 		levelUpPatternComboBox.addActionListener(event ->
 		{
+			if (updatingDisplayedSettings || remoteReadOnly)
+			{
+				return;
+			}
 			if (!updatingPatternSelectors)
 			{
 				HapticPatternSelection selected =
@@ -564,6 +654,10 @@ public final class HapticScapePanel extends PluginPanel
 		});
 		milestonePatternComboBox.addActionListener(event ->
 		{
+			if (updatingDisplayedSettings || remoteReadOnly)
+			{
+				return;
+			}
 			if (!updatingPatternSelectors)
 			{
 				HapticPatternSelection selected =
@@ -581,6 +675,10 @@ public final class HapticScapePanel extends PluginPanel
 		});
 		levelUpCheckBox.addActionListener(event ->
 		{
+			if (updatingDisplayedSettings || remoteReadOnly)
+			{
+				return;
+			}
 			levelUpEnabled = levelUpCheckBox.isSelected();
 			configManager.setConfiguration(
 				HapticScapeConfig.GROUP,
@@ -590,6 +688,10 @@ public final class HapticScapePanel extends PluginPanel
 		});
 		milestoneCheckBox.addActionListener(event ->
 		{
+			if (updatingDisplayedSettings || remoteReadOnly)
+			{
+				return;
+			}
 			milestoneEnabled = milestoneCheckBox.isSelected();
 			configManager.setConfiguration(
 				HapticScapeConfig.GROUP,
@@ -599,6 +701,10 @@ public final class HapticScapePanel extends PluginPanel
 		});
 		level99CheckBox.addActionListener(event ->
 		{
+			if (updatingDisplayedSettings || remoteReadOnly)
+			{
+				return;
+			}
 			level99Enabled = level99CheckBox.isSelected();
 			configManager.setConfiguration(
 				HapticScapeConfig.GROUP,
@@ -731,6 +837,8 @@ public final class HapticScapePanel extends PluginPanel
 
 	public void close()
 	{
+		remoteSessionManager.removeListener(this);
+		remoteControlPanel.close();
 		developerStatusTimer.stop();
 		KeyboardFocusManager.getCurrentKeyboardFocusManager()
 			.removeKeyEventDispatcher(rogueKeyDispatcher);
@@ -911,6 +1019,181 @@ public final class HapticScapePanel extends PluginPanel
 		developerStatusTimer.restart();
 	}
 
+	@Override
+	public void onRemoteSessionChanged(RemoteSessionSnapshot snapshot)
+	{
+		if (!SwingUtilities.isEventDispatchThread())
+		{
+			SwingUtilities.invokeLater(() -> applyRemoteSessionState(snapshot));
+			return;
+		}
+		applyRemoteSessionState(snapshot);
+	}
+
+	@Override
+	public void onRemoteSettingsChanged(RemoteSettingsSnapshot settings)
+	{
+		if (!SwingUtilities.isEventDispatchThread())
+		{
+			SwingUtilities.invokeLater(() -> applyRemoteSettingsIfActive(settings));
+			return;
+		}
+		applyRemoteSettingsIfActive(settings);
+	}
+
+	private void applyRemoteSettingsIfActive(RemoteSettingsSnapshot settings)
+	{
+		// Re-check on the EDT so a queued remote update cannot repaint stale remote
+		// values after the participant has already ended the session.
+		if (remoteSessionManager.getSnapshot().isParticipantControlled())
+		{
+			applyDisplayedSettings(settings);
+		}
+	}
+
+	private void applyDisplayedSettings(RemoteSettingsSnapshot settings)
+	{
+		CustomPatternLibrary displayedPatterns = settings.getCustomPatterns();
+		XpFeedbackSettings global = settings.getGlobalXpFeedbackSettings();
+
+		updatingDisplayedSettings = true;
+		try
+		{
+			customPatterns = displayedPatterns;
+			minimumXpGain = global.getMinimumXpGain();
+			intensityPercent = global.getIntensityPercent();
+			durationMillis = global.getDurationMillis();
+			patternSelection = global.getPatternSelection();
+			levelUpEnabled = settings.isLevelUpFeedbackEnabled();
+			milestoneEnabled = settings.isMilestoneFeedbackEnabled();
+			level99Enabled = settings.isLevel99CelebrationEnabled();
+			levelUpPatternSelection = settings.getLevelUpPatternPreset();
+			milestonePatternSelection = settings.getMilestonePatternPreset();
+
+			minimumXpSpinner.setValue(minimumXpGain);
+			intensitySlider.setValue(intensityPercent);
+			intensityValueLabel.setText(intensityPercent + "%");
+			durationSpinner.setValue(durationMillis);
+			levelUpCheckBox.setSelected(levelUpEnabled);
+			milestoneCheckBox.setSelected(milestoneEnabled);
+			level99CheckBox.setSelected(level99Enabled);
+
+			updatingPatternSelectors = true;
+			try
+			{
+				PanelUi.setPatternChoices(patternComboBox, patternSelection, displayedPatterns);
+				PanelUi.setPatternChoices(
+					levelUpPatternComboBox,
+					levelUpPatternSelection,
+					displayedPatterns
+				);
+				PanelUi.setPatternChoices(
+					milestonePatternComboBox,
+					milestonePatternSelection,
+					displayedPatterns
+				);
+			}
+			finally
+			{
+				updatingPatternSelectors = false;
+			}
+
+			skillsPanel.applyDisplayedSelections(
+				settings.getHapticSkillSelection(),
+				settings.getClickSkillSelection()
+			);
+			profilesPanel.applyDisplayedSettings(
+				settings.getSkillFeedbackProfiles(),
+				displayedPatterns
+			);
+			alertsPanel.applyDisplayedSettings(
+				settings.getNotificationFeedbackSettings(),
+				settings.isGenericNotificationClickEnabled(),
+				settings.getAlertProfiles(),
+				settings.getAlertTriggerSettings(),
+				settings.getClickerAlertSettings(),
+				displayedPatterns
+			);
+			customPatternsPanel.applyDisplayedLibrary(displayedPatterns);
+			musicPanel.applyDisplayedSettings(settings.getMusicSyncSettings());
+			clickerPanel.applyDisplayedSettings(
+				settings.getClickerSettings(),
+				settings.getClickerXpSettings(),
+				settings.getClickerPhraseRules()
+			);
+		}
+		finally
+		{
+			updatingDisplayedSettings = false;
+		}
+	}
+
+	private void setRemoteReadOnly(boolean remoteReadOnly)
+	{
+		this.remoteReadOnly = remoteReadOnly;
+		boolean editable = !remoteReadOnly;
+		minimumXpSpinner.setEnabled(editable);
+		intensitySlider.setEnabled(editable);
+		intensityValueLabel.setEnabled(editable);
+		durationSpinner.setEnabled(editable);
+		patternComboBox.setEnabled(editable);
+		levelUpCheckBox.setEnabled(editable);
+		levelUpPatternComboBox.setEnabled(editable);
+		milestoneCheckBox.setEnabled(editable);
+		milestonePatternComboBox.setEnabled(editable);
+		level99CheckBox.setEnabled(editable);
+		skillsPanel.setRemoteReadOnly(remoteReadOnly);
+		profilesPanel.setRemoteReadOnly(remoteReadOnly);
+		alertsPanel.setRemoteReadOnly(remoteReadOnly);
+		customPatternsPanel.setRemoteReadOnly(remoteReadOnly);
+		musicPanel.setRemoteReadOnly(remoteReadOnly);
+		clickerPanel.setRemoteReadOnly(remoteReadOnly);
+		// Tabs, navigation selectors, Casino/Rogue, Updates, Intiface connection,
+		// Remote Control controls, and Emergency Off intentionally remain usable.
+	}
+
+	private void applyRemoteSessionState(RemoteSessionSnapshot snapshot)
+	{
+		boolean participantControlled = snapshot.isParticipantControlled();
+		boolean wasRemoteReadOnly = remoteReadOnly;
+		stopButton.setText(participantControlled ? "Emergency Off" : "Stop now");
+
+		// Keep the normal HapticScape UI visible during Remote Control. The
+		// participant can navigate it and watch remote values change, but cannot
+		// mutate remotely authoritative feedback settings.
+		feedbackLayout.show(feedbackHost, LOCAL_FEEDBACK_CARD);
+		if (participantControlled)
+		{
+			setRemoteReadOnly(true);
+		}
+		else if (wasRemoteReadOnly)
+		{
+			applyDisplayedSettings(RemoteSettingsSnapshot.capture(config));
+			setRemoteReadOnly(false);
+		}
+
+		// Connection management stays local even during Remote Control. Manual
+		// preview buttons are disabled so they cannot bypass the remote policy.
+		boolean connected = latestConnectionSnapshot.getState() == ConnectionState.CONNECTED;
+		boolean emergencyPaused = snapshot.getState() == RemoteSessionState.EMERGENCY_PAUSED;
+		stopButton.setEnabled(participantControlled ? !emergencyPaused : connected);
+		testButton.setEnabled(!participantControlled && connected);
+		testLevelUpButton.setEnabled(!participantControlled && connected);
+		previewLevel99Button.setEnabled(!participantControlled && developerControlsUnlocked && connected);
+
+		boolean showBanner = snapshot.getState() != RemoteSessionState.LOCAL;
+		remoteBanner.setVisible(showBanner);
+		remoteBannerLabel.setText(participantControlled
+			? snapshot.getMessage() + " · settings mirrored read-only"
+			: snapshot.getMessage());
+		boolean participant = snapshot.getRole() == RemoteRole.PARTICIPANT && showBanner;
+		remoteEmergencyButton.setEnabled(participant && !emergencyPaused);
+		remoteResumeButton.setEnabled(participant && emergencyPaused);
+		remoteEndButton.setEnabled(showBanner);
+		revalidate();
+		repaint();
+	}
+
 	public void updateConnection(ConnectionSnapshot snapshot)
 	{
 		if (!SwingUtilities.isEventDispatchThread())
@@ -956,6 +1239,7 @@ public final class HapticScapePanel extends PluginPanel
 		alertsPanel.setConnected(connected);
 		customPatternsPanel.setConnected(connected);
 		stopButton.setEnabled(connected);
+		applyRemoteSessionState(remoteSessionManager.getSnapshot());
 	}
 
 	private static int clamp(int value, int minimum, int maximum)

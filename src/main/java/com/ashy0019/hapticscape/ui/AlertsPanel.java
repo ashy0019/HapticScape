@@ -72,6 +72,7 @@ final class AlertsPanel extends JPanel
 	private boolean updatingSpecificControls;
 	private boolean updatingPatternChoices;
 	private boolean connected;
+	private boolean remoteReadOnly;
 
 	AlertsPanel(
 		HapticScapeConfig config,
@@ -188,6 +189,57 @@ final class AlertsPanel extends JPanel
 	AlertCategory getSelectedCategory()
 	{
 		return selectedCategory;
+	}
+
+	void applyDisplayedSettings(
+		NotificationFeedbackSettings genericSettings,
+		boolean displayedGenericClickEnabled,
+		AlertProfiles displayedProfiles,
+		AlertTriggerSettings displayedTriggers,
+		ClickerAlertSettings displayedClickSettings,
+		CustomPatternLibrary library)
+	{
+		genericEnabled = genericSettings.isEnabled();
+		genericClickEnabled = displayedGenericClickEnabled;
+		respectFocus = genericSettings.isRespectRuneLiteFocus();
+		genericIntensityPercent = genericSettings.getIntensityPercent();
+		genericDurationMillis = genericSettings.getDurationMillis();
+		genericPattern = genericSettings.getPatternSelection().resolveAgainst(library);
+		alertProfiles = displayedProfiles.replaceMissingCustomPatterns(library);
+		triggerSettings = displayedTriggers;
+		clickerAlertSettings = displayedClickSettings;
+
+		updatingGenericControls = true;
+		updatingPatternChoices = true;
+		try
+		{
+			genericEnabledCheckBox.setSelected(genericEnabled);
+			genericClickEnabledCheckBox.setSelected(genericClickEnabled);
+			respectFocusCheckBox.setSelected(respectFocus);
+			genericIntensitySlider.setValue(genericIntensityPercent);
+			genericIntensityValueLabel.setText(genericIntensityPercent + "%");
+			PanelUi.setPatternChoices(genericPatternComboBox, genericPattern, library);
+			genericDurationSpinner.setValue(genericDurationMillis);
+			PanelUi.setPatternChoices(
+				specificPatternComboBox,
+				alertProfiles.get(selectedCategory).getPatternSelection(),
+				library
+			);
+		}
+		finally
+		{
+			updatingPatternChoices = false;
+			updatingGenericControls = false;
+		}
+		loadSelectedCategory();
+		updateGenericControlState();
+	}
+
+	void setRemoteReadOnly(boolean remoteReadOnly)
+	{
+		this.remoteReadOnly = remoteReadOnly;
+		updateGenericControlState();
+		updateSpecificControlState();
 	}
 
 	void applyCustomPatternLibrary(CustomPatternLibrary library)
@@ -487,7 +539,7 @@ final class AlertsPanel extends JPanel
 
 	private void updateSelectedProfile()
 	{
-		if (updatingSpecificControls || updatingPatternChoices)
+		if (remoteReadOnly || updatingSpecificControls || updatingPatternChoices)
 		{
 			return;
 		}
@@ -513,7 +565,7 @@ final class AlertsPanel extends JPanel
 
 	private void updateSelectedTrigger()
 	{
-		if (updatingSpecificControls || !selectedCategory.hasTriggerParameter())
+		if (remoteReadOnly || updatingSpecificControls || !selectedCategory.hasTriggerParameter())
 		{
 			return;
 		}
@@ -526,34 +578,43 @@ final class AlertsPanel extends JPanel
 
 	private void updateGenericControlState()
 	{
+		boolean editable = !remoteReadOnly;
 		HapticPatternSelection pattern =
 			(HapticPatternSelection) genericPatternComboBox.getSelectedItem();
 		boolean externallyScaled = pattern == null || !pattern.isCustom();
-		genericPatternComboBox.setEnabled(true);
-		genericIntensitySlider.setEnabled(externallyScaled);
-		genericIntensityValueLabel.setEnabled(externallyScaled);
-		genericDurationSpinner.setEnabled(externallyScaled);
+		genericEnabledCheckBox.setEnabled(editable);
+		genericClickEnabledCheckBox.setEnabled(editable);
+		respectFocusCheckBox.setEnabled(editable);
+		genericPatternComboBox.setEnabled(editable);
+		genericIntensitySlider.setEnabled(editable && externallyScaled);
+		genericIntensityValueLabel.setEnabled(editable && externallyScaled);
+		genericDurationSpinner.setEnabled(editable && externallyScaled);
 		testGenericButton.setEnabled(
-			(connected && genericEnabled) || genericClickEnabled
+			editable && ((connected && genericEnabled) || genericClickEnabled)
 		);
 	}
 
 	private void updateSpecificControlState()
 	{
+		boolean editable = !remoteReadOnly;
 		AlertBehavior behavior = (AlertBehavior) behaviorComboBox.getSelectedItem();
 		boolean customConfiguration = behavior == AlertBehavior.CUSTOM;
 		HapticPatternSelection pattern =
 			(HapticPatternSelection) specificPatternComboBox.getSelectedItem();
 		boolean externallyScaled = pattern == null || !pattern.isCustom();
 
-		triggerSpinner.setEnabled(selectedCategory.hasTriggerParameter());
-		specificPatternComboBox.setEnabled(customConfiguration);
-		specificIntensitySlider.setEnabled(customConfiguration && externallyScaled);
-		specificIntensityValueLabel.setEnabled(customConfiguration && externallyScaled);
-		specificDurationSpinner.setEnabled(customConfiguration && externallyScaled);
+		// Category selection is navigation only, so the participant can inspect every alert.
+		categoryComboBox.setEnabled(true);
+		behaviorComboBox.setEnabled(editable);
+		specificClickEnabledCheckBox.setEnabled(editable);
+		triggerSpinner.setEnabled(editable && selectedCategory.hasTriggerParameter());
+		specificPatternComboBox.setEnabled(editable && customConfiguration);
+		specificIntensitySlider.setEnabled(editable && customConfiguration && externallyScaled);
+		specificIntensityValueLabel.setEnabled(editable && customConfiguration && externallyScaled);
+		specificDurationSpinner.setEnabled(editable && customConfiguration && externallyScaled);
 		testSpecificButton.setEnabled(
-			(connected && behavior != AlertBehavior.OFF)
-				|| clickerAlertSettings.isEnabled(selectedCategory)
+			editable && ((connected && behavior != AlertBehavior.OFF)
+				|| clickerAlertSettings.isEnabled(selectedCategory))
 		);
 	}
 
