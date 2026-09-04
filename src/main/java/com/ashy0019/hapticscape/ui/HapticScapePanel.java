@@ -22,6 +22,7 @@ import com.ashy0019.hapticscape.music.MusicSyncSnapshot;
 import com.ashy0019.hapticscape.rogue.KonamiCodeDetector;
 import com.ashy0019.hapticscape.rogue.RogueFeedbackEvent;
 import com.ashy0019.hapticscape.remote.RemoteRole;
+import com.ashy0019.hapticscape.remote.RemotePermissions;
 import com.ashy0019.hapticscape.remote.RemoteSessionListener;
 import com.ashy0019.hapticscape.remote.RemoteSessionManager;
 import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
@@ -81,6 +82,7 @@ public final class HapticScapePanel extends PluginPanel
 	private static final String ROGUE_UNLOCKED_KEY = "rogueUnlocked";
 	private static final String ROGUE_UNLOCK_STING_PLAYED_KEY = "rogueUnlockStingPlayed";
 	private static final String NORMAL_CARD = "normal";
+	private static final String REMOTE_CARD = "remote";
 	private static final String ROGUE_CARD = "rogue";
 	private static final String LOCAL_FEEDBACK_CARD = "localFeedback";
 	private static final String REMOTE_FEEDBACK_CARD = "remoteFeedback";
@@ -114,7 +116,8 @@ public final class HapticScapePanel extends PluginPanel
 	private final JButton clearSettingsLockButton = new JButton("Clear settings lock");
 	private final JButton stopButton = new JButton("Stop now");
 	private final JButton updatesButton = new JButton("Updates");
-	private final JButton remoteButton = new JButton("Remote");
+	private final JButton remoteButton = new JButton("Remote Control");
+	private final JButton remoteBackButton = new JButton("Back to HapticScape");
 	private final JPanel settingsLockBanner = new JPanel(new BorderLayout(6, 0));
 	private final JLabel settingsLockLabel = new JLabel(SETTINGS_LOCKED_MESSAGE);
 	private final JButton unlockSettingsButton = new JButton("Unlock");
@@ -146,6 +149,7 @@ public final class HapticScapePanel extends PluginPanel
 	private final RemoteSessionManager remoteSessionManager;
 	private final SettingsLockService settingsLockService;
 	private final RemoteControlPanel remoteControlPanel;
+	private final SidebarScrollRouter pageScrollRouter;
 	private final RoguePanel roguePanel;
 	private final RogueLauncherPanel rogueLauncher;
 	private boolean rogueModeUnlocked;
@@ -453,11 +457,8 @@ public final class HapticScapePanel extends PluginPanel
 			musicPanel.disableMusicSync();
 			stopAction.run();
 		});
-		remoteButton.addActionListener(event -> JOptionPane.showMessageDialog(
-			this,
-			remoteControlPanel,
-			"HapticScape Remote Control",
-			JOptionPane.PLAIN_MESSAGE));
+		remoteButton.addActionListener(event -> showRemoteView());
+		remoteBackButton.addActionListener(event -> showNormalView());
 		remoteEmergencyButton.addActionListener(event -> remoteSessionManager.emergencyPause());
 		remoteResumeButton.addActionListener(event -> remoteSessionManager.resumeParticipant());
 		remoteEndButton.addActionListener(event -> remoteSessionManager.endSession());
@@ -485,10 +486,21 @@ public final class HapticScapePanel extends PluginPanel
 		normalView.add(scrollPane, BorderLayout.CENTER);
 		normalView.add(buttons, BorderLayout.SOUTH);
 
+		JPanel remoteView = new JPanel(new BorderLayout(0, 6));
+		remoteBackButton.setToolTipText("Return to the main HapticScape controls");
+		remoteView.add(remoteBackButton, BorderLayout.NORTH);
+		remoteView.add(remoteControlPanel, BorderLayout.CENTER);
+
 		contentHost.add(normalView, NORMAL_CARD);
+		contentHost.add(remoteView, REMOTE_CARD);
 		contentHost.add(roguePanel, ROGUE_CARD);
 		add(rogueLauncher, BorderLayout.NORTH);
 		add(contentHost, BorderLayout.CENTER);
+		// PluginPanel already owns the scroll pane displayed by RuneLite. A second
+		// full-page scroll pane expands inside that wrapper and has no range to move.
+		JScrollPane pageScrollPane = getScrollPane();
+		pageScrollPane.getVerticalScrollBar().setUnitIncrement(16);
+		pageScrollRouter = SidebarScrollRouter.install(pageScrollPane, this);
 		contentLayout.show(contentHost, NORMAL_CARD);
 
 		if (Boolean.parseBoolean(configManager.getConfiguration(HapticScapeConfig.GROUP, ROGUE_UNLOCKED_KEY)))
@@ -929,6 +941,7 @@ public final class HapticScapePanel extends PluginPanel
 
 	public void close()
 	{
+		pageScrollRouter.close();
 		remoteSessionManager.removeListener(this);
 		settingsLockService.removeListener(this);
 		remoteControlPanel.close();
@@ -1042,6 +1055,15 @@ public final class HapticScapePanel extends PluginPanel
 	{
 		rogueViewActive = false;
 		contentLayout.show(contentHost, NORMAL_CARD);
+		rogueLauncher.setActive(false);
+		contentHost.revalidate();
+		contentHost.repaint();
+	}
+
+	private void showRemoteView()
+	{
+		rogueViewActive = false;
+		contentLayout.show(contentHost, REMOTE_CARD);
 		rogueLauncher.setActive(false);
 		contentHost.revalidate();
 		contentHost.repaint();
@@ -1208,6 +1230,19 @@ public final class HapticScapePanel extends PluginPanel
 			return;
 		}
 		applyRemoteSettingsIfActive(settings);
+	}
+
+	@Override
+	public void onRemotePermissionsChanged(RemotePermissions permissions)
+	{
+		if (!SwingUtilities.isEventDispatchThread())
+		{
+			SwingUtilities.invokeLater(() -> applyRemoteSessionState(
+				remoteSessionManager.getSnapshot()
+			));
+			return;
+		}
+		applyRemoteSessionState(remoteSessionManager.getSnapshot());
 	}
 
 	private void applyRemoteSettingsIfActive(RemoteSettingsSnapshot settings)
@@ -1409,6 +1444,7 @@ public final class HapticScapePanel extends PluginPanel
 		boolean controllerSession = snapshot.getRole() == RemoteRole.CONTROLLER
 			&& snapshot.getState() != RemoteSessionState.LOCAL;
 		boolean controllerEditable = controllerSession
+			&& remoteSessionManager.getPeerPermissions().isSettingsAllowed()
 			&& (snapshot.getState() == RemoteSessionState.ACTIVE
 				|| snapshot.getState() == RemoteSessionState.PEER_EMERGENCY_PAUSED);
 		boolean workspaceVisible = controllerSession
@@ -1458,16 +1494,13 @@ public final class HapticScapePanel extends PluginPanel
 		{
 			setRemoteReadOnly(true);
 		}
-		else if (controllerEditable)
+		else if (controllerSession && subjectWorkspaceSelected && subjectAvailable)
 		{
-			if (subjectWorkspaceSelected)
-			{
-				setRemoteReadOnly(false);
-			}
-			else
-			{
-				setLocalSettingsLocked(settingsLockService.isLocked());
-			}
+			setRemoteReadOnly(!controllerEditable);
+		}
+		else if (controllerSession)
+		{
+			setLocalSettingsLocked(settingsLockService.isLocked());
 		}
 		else
 		{
@@ -1595,4 +1628,5 @@ public final class HapticScapePanel extends PluginPanel
 	{
 		return Math.max(minimum, Math.min(maximum, value));
 	}
+
 }
