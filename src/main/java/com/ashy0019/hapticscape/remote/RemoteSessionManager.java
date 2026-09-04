@@ -27,12 +27,15 @@ public final class RemoteSessionManager implements AutoCloseable
 	private static final long SETTINGS_DEBOUNCE_MILLIS = 40;
 	private static final long SETTINGS_RECONCILE_INTERVAL_MILLIS = 5_000;
 	private static final long HELLO_INTERVAL_MILLIS = 1_000;
+	private static final long LOCK_PROPOSAL_RETRY_MILLIS = 2_000;
 	private static final Base64.Encoder ENCODER = Base64.getUrlEncoder().withoutPadding();
 
 	private final Gson gson;
 	private final RemoteSettingsStore settingsStore;
 	private final EffectiveSettingsService effectiveSettings;
+	private final SettingsLockService settingsLockService;
 	private final RemoteTransportFactory transportFactory;
+	private final SettingsLockListener settingsLockListener = this::handleLocalSettingsLockChanged;
 	private final SecureRandom random = new SecureRandom();
 	private final ScheduledExecutorService scheduler;
 	private final CopyOnWriteArrayList<RemoteSessionListener> listeners =
@@ -49,6 +52,12 @@ public final class RemoteSessionManager implements AutoCloseable
 	private volatile long nextSettingsVersion;
 	private volatile long lastReceivedSettingsVersion;
 	private volatile long lastAcknowledgedVersion;
+	private volatile RemoteLockSnapshot lockSnapshot = RemoteLockSnapshot.inactive();
+	private volatile SettingsLockProposal controllerLockProposal;
+	private volatile SettingsLockProposal participantLockProposal;
+	private volatile String participantArmedLockId;
+	private volatile String participantDeclinedLockId;
+	private volatile long lastLockProposalNanos;
 	private ScheduledFuture<?> pendingSettingsSync;
 	private volatile boolean closed;
 
@@ -56,12 +65,14 @@ public final class RemoteSessionManager implements AutoCloseable
 		OkHttpClient httpClient,
 		Gson gson,
 		RemoteSettingsStore settingsStore,
-		EffectiveSettingsService effectiveSettings)
+		EffectiveSettingsService effectiveSettings,
+		SettingsLockService settingsLockService)
 	{
 		this(
 			gson,
 			settingsStore,
 			effectiveSettings,
+			settingsLockService,
 			listener -> new RemoteRelayClient(
 				Objects.requireNonNull(httpClient, "httpClient"),
 				listener
@@ -73,12 +84,15 @@ public final class RemoteSessionManager implements AutoCloseable
 		Gson gson,
 		RemoteSettingsStore settingsStore,
 		EffectiveSettingsService effectiveSettings,
+		SettingsLockService settingsLockService,
 		RemoteTransportFactory transportFactory)
 	{
 		this.gson = Objects.requireNonNull(gson, "gson");
 		this.settingsStore = Objects.requireNonNull(settingsStore, "settingsStore");
 		this.effectiveSettings = Objects.requireNonNull(effectiveSettings, "effectiveSettings");
+		this.settingsLockService = Objects.requireNonNull(settingsLockService, "settingsLockService");
 		this.transportFactory = Objects.requireNonNull(transportFactory, "transportFactory");
+		this.settingsLockService.addListener(settingsLockListener);
 		this.scheduler = Executors.newSingleThreadScheduledExecutor(task ->
 		{
 			Thread thread = new Thread(task, "hapticscape-remote");
@@ -104,11 +118,23 @@ public final class RemoteSessionManager implements AutoCloseable
 		return snapshot;
 	}
 
+	public RemoteLockSnapshot getLockSnapshot()
+	{
+		return lockSnapshot;
+	}
+
+	/** Returns the controller's current participant draft, if one has loaded. */
+	public RemoteSettingsSnapshot getControllerSettingsSnapshot()
+	{
+		return controllerSettings;
+	}
+
 	public void addListener(RemoteSessionListener listener)
 	{
 		RemoteSessionListener required = Objects.requireNonNull(listener, "listener");
 		listeners.add(required);
 		required.onRemoteSessionChanged(snapshot);
+		required.onRemoteLockChanged(lockSnapshot);
 	}
 
 	public void removeListener(RemoteSessionListener listener)
@@ -146,6 +172,93 @@ public final class RemoteSessionManager implements AutoCloseable
 			&& snapshot.getState() != RemoteSessionState.LOCAL;
 	}
 
+	public char[] generateSettingsLockKey()
+	{
+		return settingsLockService.generateUnlockKey();
+	}
+
+	public synchronized void proposeSettingsLock(char[] password)
+	{
+		if (role != RemoteRole.CONTROLLER
+			|| (snapshot.getState() != RemoteSessionState.ACTIVE
+				&& snapshot.getState() != RemoteSessionState.PEER_EMERGENCY_PAUSED))
+		{
+			throw new IllegalStateException("A participant must be connected first");
+		}
+		if (lockSnapshot.getState() == RemoteLockState.AWAITING_APPROVAL
+			|| lockSnapshot.getState() == RemoteLockState.ARMED)
+		{
+			throw new IllegalStateException(
+				"Cancel the current post-session lock before creating another"
+			);
+		}
+		controllerLockProposal = settingsLockService.createProposal(password);
+		lastLockProposalNanos = 0;
+		publishLock(
+			RemoteLockState.AWAITING_APPROVAL,
+			"Waiting for participant approval"
+		);
+		sendControllerLockProposal();
+	}
+
+	public synchronized void cancelSettingsLock()
+	{
+		if (role != RemoteRole.CONTROLLER || controllerLockProposal == null)
+		{
+			return;
+		}
+		if (lockSnapshot.getState() == RemoteLockState.DECLINED)
+		{
+			controllerLockProposal = null;
+			publishLock(RemoteLockState.INACTIVE, "No post-session lock requested");
+			return;
+		}
+		send(
+			RemoteMessageType.LOCK_CANCEL_REQUEST,
+			0,
+			controllerLockProposal.getProposalId()
+		);
+	}
+
+	public synchronized void acceptPendingSettingsLock()
+	{
+		if (role != RemoteRole.PARTICIPANT || participantLockProposal == null)
+		{
+			return;
+		}
+		SettingsLockProposal proposal = participantLockProposal;
+		try
+		{
+			participantArmedLockId = proposal.getProposalId();
+			settingsLockService.arm(proposal);
+			participantLockProposal = null;
+			participantDeclinedLockId = null;
+			publishLock(RemoteLockState.ARMED, "Post-session settings lock armed");
+			send(RemoteMessageType.LOCK_ACCEPTED, 0, participantArmedLockId);
+		}
+		catch (RuntimeException e)
+		{
+			participantArmedLockId = null;
+			participantLockProposal = null;
+			participantDeclinedLockId = proposal.getProposalId();
+			publishLock(RemoteLockState.DECLINED, "Settings lock could not be saved");
+			send(RemoteMessageType.LOCK_DECLINED, 0, participantDeclinedLockId);
+			LOG.log(Level.WARNING, "Unable to arm participant settings lock", e);
+		}
+	}
+
+	public synchronized void declinePendingSettingsLock()
+	{
+		if (role != RemoteRole.PARTICIPANT || participantLockProposal == null)
+		{
+			return;
+		}
+		participantDeclinedLockId = participantLockProposal.getProposalId();
+		participantLockProposal = null;
+		publishLock(RemoteLockState.DECLINED, "Post-session lock declined");
+		send(RemoteMessageType.LOCK_DECLINED, 0, participantDeclinedLockId);
+	}
+
 	public synchronized RemoteInvitation startController(String relayUrl)
 	{
 		requireOpen();
@@ -167,6 +280,12 @@ public final class RemoteSessionManager implements AutoCloseable
 	public synchronized void joinParticipant(String encodedInvitation)
 	{
 		requireOpen();
+		if (settingsLockService.isLocked())
+		{
+			throw new IllegalStateException(
+				"Unlock local feedback settings before joining another Remote Control session"
+			);
+		}
 		endSessionInternal(false, "Joining a new remote session");
 		beginSession(RemoteRole.PARTICIPANT, RemoteInvitation.parse(encodedInvitation));
 	}
@@ -224,6 +343,7 @@ public final class RemoteSessionManager implements AutoCloseable
 		endSessionInternal(false, "Remote service closed");
 		scheduler.shutdownNow();
 		listeners.clear();
+		settingsLockService.removeListener(settingsLockListener);
 	}
 
 	private void beginSession(RemoteRole nextRole, RemoteInvitation nextInvitation)
@@ -237,6 +357,12 @@ public final class RemoteSessionManager implements AutoCloseable
 		nextSettingsVersion = 0;
 		lastReceivedSettingsVersion = 0;
 		lastAcknowledgedVersion = 0;
+		controllerLockProposal = null;
+		participantLockProposal = null;
+		participantArmedLockId = null;
+		participantDeclinedLockId = null;
+		lastLockProposalNanos = 0;
+		lockSnapshot = RemoteLockSnapshot.inactive();
 		if (nextRole == RemoteRole.PARTICIPANT)
 		{
 			effectiveSettings.clearRemote();
@@ -274,6 +400,15 @@ public final class RemoteSessionManager implements AutoCloseable
 		{
 			lastHelloNanos = now;
 			send(RemoteMessageType.HELLO, 0, role.name());
+		}
+		if (role == RemoteRole.CONTROLLER
+			&& controllerLockProposal != null
+			&& lockSnapshot.getState() == RemoteLockState.AWAITING_APPROVAL
+			&& now - lastLockProposalNanos >= TimeUnit.MILLISECONDS.toNanos(
+				LOCK_PROPOSAL_RETRY_MILLIS
+			))
+		{
+			sendControllerLockProposal();
 		}
 	}
 
@@ -395,6 +530,21 @@ public final class RemoteSessionManager implements AutoCloseable
 					handleSettingsAcknowledgement(message);
 				}
 				break;
+			case LOCK_PROPOSAL:
+				handleLockProposal(message);
+				break;
+			case LOCK_ACCEPTED:
+				handleLockAccepted(message);
+				break;
+			case LOCK_DECLINED:
+				handleLockDeclined(message);
+				break;
+			case LOCK_CANCEL_REQUEST:
+				handleLockCancelRequest(message);
+				break;
+			case LOCK_CANCELLED:
+				handleLockCancelled(message);
+				break;
 			case EMERGENCY_PAUSED:
 				if (role == RemoteRole.CONTROLLER)
 				{
@@ -501,6 +651,132 @@ public final class RemoteSessionManager implements AutoCloseable
 			LOG.log(Level.WARNING, "Rejected invalid participant settings seed", e);
 			publish(RemoteSessionState.DISCONNECTED, "Participant settings could not be loaded");
 		}
+	}
+
+	private void handleLockProposal(RemoteProtocolMessage message)
+	{
+		if (role != RemoteRole.PARTICIPANT)
+		{
+			return;
+		}
+		try
+		{
+			SettingsLockProposal proposal = gson.fromJson(
+				message.getPayload(),
+				SettingsLockProposal.class
+			);
+			if (proposal == null)
+			{
+				return;
+			}
+			proposal.validate();
+			String proposalId = proposal.getProposalId();
+			if (proposalId.equals(participantArmedLockId))
+			{
+				send(RemoteMessageType.LOCK_ACCEPTED, 0, proposalId);
+				return;
+			}
+			if (proposalId.equals(participantDeclinedLockId))
+			{
+				send(RemoteMessageType.LOCK_DECLINED, 0, proposalId);
+				return;
+			}
+			if (participantLockProposal != null
+				&& proposalId.equals(participantLockProposal.getProposalId()))
+			{
+				return;
+			}
+			if (settingsLockService.isLocked())
+			{
+				participantDeclinedLockId = proposalId;
+				publishLock(RemoteLockState.DECLINED, "Settings are already locked");
+				send(RemoteMessageType.LOCK_DECLINED, 0, proposalId);
+				return;
+			}
+			participantLockProposal = proposal;
+			publishLock(
+				RemoteLockState.APPROVAL_REQUIRED,
+				"Controller requests a post-session settings lock"
+			);
+			for (RemoteSessionListener listener : listeners)
+			{
+				listener.onRemoteLockProposal(proposal);
+			}
+		}
+		catch (RuntimeException e)
+		{
+			LOG.log(Level.WARNING, "Rejected invalid settings-lock proposal", e);
+		}
+	}
+
+	private void handleLockAccepted(RemoteProtocolMessage message)
+	{
+		if (role == RemoteRole.CONTROLLER
+			&& matchesControllerLockProposal(message.getPayload()))
+		{
+			publishLock(RemoteLockState.ARMED, "Participant accepted; settings lock armed");
+		}
+	}
+
+	private void handleLockDeclined(RemoteProtocolMessage message)
+	{
+		if (role == RemoteRole.CONTROLLER
+			&& matchesControllerLockProposal(message.getPayload()))
+		{
+			publishLock(RemoteLockState.DECLINED, "Participant declined the settings lock");
+		}
+	}
+
+	private void handleLockCancelRequest(RemoteProtocolMessage message)
+	{
+		if (role != RemoteRole.PARTICIPANT)
+		{
+			return;
+		}
+		String proposalId = message.getPayload();
+		boolean pendingMatch = participantLockProposal != null
+			&& participantLockProposal.getProposalId().equals(proposalId);
+		boolean armedMatch = proposalId != null && proposalId.equals(participantArmedLockId);
+		if (!pendingMatch && !armedMatch)
+		{
+			return;
+		}
+		participantLockProposal = null;
+		participantDeclinedLockId = null;
+		if (armedMatch)
+		{
+			participantArmedLockId = null;
+			settingsLockService.clearAllLocks();
+		}
+		publishLock(RemoteLockState.INACTIVE, "Post-session settings lock cancelled");
+		send(RemoteMessageType.LOCK_CANCELLED, 0, proposalId);
+	}
+
+	private void handleLockCancelled(RemoteProtocolMessage message)
+	{
+		if (role == RemoteRole.CONTROLLER
+			&& matchesControllerLockProposal(message.getPayload()))
+		{
+			controllerLockProposal = null;
+			publishLock(RemoteLockState.INACTIVE, "Post-session settings lock cancelled");
+		}
+	}
+
+	private boolean matchesControllerLockProposal(String proposalId)
+	{
+		return controllerLockProposal != null
+			&& controllerLockProposal.getProposalId().equals(proposalId);
+	}
+
+	private void sendControllerLockProposal()
+	{
+		SettingsLockProposal proposal = controllerLockProposal;
+		if (proposal == null)
+		{
+			return;
+		}
+		lastLockProposalNanos = System.nanoTime();
+		send(RemoteMessageType.LOCK_PROPOSAL, 0, gson.toJson(proposal));
 	}
 
 	private void handleSettingsAcknowledgement(RemoteProtocolMessage message)
@@ -677,6 +953,28 @@ public final class RemoteSessionManager implements AutoCloseable
 		}
 	}
 
+	private void publishLock(RemoteLockState state, String message)
+	{
+		RemoteLockSnapshot next = new RemoteLockSnapshot(state, message);
+		lockSnapshot = next;
+		for (RemoteSessionListener listener : listeners)
+		{
+			listener.onRemoteLockChanged(next);
+		}
+	}
+
+	private synchronized void handleLocalSettingsLockChanged(boolean locked)
+	{
+		if (locked || role != RemoteRole.PARTICIPANT || participantArmedLockId == null)
+		{
+			return;
+		}
+		String clearedId = participantArmedLockId;
+		participantArmedLockId = null;
+		publishLock(RemoteLockState.INACTIVE, "Settings lock cleared locally");
+		send(RemoteMessageType.LOCK_CANCELLED, 0, clearedId);
+	}
+
 	private synchronized void endSessionInternal(boolean notifyPeer, String message)
 	{
 		if (pendingSettingsSync != null)
@@ -707,6 +1005,12 @@ public final class RemoteSessionManager implements AutoCloseable
 		nextSettingsVersion = 0;
 		lastReceivedSettingsVersion = 0;
 		lastAcknowledgedVersion = 0;
+		controllerLockProposal = null;
+		participantLockProposal = null;
+		participantArmedLockId = null;
+		participantDeclinedLockId = null;
+		lastLockProposalNanos = 0;
+		lockSnapshot = RemoteLockSnapshot.inactive();
 		snapshot = new RemoteSessionSnapshot(
 			RemoteRole.NONE,
 			RemoteSessionState.LOCAL,
@@ -717,6 +1021,7 @@ public final class RemoteSessionManager implements AutoCloseable
 		{
 			listener.onRemoteSessionChanged(snapshot);
 			listener.onRemoteSettingsChanged(effectiveSettings.current());
+			listener.onRemoteLockChanged(lockSnapshot);
 		}
 	}
 

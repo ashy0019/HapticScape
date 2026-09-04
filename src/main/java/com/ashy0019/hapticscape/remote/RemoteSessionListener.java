@@ -7,4 +7,12 @@ public interface RemoteSessionListener
 	default void onRemoteSettingsChanged(RemoteSettingsSnapshot settings)
 	{
 	}
+
+	default void onRemoteLockChanged(RemoteLockSnapshot lock)
+	{
+	}
+
+	default void onRemoteLockProposal(SettingsLockProposal proposal)
+	{
+	}
 }

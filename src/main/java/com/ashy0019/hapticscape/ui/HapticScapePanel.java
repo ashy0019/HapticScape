@@ -27,6 +27,8 @@ import com.ashy0019.hapticscape.remote.RemoteSessionManager;
 import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteSettingsSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteSessionState;
+import com.ashy0019.hapticscape.remote.SettingsLockListener;
+import com.ashy0019.hapticscape.remote.SettingsLockService;
 import com.ashy0019.hapticscape.rogue.ui.RogueLauncherPanel;
 import com.ashy0019.hapticscape.rogue.ui.RoguePanel;
 import com.ashy0019.hapticscape.update.UpdateCheckService;
@@ -35,6 +37,7 @@ import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.KeyEventDispatcher;
 import java.awt.KeyboardFocusManager;
@@ -43,6 +46,7 @@ import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import javax.swing.BorderFactory;
@@ -55,6 +59,7 @@ import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPasswordField;
 import javax.swing.JScrollPane;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
@@ -68,7 +73,8 @@ import net.runelite.api.Skill;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.ui.PluginPanel;
 
-public final class HapticScapePanel extends PluginPanel implements RemoteSessionListener
+public final class HapticScapePanel extends PluginPanel
+	implements RemoteSessionListener, SettingsLockListener
 {
 	private static final int DEVELOPER_UNLOCK_CLICKS = 9;
 	private static final long DEVELOPER_UNLOCK_WINDOW_NANOS = TimeUnit.SECONDS.toNanos(4);
@@ -78,6 +84,12 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 	private static final String ROGUE_CARD = "rogue";
 	private static final String LOCAL_FEEDBACK_CARD = "localFeedback";
 	private static final String REMOTE_FEEDBACK_CARD = "remoteFeedback";
+	private static final int MINE_WORKSPACE_INDEX = 0;
+	private static final int SUBJECT_WORKSPACE_INDEX = 1;
+	private static final String SETTINGS_LOCKED_MESSAGE =
+		"<html><b>Settings locked</b><br>Forge + Music<br>stay editable</html>";
+	private static final String POST_SESSION_LOCK_MESSAGE =
+		"<html><b>Post-session lock</b><br>armed after session</html>";
 
 	private final HapticScapeConfig config;
 	private final ConfigManager configManager;
@@ -90,6 +102,7 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 	private final JPanel contentHost = new JPanel(contentLayout);
 	private final CardLayout feedbackLayout = new CardLayout();
 	private final JPanel feedbackHost = new JPanel(feedbackLayout);
+	private final JTabbedPane controllerWorkspaceTabs = new JTabbedPane(JTabbedPane.TOP);
 	private final JLabel statusLabel = new JLabel("Disconnected", SwingConstants.CENTER);
 	private final DefaultListModel<DeviceInfo> deviceModel = new DefaultListModel<>();
 	private final JButton connectButton = new JButton("Connect");
@@ -98,9 +111,13 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 	private final JButton testLevelUpButton = new JButton("Test level-up");
 	private final JButton previewLevel99Button = new JButton("Test 99");
 	private final JButton resetRogueDiscoveryButton = new JButton("Reset Rogue");
+	private final JButton clearSettingsLockButton = new JButton("Clear settings lock");
 	private final JButton stopButton = new JButton("Stop now");
 	private final JButton updatesButton = new JButton("Updates");
 	private final JButton remoteButton = new JButton("Remote");
+	private final JPanel settingsLockBanner = new JPanel(new BorderLayout(6, 0));
+	private final JLabel settingsLockLabel = new JLabel(SETTINGS_LOCKED_MESSAGE);
+	private final JButton unlockSettingsButton = new JButton("Unlock");
 	private final JPanel remoteBanner = new JPanel(new BorderLayout(6, 0));
 	private final JLabel remoteBannerLabel = new JLabel();
 	private final JButton remoteEmergencyButton = new JButton("Emergency Off");
@@ -117,7 +134,7 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 	private final JComboBox<HapticPatternSelection> levelUpPatternComboBox;
 	private final JComboBox<HapticPatternSelection> milestonePatternComboBox;
 	private final JPanel level99Row = new JPanel(new BorderLayout(8, 0));
-	private final JPanel developerControlsRow = new JPanel(new GridLayout(1, 2, 6, 0));
+	private final JPanel developerControlsRow = new JPanel(new GridLayout(0, 1, 0, 4));
 	private final JPanel settingsPanel;
 	private final SkillsPanel skillsPanel;
 	private final ProfilesPanel profilesPanel;
@@ -127,6 +144,7 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 	private final ClickerPanel clickerPanel;
 	private final UpdatesPanel updatesPanel;
 	private final RemoteSessionManager remoteSessionManager;
+	private final SettingsLockService settingsLockService;
 	private final RemoteControlPanel remoteControlPanel;
 	private final RoguePanel roguePanel;
 	private final RogueLauncherPanel rogueLauncher;
@@ -152,6 +170,9 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 	private boolean remoteReadOnly;
 	private boolean displayingRemoteSettings;
 	private boolean updatingDisplayedSettings;
+	private boolean subjectWorkspaceSelected = true;
+	private boolean controllerSubjectAvailable;
+	private boolean updatingControllerWorkspaceTabs;
 
 	public HapticScapePanel(
 		HapticScapeConfig config,
@@ -171,6 +192,7 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 		UpdatePreferencesStore updatePreferencesStore,
 		UpdateCheckService updateCheckService,
 		RemoteSessionManager remoteSessionManager,
+		SettingsLockService settingsLockService,
 		Consumer<RogueFeedbackEvent> rogueFeedbackAction,
 		Runnable rogueUnlockSoundAction,
 		Runnable stopAction)
@@ -179,6 +201,7 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 		this.config = config;
 		this.configManager = configManager;
 		this.remoteSessionManager = remoteSessionManager;
+		this.settingsLockService = settingsLockService;
 		this.rogueFeedbackAction = rogueFeedbackAction;
 		this.rogueUnlockSoundAction = rogueUnlockSoundAction;
 		setLayout(new BorderLayout(0, 6));
@@ -266,6 +289,10 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 		resetRogueDiscoveryButton.setToolTipText(
 			"Forget Rogue discovery and the unlock sting so the Konami code can be tested again"
 		);
+		clearSettingsLockButton.setMargin(new java.awt.Insets(2, 6, 2, 6));
+		clearSettingsLockButton.setToolTipText(
+			"Emergency recovery: remove the persistent feedback-settings lock"
+		);
 		developerControlsRow.setVisible(false);
 
 		configureGlobalListeners();
@@ -302,7 +329,7 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 			this::writeFeedbackSetting,
 			settings ->
 			{
-				if (!remoteSessionManager.isControllerSession())
+				if (!isSubjectWorkspaceActive())
 				{
 					musicSettingsAction.accept(settings);
 				}
@@ -313,7 +340,7 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 			this::writeFeedbackSetting,
 			settings ->
 			{
-				if (!remoteSessionManager.isControllerSession())
+				if (!isSubjectWorkspaceActive())
 				{
 					clickerSettingsAction.accept(settings);
 				}
@@ -340,6 +367,15 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 		topPanel.setLayout(new BoxLayout(topPanel, BoxLayout.Y_AXIS));
 		PanelUi.addVerticalComponent(topPanel, statusLabel);
 
+		settingsLockBanner.setBorder(BorderFactory.createTitledBorder("Settings access"));
+		settingsLockBanner.add(settingsLockLabel, BorderLayout.CENTER);
+		JPanel unlockButtonHost = new JPanel(new GridBagLayout());
+		unlockButtonHost.setOpaque(false);
+		unlockButtonHost.add(unlockSettingsButton);
+		settingsLockBanner.add(unlockButtonHost, BorderLayout.EAST);
+		settingsLockBanner.setVisible(false);
+		PanelUi.addVerticalComponent(topPanel, settingsLockBanner);
+
 		remoteBanner.setBorder(BorderFactory.createTitledBorder("Remote Control"));
 		remoteBanner.add(remoteBannerLabel, BorderLayout.CENTER);
 		JPanel remoteBannerButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 3, 0));
@@ -349,6 +385,28 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 		remoteBanner.add(remoteBannerButtons, BorderLayout.SOUTH);
 		remoteBanner.setVisible(false);
 		PanelUi.addVerticalComponent(topPanel, remoteBanner);
+
+		controllerWorkspaceTabs.putClientProperty(
+			"FlatLaf.style",
+			"tabHeight: 26; tabAreaAlignment: center"
+		);
+		controllerWorkspaceTabs.addTab("Mine", new JPanel());
+		controllerWorkspaceTabs.addTab("Subject", new JPanel());
+		controllerWorkspaceTabs.setSelectedIndex(SUBJECT_WORKSPACE_INDEX);
+		controllerWorkspaceTabs.setPreferredSize(new Dimension(0, 31));
+		controllerWorkspaceTabs.setMinimumSize(new Dimension(0, 31));
+		controllerWorkspaceTabs.setMaximumSize(new Dimension(Integer.MAX_VALUE, 31));
+		controllerWorkspaceTabs.setVisible(false);
+		controllerWorkspaceTabs.addChangeListener(event ->
+		{
+			if (!updatingControllerWorkspaceTabs)
+			{
+				selectControllerWorkspace(
+					controllerWorkspaceTabs.getSelectedIndex() == SUBJECT_WORKSPACE_INDEX
+				);
+			}
+		});
+		PanelUi.addVerticalComponent(topPanel, controllerWorkspaceTabs);
 
 		JPanel localFeedback = new JPanel();
 		localFeedback.setLayout(new BoxLayout(localFeedback, BoxLayout.Y_AXIS));
@@ -383,6 +441,8 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 		testLevelUpButton.addActionListener(event -> testLevelUpAction.run());
 		previewLevel99Button.addActionListener(event -> previewLevel99Action.run());
 		resetRogueDiscoveryButton.addActionListener(event -> resetRogueDiscovery());
+		clearSettingsLockButton.addActionListener(event -> clearSettingsLockFromDeveloperMode());
+		unlockSettingsButton.addActionListener(event -> unlockSettings());
 		stopButton.addActionListener(event ->
 		{
 			if (remoteSessionManager.getSnapshot().isParticipantControlled())
@@ -437,6 +497,7 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 		}
 
 		remoteSessionManager.addListener(this);
+		settingsLockService.addListener(this);
 		applyRemoteSessionState(remoteSessionManager.getSnapshot());
 		applyState(ConnectionSnapshot.disconnected());
 		rogueKeyDispatcher = this::handleRogueKeyEvent;
@@ -735,12 +796,18 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 
 	private void writeFeedbackSetting(String key, Object value)
 	{
-		if (remoteSessionManager.updateControllerSetting(key, value))
+		RemoteSessionSnapshot current = remoteSessionManager.getSnapshot();
+		if (isSubjectWorkspaceActive(current))
+		{
+			remoteSessionManager.updateControllerSetting(key, value);
+			return;
+		}
+		if (current.getRole() == RemoteRole.PARTICIPANT
+			&& current.getState() != RemoteSessionState.LOCAL)
 		{
 			return;
 		}
-		RemoteSessionSnapshot current = remoteSessionManager.getSnapshot();
-		if (current.getState() != RemoteSessionState.LOCAL)
+		if (!settingsLockService.canEditLocally(key))
 		{
 			return;
 		}
@@ -793,6 +860,7 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 
 		developerControlsRow.add(previewLevel99Button);
 		developerControlsRow.add(resetRogueDiscoveryButton);
+		developerControlsRow.add(clearSettingsLockButton);
 		PanelUi.addVerticalComponent(settings, developerControlsRow);
 		return settings;
 	}
@@ -862,6 +930,7 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 	public void close()
 	{
 		remoteSessionManager.removeListener(this);
+		settingsLockService.removeListener(this);
 		remoteControlPanel.close();
 		developerStatusTimer.stop();
 		KeyboardFocusManager.getCurrentKeyboardFocusManager()
@@ -994,6 +1063,71 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 		developerStatusTimer.restart();
 	}
 
+	private void unlockSettings()
+	{
+		JPasswordField passwordField = new JPasswordField(18);
+		int choice = JOptionPane.showConfirmDialog(
+			this,
+			passwordField,
+			"Enter settings unlock key",
+			JOptionPane.OK_CANCEL_OPTION,
+			JOptionPane.PLAIN_MESSAGE
+		);
+		if (choice != JOptionPane.OK_OPTION)
+		{
+			return;
+		}
+		char[] password = passwordField.getPassword();
+		try
+		{
+			if (!settingsLockService.unlock(password))
+			{
+				JOptionPane.showMessageDialog(
+					this,
+					"That key did not unlock these settings.",
+					"Settings remain locked",
+					JOptionPane.ERROR_MESSAGE
+				);
+			}
+		}
+		catch (RuntimeException e)
+		{
+			JOptionPane.showMessageDialog(
+				this,
+				e.getMessage(),
+				"Unable to unlock settings",
+				JOptionPane.ERROR_MESSAGE
+			);
+		}
+		finally
+		{
+			Arrays.fill(password, '\0');
+			passwordField.setText("");
+		}
+	}
+
+	private void clearSettingsLockFromDeveloperMode()
+	{
+		if (!settingsLockService.isLocked())
+		{
+			return;
+		}
+		int choice = JOptionPane.showConfirmDialog(
+			this,
+			"Clear the persistent settings lock? The current feedback settings "
+				+ "will not be changed.",
+			"Emergency settings-lock recovery",
+			JOptionPane.YES_NO_OPTION,
+			JOptionPane.WARNING_MESSAGE
+		);
+		if (choice == JOptionPane.YES_OPTION)
+		{
+			settingsLockService.clearAllLocks();
+			statusLabel.setText("Settings lock cleared through developer recovery");
+			developerStatusTimer.restart();
+		}
+	}
+
 	private void refreshDeveloperControlsLayout()
 	{
 		developerControlsRow.revalidate();
@@ -1055,6 +1189,17 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 	}
 
 	@Override
+	public void onSettingsLockChanged(boolean locked)
+	{
+		if (!SwingUtilities.isEventDispatchThread())
+		{
+			SwingUtilities.invokeLater(() -> applySettingsLockState(locked));
+			return;
+		}
+		applySettingsLockState(locked);
+	}
+
+	@Override
 	public void onRemoteSettingsChanged(RemoteSettingsSnapshot settings)
 	{
 		if (!SwingUtilities.isEventDispatchThread())
@@ -1070,9 +1215,7 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 		// Re-check on the EDT so a queued remote update cannot repaint stale remote
 		// values after the participant has already ended the session.
 		RemoteSessionSnapshot current = remoteSessionManager.getSnapshot();
-		if (current.isParticipantControlled()
-			|| current.getRole() == RemoteRole.CONTROLLER
-				&& current.getState() != RemoteSessionState.LOCAL)
+		if (current.isParticipantControlled() || isSubjectWorkspaceActive(current))
 		{
 			displayingRemoteSettings = true;
 			applyDisplayedSettings(settings);
@@ -1180,6 +1323,86 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 		// Remote Control controls, and Emergency Off intentionally remain usable.
 	}
 
+	private void setLocalSettingsLocked(boolean locked)
+	{
+		setRemoteReadOnly(locked);
+		if (locked)
+		{
+			// These remain participant-owned after a session. In particular, music
+			// sync can always be disabled or retuned locally.
+			customPatternsPanel.setRemoteReadOnly(false);
+			musicPanel.setRemoteReadOnly(false);
+		}
+	}
+
+	private boolean isSubjectWorkspaceActive()
+	{
+		return isSubjectWorkspaceActive(remoteSessionManager.getSnapshot());
+	}
+
+	private boolean isSubjectWorkspaceActive(RemoteSessionSnapshot snapshot)
+	{
+		return subjectWorkspaceSelected
+			&& isControllerSubjectAvailable(snapshot);
+	}
+
+	private boolean isControllerSubjectAvailable(RemoteSessionSnapshot snapshot)
+	{
+		return snapshot.getRole() == RemoteRole.CONTROLLER
+			&& (snapshot.getState() == RemoteSessionState.ACTIVE
+				|| snapshot.getState() == RemoteSessionState.PEER_EMERGENCY_PAUSED)
+			&& remoteSessionManager.getControllerSettingsSnapshot() != null;
+	}
+
+	private void selectControllerWorkspace(boolean subject)
+	{
+		RemoteSessionSnapshot snapshot = remoteSessionManager.getSnapshot();
+		if (snapshot.getRole() != RemoteRole.CONTROLLER
+			|| snapshot.getState() == RemoteSessionState.LOCAL
+			|| snapshot.getState() == RemoteSessionState.DISCONNECTED)
+		{
+			return;
+		}
+		if (subject && !isControllerSubjectAvailable(snapshot))
+		{
+			setControllerWorkspaceTab(false);
+			return;
+		}
+
+		subjectWorkspaceSelected = subject;
+		if (subject)
+		{
+			RemoteSettingsSnapshot subjectSettings =
+				remoteSessionManager.getControllerSettingsSnapshot();
+			if (subjectSettings != null)
+			{
+				displayingRemoteSettings = true;
+				applyDisplayedSettings(subjectSettings);
+			}
+		}
+		else
+		{
+			applyDisplayedSettings(RemoteSettingsSnapshot.capture(config));
+			displayingRemoteSettings = false;
+		}
+		applyRemoteSessionState(snapshot);
+	}
+
+	private void setControllerWorkspaceTab(boolean subject)
+	{
+		updatingControllerWorkspaceTabs = true;
+		try
+		{
+			controllerWorkspaceTabs.setSelectedIndex(
+				subject ? SUBJECT_WORKSPACE_INDEX : MINE_WORKSPACE_INDEX
+			);
+		}
+		finally
+		{
+			updatingControllerWorkspaceTabs = false;
+		}
+	}
+
 	private void applyRemoteSessionState(RemoteSessionSnapshot snapshot)
 	{
 		boolean participantControlled = snapshot.isParticipantControlled();
@@ -1188,19 +1411,63 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 		boolean controllerEditable = controllerSession
 			&& (snapshot.getState() == RemoteSessionState.ACTIVE
 				|| snapshot.getState() == RemoteSessionState.PEER_EMERGENCY_PAUSED);
+		boolean workspaceVisible = controllerSession
+			&& snapshot.getState() != RemoteSessionState.DISCONNECTED;
+		boolean subjectAvailable = isControllerSubjectAvailable(snapshot);
 		stopButton.setText(participantControlled ? "Emergency Off" : "Stop now");
+		boolean workspaceWasVisible = controllerWorkspaceTabs.isVisible();
+		boolean subjectBecameAvailable = subjectAvailable && !controllerSubjectAvailable;
+		controllerSubjectAvailable = subjectAvailable;
+		controllerWorkspaceTabs.setVisible(workspaceVisible);
+		controllerWorkspaceTabs.setEnabledAt(MINE_WORKSPACE_INDEX, true);
+		controllerWorkspaceTabs.setEnabledAt(SUBJECT_WORKSPACE_INDEX, subjectAvailable);
+		if (workspaceVisible && subjectAvailable
+			&& (!workspaceWasVisible || subjectBecameAvailable))
+		{
+			subjectWorkspaceSelected = true;
+			setControllerWorkspaceTab(true);
+			RemoteSettingsSnapshot subjectSettings =
+				remoteSessionManager.getControllerSettingsSnapshot();
+			if (subjectSettings != null)
+			{
+				displayingRemoteSettings = true;
+				applyDisplayedSettings(subjectSettings);
+			}
+		}
+		else if (workspaceVisible && !subjectAvailable
+			&& (!workspaceWasVisible || subjectWorkspaceSelected))
+		{
+			subjectWorkspaceSelected = false;
+			setControllerWorkspaceTab(false);
+			if (displayingRemoteSettings)
+			{
+				applyDisplayedSettings(RemoteSettingsSnapshot.capture(config));
+			}
+			displayingRemoteSettings = false;
+		}
+		else if (!workspaceVisible)
+		{
+			controllerSubjectAvailable = false;
+		}
 
 		// Keep the normal HapticScape UI visible during Remote Control. The
 		// participant can navigate it and watch remote values change, but cannot
 		// mutate remotely authoritative feedback settings.
 		feedbackLayout.show(feedbackHost, LOCAL_FEEDBACK_CARD);
-		if (participantControlled || controllerSession && !controllerEditable)
+		if (participantControlled)
 		{
 			setRemoteReadOnly(true);
 		}
 		else if (controllerEditable)
 		{
-			setRemoteReadOnly(false);
+			if (subjectWorkspaceSelected)
+			{
+				setRemoteReadOnly(false);
+			}
+			else
+			{
+				setLocalSettingsLocked(settingsLockService.isLocked());
+			}
 		}
 		else
 		{
@@ -1209,22 +1476,29 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 				applyDisplayedSettings(RemoteSettingsSnapshot.capture(config));
 			}
 			displayingRemoteSettings = false;
-			setRemoteReadOnly(false);
+			setLocalSettingsLocked(settingsLockService.isLocked());
+			if (!controllerSession)
+			{
+				subjectWorkspaceSelected = true;
+				setControllerWorkspaceTab(true);
+			}
 		}
 
 		// Connection management stays local even during Remote Control. Manual
 		// preview buttons are disabled so they cannot bypass the remote policy.
 		boolean connected = latestConnectionSnapshot.getState() == ConnectionState.CONNECTED;
-		boolean remoteSession = snapshot.getState() != RemoteSessionState.LOCAL;
-		profilesPanel.setPreviewAllowed(!remoteSession);
-		alertsPanel.setPreviewAllowed(!remoteSession);
-		customPatternsPanel.setPreviewAllowed(!remoteSession);
-		clickerPanel.setPreviewAllowed(!remoteSession);
+		boolean previewBlocked = participantControlled || isSubjectWorkspaceActive(snapshot);
+		profilesPanel.setPreviewAllowed(!previewBlocked);
+		alertsPanel.setPreviewAllowed(!previewBlocked);
+		customPatternsPanel.setPreviewAllowed(!previewBlocked);
+		clickerPanel.setPreviewAllowed(!previewBlocked);
 		boolean emergencyPaused = snapshot.getState() == RemoteSessionState.EMERGENCY_PAUSED;
 		stopButton.setEnabled(participantControlled ? !emergencyPaused : connected);
-		testButton.setEnabled(!remoteSession && connected);
-		testLevelUpButton.setEnabled(!remoteSession && connected);
-		previewLevel99Button.setEnabled(!remoteSession && developerControlsUnlocked && connected);
+		testButton.setEnabled(!previewBlocked && connected);
+		testLevelUpButton.setEnabled(!previewBlocked && connected);
+		previewLevel99Button.setEnabled(
+			!previewBlocked && developerControlsUnlocked && connected
+		);
 
 		boolean showBanner = snapshot.getState() != RemoteSessionState.LOCAL;
 		remoteBanner.setVisible(showBanner);
@@ -1239,6 +1513,32 @@ public final class HapticScapePanel extends PluginPanel implements RemoteSession
 		remoteEmergencyButton.setVisible(participant && !emergencyPaused);
 		remoteResumeButton.setVisible(participant && emergencyPaused);
 		remoteEndButton.setEnabled(showBanner);
+		applySettingsLockState(settingsLockService.isLocked());
+		revalidate();
+		repaint();
+	}
+
+	private void applySettingsLockState(boolean locked)
+	{
+		RemoteSessionSnapshot remote = remoteSessionManager.getSnapshot();
+		boolean local = remote.getState() == RemoteSessionState.LOCAL;
+		boolean participantSession = remote.getRole() == RemoteRole.PARTICIPANT && !local;
+		boolean controllerMine = remote.getRole() == RemoteRole.CONTROLLER
+			&& remote.getState() != RemoteSessionState.LOCAL
+			&& !isSubjectWorkspaceActive(remote);
+		boolean localWorkspace = local || controllerMine;
+
+		settingsLockLabel.setText(participantSession
+			? POST_SESSION_LOCK_MESSAGE
+			: SETTINGS_LOCKED_MESSAGE);
+		settingsLockBanner.setVisible(locked && (localWorkspace || participantSession));
+		unlockSettingsButton.setVisible(locked && localWorkspace);
+		unlockSettingsButton.setEnabled(locked && localWorkspace);
+		clearSettingsLockButton.setEnabled(locked);
+		if (localWorkspace)
+		{
+			setLocalSettingsLocked(locked);
+		}
 		revalidate();
 		repaint();
 	}

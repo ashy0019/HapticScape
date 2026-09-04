@@ -1,5 +1,7 @@
 package com.ashy0019.hapticscape.remote;
 
+import com.ashy0019.hapticscape.CustomPattern;
+import com.ashy0019.hapticscape.CustomPatternLibrary;
 import com.ashy0019.hapticscape.HapticScapeConfig;
 import com.google.gson.Gson;
 import java.util.ArrayList;
@@ -8,7 +10,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -16,6 +20,9 @@ import static org.junit.Assert.assertTrue;
 
 public class RemoteSessionManagerTest
 {
+	@Rule
+	public final TemporaryFolder temporaryFolder = new TemporaryFolder();
+
 	@Test
 	public void participantSeedsControllerAndKeepsAcceptedChanges() throws Exception
 	{
@@ -28,16 +35,20 @@ public class RemoteSessionManagerTest
 			new EffectiveSettingsService(controllerConfig);
 		EffectiveSettingsService participantEffective =
 			new EffectiveSettingsService(participantConfig);
+		SettingsLockService controllerLock = lockService("controller-lock.json");
+		SettingsLockService participantLock = lockService("participant-lock.json");
 
 		try (RemoteSessionManager controller = new RemoteSessionManager(
 			new Gson(),
 			controllerStore,
 			controllerEffective,
+			controllerLock,
 			relay);
 			RemoteSessionManager participant = new RemoteSessionManager(
 				new Gson(),
 				participantStore,
 				participantEffective,
+				participantLock,
 				relay))
 		{
 			List<RemoteSettingsSnapshot> controllerViews = new ArrayList<>();
@@ -72,10 +83,29 @@ public class RemoteSessionManagerTest
 			assertEquals(12, controllerConfig.intensityPercent());
 			assertEquals(0, controllerStore.getSaveCount());
 
+			CustomPatternLibrary subjectPatterns = CustomPatternLibrary.defaults()
+				.addBlankPattern()
+				.withName(2, "Remote forge")
+				.withPattern(2, new CustomPattern(0, 60, 100, 0), 700, 3);
+			String persistedPatterns = subjectPatterns.toConfigValue();
+			assertTrue(controller.updateControllerSetting(
+				HapticScapeConfig.CUSTOM_PATTERNS_KEY,
+				persistedPatterns
+			));
+			await(() -> participantConfig.customPatterns().equals(persistedPatterns));
+			controller.reconcileSettingsSafely();
+			assertEquals(
+				"Remote forge",
+				participantStore.capture().getCustomPatterns().findById(2)
+					.orElseThrow(AssertionError::new)
+					.getName()
+			);
+
 			participant.endSession();
 			assertEquals(RemoteSessionState.LOCAL, participant.getSnapshot().getState());
 			assertEquals(68, participantEffective.current().getGlobalXpFeedbackSettings()
 				.getIntensityPercent());
+			assertEquals(persistedPatterns, participantConfig.customPatterns());
 		}
 	}
 
@@ -88,6 +118,7 @@ public class RemoteSessionManagerTest
 			new Gson(),
 			store,
 			new EffectiveSettingsService(config),
+			lockService("single-lock.json"),
 			new TestRelay()))
 		{
 			assertFalse(manager.updateControllerSetting(
@@ -96,6 +127,114 @@ public class RemoteSessionManagerTest
 			));
 			assertEquals(35, config.intensityPercent());
 		}
+	}
+
+	@Test
+	public void participantApprovalPersistsLockAfterSession()
+	{
+		Gson gson = new Gson();
+		TestRelay relay = new TestRelay();
+		MutableConfig controllerConfig = new MutableConfig(20);
+		MutableConfig participantConfig = new MutableConfig(60);
+		SettingsLockService controllerLock = lockService("approval-controller.json");
+		SettingsLockService participantLock = lockService("approval-participant.json");
+		char[] password = "correct horse battery staple".toCharArray();
+		try (RemoteSessionManager controller = new RemoteSessionManager(
+			gson,
+			new MemoryStore(controllerConfig),
+			new EffectiveSettingsService(controllerConfig),
+			controllerLock,
+			relay);
+			RemoteSessionManager participant = new RemoteSessionManager(
+				gson,
+				new MemoryStore(participantConfig),
+				new EffectiveSettingsService(participantConfig),
+				participantLock,
+				relay))
+		{
+			RemoteInvitation invitation = controller.startController(
+				"wss://relay.example/relay"
+			);
+			participant.joinParticipant(invitation.encode());
+			controller.proposeSettingsLock(password);
+
+			assertEquals(
+				RemoteLockState.APPROVAL_REQUIRED,
+				participant.getLockSnapshot().getState()
+			);
+			assertFalse(participantLock.isLocked());
+			participant.acceptPendingSettingsLock();
+
+			assertEquals(RemoteLockState.ARMED, controller.getLockSnapshot().getState());
+			assertEquals(RemoteLockState.ARMED, participant.getLockSnapshot().getState());
+			assertTrue(participantLock.isLocked());
+			participant.endSession();
+			assertTrue(participantLock.isLocked());
+			boolean rejoinRejected = false;
+			try
+			{
+				participant.joinParticipant(invitation.encode());
+			}
+			catch (IllegalStateException expected)
+			{
+				rejoinRejected = true;
+			}
+			assertTrue(rejoinRejected);
+			assertFalse(participantLock.unlock("wrong password".toCharArray()));
+			assertTrue(participantLock.isLocked());
+			assertTrue(participantLock.unlock(password));
+			assertFalse(participantLock.isLocked());
+			assertFalse(controllerLock.isLocked());
+		}
+		finally
+		{
+			java.util.Arrays.fill(password, '\0');
+		}
+	}
+
+	@Test
+	public void controllerCanCancelAnAcceptedSessionLock()
+	{
+		Gson gson = new Gson();
+		TestRelay relay = new TestRelay();
+		MutableConfig controllerConfig = new MutableConfig(20);
+		MutableConfig participantConfig = new MutableConfig(60);
+		SettingsLockService participantLock = lockService("cancel-participant.json");
+		try (RemoteSessionManager controller = new RemoteSessionManager(
+			gson,
+			new MemoryStore(controllerConfig),
+			new EffectiveSettingsService(controllerConfig),
+			lockService("cancel-controller.json"),
+			relay);
+			RemoteSessionManager participant = new RemoteSessionManager(
+				gson,
+				new MemoryStore(participantConfig),
+				new EffectiveSettingsService(participantConfig),
+				participantLock,
+				relay))
+		{
+			RemoteInvitation invitation = controller.startController(
+				"wss://relay.example/relay"
+			);
+			participant.joinParticipant(invitation.encode());
+			controller.proposeSettingsLock("cancel this password".toCharArray());
+			participant.acceptPendingSettingsLock();
+			assertTrue(participantLock.isLocked());
+
+			controller.cancelSettingsLock();
+
+			assertFalse(participantLock.isLocked());
+			assertEquals(RemoteLockState.INACTIVE, controller.getLockSnapshot().getState());
+			assertEquals(RemoteLockState.INACTIVE, participant.getLockSnapshot().getState());
+		}
+	}
+
+	private SettingsLockService lockService(String name)
+	{
+		return new SettingsLockService(
+			new Gson(),
+			temporaryFolder.getRoot().toPath().resolve(name)
+		);
 	}
 
 	private static RemoteSettingsSnapshot last(List<RemoteSettingsSnapshot> settings)
@@ -137,6 +276,8 @@ public class RemoteSessionManagerTest
 	private static final class MutableConfig implements HapticScapeConfig
 	{
 		private volatile int intensity;
+		private volatile String customPatterns =
+			CustomPatternLibrary.defaults().toConfigValue();
 
 		private MutableConfig(int intensity)
 		{
@@ -147,6 +288,12 @@ public class RemoteSessionManagerTest
 		public int intensityPercent()
 		{
 			return intensity;
+		}
+
+		@Override
+		public String customPatterns()
+		{
+			return customPatterns;
 		}
 	}
 
@@ -171,6 +318,7 @@ public class RemoteSessionManagerTest
 		{
 			settings.validate();
 			config.intensity = settings.getGlobalXpFeedbackSettings().getIntensityPercent();
+			config.customPatterns = settings.getCustomPatterns().toConfigValue();
 			saveCount++;
 			return capture();
 		}

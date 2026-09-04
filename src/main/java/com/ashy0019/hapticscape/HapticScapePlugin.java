@@ -22,6 +22,7 @@ import com.ashy0019.hapticscape.remote.RemoteSessionManager;
 import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteSessionState;
 import com.ashy0019.hapticscape.remote.RemoteSettingsSnapshot;
+import com.ashy0019.hapticscape.remote.SettingsLockService;
 import com.ashy0019.hapticscape.rogue.feedback.CasinoFeedbackMapper;
 import com.ashy0019.hapticscape.ui.HapticScapePanel;
 import com.ashy0019.hapticscape.ui.Level99CelebrationOverlay;
@@ -99,6 +100,7 @@ public class HapticScapePlugin extends Plugin
 	private GatedIntifaceService intifaceService;
 	private EffectiveSettingsService effectiveSettingsService;
 	private RemoteSessionManager remoteSessionManager;
+	private SettingsLockService settingsLockService;
 	private MusicSyncService musicSyncService;
 	private ClickerService clickerService;
 	private HapticScapePanel panel;
@@ -167,11 +169,13 @@ public class HapticScapePlugin extends Plugin
 			new DefaultIntifaceService(httpClient, gson)
 		);
 		effectiveSettingsService = new EffectiveSettingsService(config);
+		settingsLockService = new SettingsLockService(gson);
 		remoteSessionManager = new RemoteSessionManager(
 			httpClient,
 			gson,
 			new ConfigBackedRemoteSettingsStore(config, configManager),
-			effectiveSettingsService
+			effectiveSettingsService,
+			settingsLockService
 		);
 		remoteSessionManager.addListener(new RemoteSessionListener()
 		{
@@ -216,6 +220,7 @@ public class HapticScapePlugin extends Plugin
 			updatePreferencesStore,
 			updateCheckService,
 			remoteSessionManager,
+			settingsLockService,
 			this::dispatchRogueFeedback,
 			this::playRogueUnlockStingAsync,
 			intifaceService::stopAll
@@ -287,6 +292,7 @@ public class HapticScapePlugin extends Plugin
 			panel.close();
 			panel = null;
 		}
+		settingsLockService = null;
 		if (updateCheckService != null)
 		{
 			updateCheckService.close();

@@ -2,17 +2,21 @@ package com.ashy0019.hapticscape.ui;
 
 import com.ashy0019.hapticscape.HapticScapeConfig;
 import com.ashy0019.hapticscape.remote.RemoteInvitation;
+import com.ashy0019.hapticscape.remote.RemoteLockSnapshot;
+import com.ashy0019.hapticscape.remote.RemoteLockState;
 import com.ashy0019.hapticscape.remote.RemoteRole;
 import com.ashy0019.hapticscape.remote.RemoteSessionListener;
 import com.ashy0019.hapticscape.remote.RemoteSessionManager;
 import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteSessionState;
+import com.ashy0019.hapticscape.remote.SettingsLockProposal;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.awt.Toolkit;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
+import java.util.Arrays;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
@@ -40,6 +44,10 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 	private final JButton emergencyButton = new JButton("EMERGENCY OFF");
 	private final JButton resumeButton = new JButton("Resume");
 	private final JButton endButton = new JButton("End session");
+	private final JPanel settingsLockPanel = new JPanel();
+	private final JLabel settingsLockStatusLabel = new JLabel("No post-session lock requested");
+	private final JButton armSettingsLockButton = new JButton("Generate unlock key");
+	private final JButton cancelSettingsLockButton = new JButton("Cancel lock");
 	private final JPanel controllerPanel = new JPanel();
 	private final JPanel participantPanel = new JPanel();
 	private boolean wasLocal = true;
@@ -104,6 +112,30 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		session.add(statusLabel, BorderLayout.CENTER);
 		PanelUi.addVerticalComponent(this, session);
 
+		settingsLockPanel.setLayout(new BoxLayout(settingsLockPanel, BoxLayout.Y_AXIS));
+		settingsLockPanel.setBorder(
+			BorderFactory.createTitledBorder("Post-session settings lock")
+		);
+		JTextArea lockExplanation = new JTextArea(
+			"Ask the participant to keep the final feedback settings locked after "
+				+ "the session. They must approve the request. HapticScape generates "
+				+ "the unlock key for you.",
+			3,
+			24
+		);
+		lockExplanation.setEditable(false);
+		lockExplanation.setOpaque(false);
+		lockExplanation.setFocusable(false);
+		lockExplanation.setLineWrap(true);
+		lockExplanation.setWrapStyleWord(true);
+		PanelUi.addVerticalComponent(settingsLockPanel, lockExplanation);
+		JPanel settingsLockButtons = new JPanel(new GridLayout(0, 1, 0, 4));
+		settingsLockButtons.add(armSettingsLockButton);
+		settingsLockButtons.add(cancelSettingsLockButton);
+		PanelUi.addVerticalComponent(settingsLockPanel, settingsLockButtons);
+		PanelUi.addVerticalComponent(settingsLockPanel, settingsLockStatusLabel);
+		PanelUi.addVerticalComponent(this, settingsLockPanel);
+
 		JPanel safetyButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
 		safetyButtons.add(emergencyButton);
 		safetyButtons.add(resumeButton);
@@ -117,6 +149,8 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		emergencyButton.addActionListener(event -> sessionManager.emergencyPause());
 		resumeButton.addActionListener(event -> sessionManager.resumeParticipant());
 		endButton.addActionListener(event -> sessionManager.endSession());
+		armSettingsLockButton.addActionListener(event -> armSettingsLock());
+		cancelSettingsLockButton.addActionListener(event -> sessionManager.cancelSettingsLock());
 
 		sessionManager.addListener(this);
 		applySnapshot(sessionManager.getSnapshot());
@@ -131,6 +165,18 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 	public void onRemoteSessionChanged(RemoteSessionSnapshot snapshot)
 	{
 		SwingUtilities.invokeLater(() -> applySnapshot(snapshot));
+	}
+
+	@Override
+	public void onRemoteLockChanged(RemoteLockSnapshot snapshot)
+	{
+		SwingUtilities.invokeLater(() -> applyLockSnapshot(snapshot));
+	}
+
+	@Override
+	public void onRemoteLockProposal(SettingsLockProposal proposal)
+	{
+		SwingUtilities.invokeLater(this::confirmSettingsLockProposal);
 	}
 
 	private void createInvitation()
@@ -191,6 +237,84 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		}
 	}
 
+	private void armSettingsLock()
+	{
+		char[] unlockKey = sessionManager.generateSettingsLockKey();
+		JTextField keyField = new JTextField(new String(unlockKey));
+		keyField.setEditable(false);
+		keyField.setHorizontalAlignment(JTextField.CENTER);
+		JTextArea explanation = new JTextArea(
+			"Save this unlock key somewhere safe. HapticScape does not retain it, "
+				+ "and the participant will need it to unlock the settings normally.",
+			3,
+			24
+		);
+		explanation.setEditable(false);
+		explanation.setOpaque(false);
+		explanation.setFocusable(false);
+		explanation.setLineWrap(true);
+		explanation.setWrapStyleWord(true);
+		JPanel content = new JPanel();
+		content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+		PanelUi.addVerticalComponent(content, explanation);
+		PanelUi.addVerticalComponent(content, keyField);
+		try
+		{
+			Object[] options = {"Copy key & request", "Cancel"};
+			int choice = JOptionPane.showOptionDialog(
+				this,
+				content,
+				"Generated settings unlock key",
+				JOptionPane.YES_NO_OPTION,
+				JOptionPane.WARNING_MESSAGE,
+				null,
+				options,
+				options[0]
+			);
+			if (choice != JOptionPane.YES_OPTION)
+			{
+				return;
+			}
+			Toolkit.getDefaultToolkit().getSystemClipboard().setContents(
+				new StringSelection(keyField.getText()),
+				null
+			);
+			sessionManager.proposeSettingsLock(unlockKey);
+		}
+		catch (RuntimeException e)
+		{
+			showError(e.getMessage());
+		}
+		finally
+		{
+			Arrays.fill(unlockKey, '\0');
+			keyField.setText("");
+		}
+	}
+
+	private void confirmSettingsLockProposal()
+	{
+		int choice = JOptionPane.showConfirmDialog(
+			this,
+			"<html>The controller requests a persistent settings lock.<br><br>"
+				+ "If accepted, the final feedback settings will stay locked after "
+				+ "this session ends.<br>Only the controller's generated key can unlock "
+				+ "them normally.<br><br>Emergency Off, End Session, Intiface controls, "
+				+ "and developer recovery remain available.</html>",
+			"Accept post-session settings lock?",
+			JOptionPane.YES_NO_OPTION,
+			JOptionPane.WARNING_MESSAGE
+		);
+		if (choice == JOptionPane.YES_OPTION)
+		{
+			sessionManager.acceptPendingSettingsLock();
+		}
+		else
+		{
+			sessionManager.declinePendingSettingsLock();
+		}
+	}
+
 	private void applySnapshot(RemoteSessionSnapshot snapshot)
 	{
 		statusLabel.setText("<html>" + snapshot.getMessage() + "</html>");
@@ -221,8 +345,30 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		resumeButton.setVisible(participant && emergencyPaused);
 		endButton.setEnabled(!local);
 		endButton.setVisible(!local);
+		applyLockSnapshot(sessionManager.getLockSnapshot());
 		revalidate();
 		repaint();
+	}
+
+	private void applyLockSnapshot(RemoteLockSnapshot snapshot)
+	{
+		RemoteSessionSnapshot session = sessionManager.getSnapshot();
+		boolean controllerActive = session.getRole() == RemoteRole.CONTROLLER
+			&& (session.getState() == RemoteSessionState.ACTIVE
+				|| session.getState() == RemoteSessionState.PEER_EMERGENCY_PAUSED);
+		RemoteLockState state = snapshot.getState();
+		settingsLockPanel.setVisible(controllerActive);
+		settingsLockStatusLabel.setText("<html>" + snapshot.getMessage() + "</html>");
+		boolean mayRequest = state == RemoteLockState.INACTIVE
+			|| state == RemoteLockState.DECLINED;
+		armSettingsLockButton.setEnabled(controllerActive && mayRequest);
+		boolean mayCancel = state == RemoteLockState.AWAITING_APPROVAL
+			|| state == RemoteLockState.ARMED
+			|| state == RemoteLockState.DECLINED;
+		cancelSettingsLockButton.setVisible(mayCancel);
+		cancelSettingsLockButton.setEnabled(controllerActive && mayCancel);
+		settingsLockPanel.revalidate();
+		settingsLockPanel.repaint();
 	}
 
 	private void copyInvitation()
