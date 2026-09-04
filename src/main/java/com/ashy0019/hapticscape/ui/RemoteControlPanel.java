@@ -88,7 +88,12 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		);
 		addSection(privacy);
 
-		relayUrlField.setText(config.remoteRelayUrl());
+		relayUrlField.setText(HapticScapeConfig.resolveRemoteRelayUrl(
+			config.remoteRelayUrl()
+		));
+		relayUrlField.setToolTipText(
+			"Hosted HapticScape relay by default; replace this URL to use a self-hosted relay"
+		);
 		addSection(row("Relay", relayUrlField));
 
 		controllerPanel.setLayout(new BoxLayout(controllerPanel, BoxLayout.Y_AXIS));
