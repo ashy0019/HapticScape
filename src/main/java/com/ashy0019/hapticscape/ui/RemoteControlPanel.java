@@ -11,8 +11,10 @@ import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteSessionState;
 import com.ashy0019.hapticscape.remote.SettingsLockProposal;
 import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
+import java.awt.Rectangle;
 import java.awt.Toolkit;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
@@ -24,12 +26,14 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.Scrollable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import net.runelite.client.config.ConfigManager;
 
-final class RemoteControlPanel extends JPanel implements RemoteSessionListener
+final class RemoteControlPanel extends JPanel
+	implements RemoteSessionListener, Scrollable
 {
 	private final ConfigManager configManager;
 	private final RemoteSessionManager sessionManager;
@@ -159,6 +163,42 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 	void close()
 	{
 		sessionManager.removeListener(this);
+	}
+
+	@Override
+	public Dimension getPreferredScrollableViewportSize()
+	{
+		return getPreferredSize();
+	}
+
+	@Override
+	public int getScrollableUnitIncrement(
+		Rectangle visibleRect,
+		int orientation,
+		int direction)
+	{
+		return 16;
+	}
+
+	@Override
+	public int getScrollableBlockIncrement(
+		Rectangle visibleRect,
+		int orientation,
+		int direction)
+	{
+		return Math.max(16, visibleRect.height - 16);
+	}
+
+	@Override
+	public boolean getScrollableTracksViewportWidth()
+	{
+		return true;
+	}
+
+	@Override
+	public boolean getScrollableTracksViewportHeight()
+	{
+		return false;
 	}
 
 	@Override
