@@ -13,27 +13,29 @@ import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import net.runelite.api.Skill;
-import net.runelite.client.config.ConfigManager;
 
 final class SkillsPanel extends JPanel
 {
-	private final ConfigManager configManager;
+	private final SettingsChangeSink settingsSink;
 	private final JLabel enabledSkillsValueLabel = new JLabel();
 	private final Map<Skill, JCheckBox> skillCheckBoxes = new EnumMap<>(Skill.class);
 	private final JComboBox<SkillOutput> outputSelector =
 		new JComboBox<>(SkillOutput.values());
+	private final JButton allSkillsButton = new JButton("All");
+	private final JButton noSkillsButton = new JButton("None");
 	private volatile SkillSelection hapticSkillSelection;
 	private volatile SkillSelection clickSkillSelection;
 	private boolean updatingSkillCheckBoxes;
+	private boolean remoteReadOnly;
 
 	SkillsPanel(
 		SkillSelection hapticSkillSelection,
 		SkillSelection clickSkillSelection,
-		ConfigManager configManager)
+		SettingsChangeSink settingsSink)
 	{
 		this.hapticSkillSelection = hapticSkillSelection;
 		this.clickSkillSelection = clickSkillSelection;
-		this.configManager = configManager;
+		this.settingsSink = settingsSink;
 		setLayout(new BorderLayout(0, 4));
 		setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
 
@@ -44,11 +46,9 @@ final class SkillsPanel extends JPanel
 		outputRow.add(new JLabel("Output"), BorderLayout.WEST);
 		outputRow.add(outputSelector, BorderLayout.EAST);
 
-		JButton allSkillsButton = new JButton("All");
 		allSkillsButton.setToolTipText("Enable every skill for the selected output");
 		allSkillsButton.addActionListener(event -> setAllSkillsEnabled(true));
 
-		JButton noSkillsButton = new JButton("None");
 		noSkillsButton.setToolTipText("Disable every skill for the selected output");
 		noSkillsButton.addActionListener(event -> setAllSkillsEnabled(false));
 
@@ -79,6 +79,21 @@ final class SkillsPanel extends JPanel
 		updateEnabledSkillsLabel();
 	}
 
+	void applyDisplayedSelections(
+		SkillSelection hapticSelection,
+		SkillSelection clickSelection)
+	{
+		hapticSkillSelection = hapticSelection;
+		clickSkillSelection = clickSelection;
+		refreshSkillCheckBoxes();
+	}
+
+	void setRemoteReadOnly(boolean remoteReadOnly)
+	{
+		this.remoteReadOnly = remoteReadOnly;
+		refreshReadOnlyState();
+	}
+
 	boolean isHapticSkillEnabled(Skill skill)
 	{
 		return hapticSkillSelection.isEnabled(skill);
@@ -96,7 +111,7 @@ final class SkillsPanel extends JPanel
 
 	private void setSkillEnabled(Skill skill, boolean enabled)
 	{
-		if (updatingSkillCheckBoxes)
+		if (remoteReadOnly || updatingSkillCheckBoxes)
 		{
 			return;
 		}
@@ -109,6 +124,10 @@ final class SkillsPanel extends JPanel
 
 	private void setAllSkillsEnabled(boolean enabled)
 	{
+		if (remoteReadOnly)
+		{
+			return;
+		}
 		SkillOutput output = selectedOutput();
 		SkillSelection updated = selectionFor(output).withAllEnabled(enabled);
 		setSelection(output, updated);
@@ -130,8 +149,7 @@ final class SkillsPanel extends JPanel
 
 	private void persist(SkillOutput output, SkillSelection selection)
 	{
-		configManager.setConfiguration(
-			HapticScapeConfig.GROUP,
+		settingsSink.set(
 			output == SkillOutput.HAPTICS
 				? HapticScapeConfig.DISABLED_SKILLS_KEY
 				: HapticScapeConfig.CLICKER_DISABLED_SKILLS_KEY,
@@ -166,6 +184,19 @@ final class SkillsPanel extends JPanel
 			updatingSkillCheckBoxes = false;
 		}
 		updateEnabledSkillsLabel();
+		refreshReadOnlyState();
+	}
+
+	private void refreshReadOnlyState()
+	{
+		for (JCheckBox checkBox : skillCheckBoxes.values())
+		{
+			checkBox.setEnabled(!remoteReadOnly);
+		}
+		allSkillsButton.setEnabled(!remoteReadOnly);
+		noSkillsButton.setEnabled(!remoteReadOnly);
+		// Output selector is navigation only, so it stays usable while remote-controlled.
+		outputSelector.setEnabled(true);
 	}
 
 	private SkillOutput selectedOutput()

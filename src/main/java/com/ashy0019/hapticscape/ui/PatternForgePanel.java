@@ -37,13 +37,12 @@ import javax.swing.JSpinner;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.Timer;
-import net.runelite.client.config.ConfigManager;
 
 final class PatternForgePanel extends JPanel
 {
 	private static final int MAXIMUM_UNDO_STATES = 20;
 
-	private final ConfigManager configManager;
+	private final SettingsChangeSink settingsSink;
 	private final Consumer<CustomPatternEntry> previewAction;
 	private final Consumer<CustomPatternLibrary> libraryChangeAction;
 	private final JComboBox<CustomPatternEntry> patternComboBox = new JComboBox<>();
@@ -76,17 +75,20 @@ final class PatternForgePanel extends JPanel
 	private CustomPattern draft;
 	private boolean loadingControls;
 	private boolean dirty;
+	private boolean connected;
+	private boolean remoteReadOnly;
+	private boolean previewAllowed = true;
 	private Timer playheadTimer;
 	private long previewStartedAt;
 
 	PatternForgePanel(
 		CustomPatternLibrary library,
-		ConfigManager configManager,
+		SettingsChangeSink settingsSink,
 		Consumer<CustomPatternEntry> previewAction,
 		Consumer<CustomPatternLibrary> libraryChangeAction)
 	{
 		this.library = Objects.requireNonNull(library, "library");
-		this.configManager = Objects.requireNonNull(configManager, "configManager");
+		this.settingsSink = Objects.requireNonNull(settingsSink, "settingsSink");
 		this.previewAction = Objects.requireNonNull(previewAction, "previewAction");
 		this.libraryChangeAction = Objects.requireNonNull(
 			libraryChangeAction,
@@ -220,13 +222,44 @@ final class PatternForgePanel extends JPanel
 		return library;
 	}
 
+	void applyDisplayedLibrary(CustomPatternLibrary displayedLibrary)
+	{
+		library = Objects.requireNonNull(displayedLibrary, "displayedLibrary");
+		int selectedId = library.findById(selectedPatternId).isPresent()
+			? selectedPatternId
+			: library.getPatterns().get(0).getId();
+		refreshPatternChoices(selectedId);
+		loadPattern(selectedId);
+	}
+
+	void setRemoteReadOnly(boolean remoteReadOnly)
+	{
+		this.remoteReadOnly = remoteReadOnly;
+		if (remoteReadOnly)
+		{
+			stopAnimation();
+		}
+		refreshEditorState();
+	}
+
+	void setPreviewAllowed(boolean previewAllowed)
+	{
+		this.previewAllowed = previewAllowed;
+		if (!previewAllowed)
+		{
+			stopAnimation();
+		}
+		refreshEditorState();
+	}
+
 	void setConnected(boolean connected)
 	{
-		previewButton.setEnabled(connected);
+		this.connected = connected;
 		if (!connected)
 		{
 			stopAnimation();
 		}
+		refreshEditorState();
 	}
 
 	void stopPreview()
@@ -252,7 +285,7 @@ final class PatternForgePanel extends JPanel
 			return;
 		}
 
-		if (dirty)
+		if (dirty && !remoteReadOnly)
 		{
 			saveDraft();
 		}
@@ -305,6 +338,10 @@ final class PatternForgePanel extends JPanel
 
 	private void changeDraft(CustomPattern pattern, boolean rememberCurrent)
 	{
+		if (remoteReadOnly)
+		{
+			return;
+		}
 		stopAnimation();
 		if (rememberCurrent)
 		{
@@ -317,7 +354,7 @@ final class PatternForgePanel extends JPanel
 
 	private void changePlaybackSettings()
 	{
-		if (loadingControls)
+		if (remoteReadOnly || loadingControls)
 		{
 			return;
 		}
@@ -328,6 +365,10 @@ final class PatternForgePanel extends JPanel
 
 	private void undo()
 	{
+		if (remoteReadOnly)
+		{
+			return;
+		}
 		if (undoStates.isEmpty())
 		{
 			return;
@@ -340,6 +381,10 @@ final class PatternForgePanel extends JPanel
 
 	private void saveDraft()
 	{
+		if (remoteReadOnly)
+		{
+			return;
+		}
 		library = library.withPattern(
 			selectedPatternId,
 			draft,
@@ -352,6 +397,10 @@ final class PatternForgePanel extends JPanel
 
 	private void addPattern()
 	{
+		if (remoteReadOnly)
+		{
+			return;
+		}
 		if (!library.canAddPattern())
 		{
 			return;
@@ -370,6 +419,10 @@ final class PatternForgePanel extends JPanel
 
 	private void renameSelectedPattern()
 	{
+		if (remoteReadOnly)
+		{
+			return;
+		}
 		String updatedName = (String) JOptionPane.showInputDialog(
 			this,
 			"Choose a name for this custom pattern:",
@@ -393,6 +446,10 @@ final class PatternForgePanel extends JPanel
 
 	private void deleteSelectedPattern()
 	{
+		if (remoteReadOnly)
+		{
+			return;
+		}
 		if (library.size() == 1)
 		{
 			return;
@@ -427,8 +484,7 @@ final class PatternForgePanel extends JPanel
 
 	private void persistLibrary()
 	{
-		configManager.setConfiguration(
-			HapticScapeConfig.GROUP,
+		settingsSink.set(
 			HapticScapeConfig.CUSTOM_PATTERNS_KEY,
 			library.toConfigValue()
 		);
@@ -458,8 +514,10 @@ final class PatternForgePanel extends JPanel
 
 	private void updateLibraryButtons()
 	{
-		addButton.setEnabled(library.canAddPattern());
-		deleteButton.setEnabled(library.size() > 1);
+		boolean editable = !remoteReadOnly;
+		addButton.setEnabled(editable && library.canAddPattern());
+		renameButton.setEnabled(editable);
+		deleteButton.setEnabled(editable && library.size() > 1);
 		addButton.setToolTipText(library.canAddPattern()
 			? "Create a blank custom pattern (" + library.size() + "/"
 				+ CustomPatternLibrary.MAXIMUM_PATTERN_COUNT + ")"
@@ -467,8 +525,27 @@ final class PatternForgePanel extends JPanel
 				+ " custom patterns reached");
 	}
 
+	private void refreshEditorState()
+	{
+		boolean editable = !remoteReadOnly;
+		// Pattern selection is navigation only and remains available while locked.
+		patternComboBox.setEnabled(true);
+		beatDurationSpinner.setEnabled(editable);
+		beatCountSpinner.setEnabled(editable);
+		canvas.setEditable(editable);
+		clearButton.setEnabled(editable);
+		undoButton.setEnabled(editable && !undoStates.isEmpty());
+		saveButton.setEnabled(editable && dirty);
+		previewButton.setEnabled(editable && connected && previewAllowed);
+		updateLibraryButtons();
+	}
+
 	private void preview()
 	{
+		if (remoteReadOnly)
+		{
+			return;
+		}
 		startAnimation();
 		CustomPatternEntry previewEntry = library.withPattern(
 			selectedPatternId,
@@ -548,9 +625,8 @@ final class PatternForgePanel extends JPanel
 	private void setDirty(boolean dirty)
 	{
 		this.dirty = dirty;
-		saveButton.setEnabled(dirty);
 		saveStateLabel.setText(dirty ? "Unsaved" : "Saved");
-		undoButton.setEnabled(!undoStates.isEmpty());
+		refreshEditorState();
 	}
 
 	private static final class PatternCanvas extends JPanel
@@ -571,6 +647,7 @@ final class PatternForgePanel extends JPanel
 		private double playheadProgress = -1.0;
 		private int previousSampleIndex = -1;
 		private int previousIntensity;
+		private boolean editable = true;
 
 		private PatternCanvas()
 		{
@@ -583,6 +660,10 @@ final class PatternForgePanel extends JPanel
 				@Override
 				public void mousePressed(MouseEvent event)
 				{
+					if (!editable)
+					{
+						return;
+					}
 					gestureStartAction.run();
 					previousSampleIndex = -1;
 					updateFromMouse(event);
@@ -591,7 +672,10 @@ final class PatternForgePanel extends JPanel
 				@Override
 				public void mouseDragged(MouseEvent event)
 				{
-					updateFromMouse(event);
+					if (editable)
+					{
+						updateFromMouse(event);
+					}
 				}
 
 				@Override
@@ -602,6 +686,14 @@ final class PatternForgePanel extends JPanel
 			};
 			addMouseListener(drawingHandler);
 			addMouseMotionListener(drawingHandler);
+		}
+
+		private void setEditable(boolean editable)
+		{
+			this.editable = editable;
+			setToolTipText(editable
+				? "Click and drag to draw intensity over time"
+				: "Remote-controlled pattern: view only");
 		}
 
 		private void setGestureStartAction(Runnable action)

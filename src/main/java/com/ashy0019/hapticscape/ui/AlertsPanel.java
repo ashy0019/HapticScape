@@ -25,11 +25,10 @@ import javax.swing.JPanel;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
 import javax.swing.SpinnerNumberModel;
-import net.runelite.client.config.ConfigManager;
 
 final class AlertsPanel extends JPanel
 {
-	private final ConfigManager configManager;
+	private final SettingsChangeSink settingsSink;
 	private final Supplier<CustomPatternLibrary> customPatternsSupplier;
 
 	private final JCheckBox genericEnabledCheckBox =
@@ -72,15 +71,17 @@ final class AlertsPanel extends JPanel
 	private boolean updatingSpecificControls;
 	private boolean updatingPatternChoices;
 	private boolean connected;
+	private boolean remoteReadOnly;
+	private boolean previewAllowed = true;
 
 	AlertsPanel(
 		HapticScapeConfig config,
-		ConfigManager configManager,
+		SettingsChangeSink settingsSink,
 		Supplier<CustomPatternLibrary> customPatternsSupplier,
 		Runnable testGenericAction,
 		Consumer<AlertCategory> testSpecificAction)
 	{
-		this.configManager = configManager;
+		this.settingsSink = settingsSink;
 		this.customPatternsSupplier = customPatternsSupplier;
 		genericEnabled = config.notificationFeedbackEnabled();
 		genericClickEnabled = config.clickerGenericNotificationEnabled();
@@ -188,6 +189,64 @@ final class AlertsPanel extends JPanel
 	AlertCategory getSelectedCategory()
 	{
 		return selectedCategory;
+	}
+
+	void applyDisplayedSettings(
+		NotificationFeedbackSettings genericSettings,
+		boolean displayedGenericClickEnabled,
+		AlertProfiles displayedProfiles,
+		AlertTriggerSettings displayedTriggers,
+		ClickerAlertSettings displayedClickSettings,
+		CustomPatternLibrary library)
+	{
+		genericEnabled = genericSettings.isEnabled();
+		genericClickEnabled = displayedGenericClickEnabled;
+		respectFocus = genericSettings.isRespectRuneLiteFocus();
+		genericIntensityPercent = genericSettings.getIntensityPercent();
+		genericDurationMillis = genericSettings.getDurationMillis();
+		genericPattern = genericSettings.getPatternSelection().resolveAgainst(library);
+		alertProfiles = displayedProfiles.replaceMissingCustomPatterns(library);
+		triggerSettings = displayedTriggers;
+		clickerAlertSettings = displayedClickSettings;
+
+		updatingGenericControls = true;
+		updatingPatternChoices = true;
+		try
+		{
+			genericEnabledCheckBox.setSelected(genericEnabled);
+			genericClickEnabledCheckBox.setSelected(genericClickEnabled);
+			respectFocusCheckBox.setSelected(respectFocus);
+			genericIntensitySlider.setValue(genericIntensityPercent);
+			genericIntensityValueLabel.setText(genericIntensityPercent + "%");
+			PanelUi.setPatternChoices(genericPatternComboBox, genericPattern, library);
+			genericDurationSpinner.setValue(genericDurationMillis);
+			PanelUi.setPatternChoices(
+				specificPatternComboBox,
+				alertProfiles.get(selectedCategory).getPatternSelection(),
+				library
+			);
+		}
+		finally
+		{
+			updatingPatternChoices = false;
+			updatingGenericControls = false;
+		}
+		loadSelectedCategory();
+		updateGenericControlState();
+	}
+
+	void setRemoteReadOnly(boolean remoteReadOnly)
+	{
+		this.remoteReadOnly = remoteReadOnly;
+		updateGenericControlState();
+		updateSpecificControlState();
+	}
+
+	void setPreviewAllowed(boolean previewAllowed)
+	{
+		this.previewAllowed = previewAllowed;
+		updateGenericControlState();
+		updateSpecificControlState();
 	}
 
 	void applyCustomPatternLibrary(CustomPatternLibrary library)
@@ -330,8 +389,7 @@ final class AlertsPanel extends JPanel
 		genericEnabledCheckBox.addActionListener(event ->
 		{
 			genericEnabled = genericEnabledCheckBox.isSelected();
-			configManager.setConfiguration(
-				HapticScapeConfig.GROUP,
+			settingsSink.set(
 				HapticScapeConfig.NOTIFICATION_FEEDBACK_ENABLED_KEY,
 				genericEnabled
 			);
@@ -340,8 +398,7 @@ final class AlertsPanel extends JPanel
 		genericClickEnabledCheckBox.addActionListener(event ->
 		{
 			genericClickEnabled = genericClickEnabledCheckBox.isSelected();
-			configManager.setConfiguration(
-				HapticScapeConfig.GROUP,
+			settingsSink.set(
 				HapticScapeConfig.CLICKER_GENERIC_NOTIFICATION_ENABLED_KEY,
 				genericClickEnabled
 			);
@@ -350,8 +407,7 @@ final class AlertsPanel extends JPanel
 		respectFocusCheckBox.addActionListener(event ->
 		{
 			respectFocus = respectFocusCheckBox.isSelected();
-			configManager.setConfiguration(
-				HapticScapeConfig.GROUP,
+			settingsSink.set(
 				HapticScapeConfig.NOTIFICATION_RESPECT_FOCUS_KEY,
 				respectFocus
 			);
@@ -362,8 +418,7 @@ final class AlertsPanel extends JPanel
 			if (!genericIntensitySlider.getValueIsAdjusting() && !updatingGenericControls)
 			{
 				genericIntensityPercent = genericIntensitySlider.getValue();
-				configManager.setConfiguration(
-					HapticScapeConfig.GROUP,
+				settingsSink.set(
 					HapticScapeConfig.NOTIFICATION_INTENSITY_PERCENT_KEY,
 					genericIntensityPercent
 				);
@@ -389,8 +444,7 @@ final class AlertsPanel extends JPanel
 			if (!updatingGenericControls)
 			{
 				genericDurationMillis = ((Number) genericDurationSpinner.getValue()).intValue();
-				configManager.setConfiguration(
-					HapticScapeConfig.GROUP,
+				settingsSink.set(
 					HapticScapeConfig.NOTIFICATION_DURATION_MILLIS_KEY,
 					genericDurationMillis
 				);
@@ -487,7 +541,7 @@ final class AlertsPanel extends JPanel
 
 	private void updateSelectedProfile()
 	{
-		if (updatingSpecificControls || updatingPatternChoices)
+		if (remoteReadOnly || updatingSpecificControls || updatingPatternChoices)
 		{
 			return;
 		}
@@ -513,7 +567,7 @@ final class AlertsPanel extends JPanel
 
 	private void updateSelectedTrigger()
 	{
-		if (updatingSpecificControls || !selectedCategory.hasTriggerParameter())
+		if (remoteReadOnly || updatingSpecificControls || !selectedCategory.hasTriggerParameter())
 		{
 			return;
 		}
@@ -526,34 +580,43 @@ final class AlertsPanel extends JPanel
 
 	private void updateGenericControlState()
 	{
+		boolean editable = !remoteReadOnly;
 		HapticPatternSelection pattern =
 			(HapticPatternSelection) genericPatternComboBox.getSelectedItem();
 		boolean externallyScaled = pattern == null || !pattern.isCustom();
-		genericPatternComboBox.setEnabled(true);
-		genericIntensitySlider.setEnabled(externallyScaled);
-		genericIntensityValueLabel.setEnabled(externallyScaled);
-		genericDurationSpinner.setEnabled(externallyScaled);
+		genericEnabledCheckBox.setEnabled(editable);
+		genericClickEnabledCheckBox.setEnabled(editable);
+		respectFocusCheckBox.setEnabled(editable);
+		genericPatternComboBox.setEnabled(editable);
+		genericIntensitySlider.setEnabled(editable && externallyScaled);
+		genericIntensityValueLabel.setEnabled(editable && externallyScaled);
+		genericDurationSpinner.setEnabled(editable && externallyScaled);
 		testGenericButton.setEnabled(
-			(connected && genericEnabled) || genericClickEnabled
+			previewAllowed && editable && ((connected && genericEnabled) || genericClickEnabled)
 		);
 	}
 
 	private void updateSpecificControlState()
 	{
+		boolean editable = !remoteReadOnly;
 		AlertBehavior behavior = (AlertBehavior) behaviorComboBox.getSelectedItem();
 		boolean customConfiguration = behavior == AlertBehavior.CUSTOM;
 		HapticPatternSelection pattern =
 			(HapticPatternSelection) specificPatternComboBox.getSelectedItem();
 		boolean externallyScaled = pattern == null || !pattern.isCustom();
 
-		triggerSpinner.setEnabled(selectedCategory.hasTriggerParameter());
-		specificPatternComboBox.setEnabled(customConfiguration);
-		specificIntensitySlider.setEnabled(customConfiguration && externallyScaled);
-		specificIntensityValueLabel.setEnabled(customConfiguration && externallyScaled);
-		specificDurationSpinner.setEnabled(customConfiguration && externallyScaled);
+		// Category selection is navigation only, so the participant can inspect every alert.
+		categoryComboBox.setEnabled(true);
+		behaviorComboBox.setEnabled(editable);
+		specificClickEnabledCheckBox.setEnabled(editable);
+		triggerSpinner.setEnabled(editable && selectedCategory.hasTriggerParameter());
+		specificPatternComboBox.setEnabled(editable && customConfiguration);
+		specificIntensitySlider.setEnabled(editable && customConfiguration && externallyScaled);
+		specificIntensityValueLabel.setEnabled(editable && customConfiguration && externallyScaled);
+		specificDurationSpinner.setEnabled(editable && customConfiguration && externallyScaled);
 		testSpecificButton.setEnabled(
-			(connected && behavior != AlertBehavior.OFF)
-				|| clickerAlertSettings.isEnabled(selectedCategory)
+			previewAllowed && editable && ((connected && behavior != AlertBehavior.OFF)
+				|| clickerAlertSettings.isEnabled(selectedCategory))
 		);
 	}
 
@@ -573,8 +636,7 @@ final class AlertsPanel extends JPanel
 
 	private void persistGenericPattern()
 	{
-		configManager.setConfiguration(
-			HapticScapeConfig.GROUP,
+		settingsSink.set(
 			HapticScapeConfig.NOTIFICATION_PATTERN_PRESET_KEY,
 			genericPattern.toConfigValue()
 		);
@@ -582,8 +644,7 @@ final class AlertsPanel extends JPanel
 
 	private void persistProfiles()
 	{
-		configManager.setConfiguration(
-			HapticScapeConfig.GROUP,
+		settingsSink.set(
 			HapticScapeConfig.ALERT_PROFILES_KEY,
 			alertProfiles.toConfigValue()
 		);
@@ -591,8 +652,7 @@ final class AlertsPanel extends JPanel
 
 	private void persistTriggerSettings()
 	{
-		configManager.setConfiguration(
-			HapticScapeConfig.GROUP,
+		settingsSink.set(
 			HapticScapeConfig.ALERT_TRIGGER_SETTINGS_KEY,
 			triggerSettings.toConfigValue()
 		);
@@ -600,8 +660,7 @@ final class AlertsPanel extends JPanel
 
 	private void persistClickerAlertSettings()
 	{
-		configManager.setConfiguration(
-			HapticScapeConfig.GROUP,
+		settingsSink.set(
 			HapticScapeConfig.CLICKER_ALERT_SETTINGS_KEY,
 			clickerAlertSettings.toConfigValue()
 		);

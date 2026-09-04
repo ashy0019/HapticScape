@@ -2,9 +2,8 @@ name: CI
 
 on:
   push:
-    branches:
-      - master
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -16,24 +15,37 @@ jobs:
 
     steps:
       - name: Check out HapticScape
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Java 11
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "11"
-          cache: gradle
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Test remote relay
+        working-directory: remote-relay
+        run: npm test
 
       - name: Run compatibility checks
         shell: bash
         run: |
           set -euo pipefail
           chmod +x ./gradlew
-
           ./gradlew \
             --no-daemon \
             clean \
             test \
+            shadowJar \
             verifyClientJar \
             collectRuntimeLicenses
+
+      - name: Upload client JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: hapticscape-client-${{ github.sha }}
+          path: build/libs/hapticscape-client.jar
+          retention-days: 14

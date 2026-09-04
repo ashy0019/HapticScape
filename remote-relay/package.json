@@ -1,0 +1,16 @@
+{
+  "name": "remote-relay",
+  "version": "1.0.0",
+  "description": "This Cloudflare Worker/Durable Object is a deliberately dumb relay for HapticScape Remote Control.",
+  "main": "worker.js",
+  "scripts": {
+    "test": "node --test worker.test.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "BSD-2-Clause",
+  "type": "module",
+  "devDependencies": {
+    "wrangler": "^4.129.0"
+  }
+}

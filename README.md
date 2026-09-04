@@ -115,6 +115,23 @@ applications using that device can influence the response too.
 - Recover cleanly when Intiface stops or the connection is lost.
 - Reconnect after restarting Intiface without relaunching the client.
 
+### Remote Control
+
+Remote Control creates an explicit, encrypted session between two HapticScape
+clients through a small relay. The participant always keeps the local
+Intiface connection, **Emergency Off**, and the ability to end the session.
+
+- Create an invitation as the controller or paste one as the participant.
+- Load the participant's existing feedback settings into the controller's UI.
+- Save accepted controller changes on the participant as they are made.
+- Keep those settings after either person ends the session.
+- Leave the controller's own local profile unchanged.
+- Acknowledge saved changes and retry a settings update if its acknowledgement
+  is lost.
+
+Invitations contain the room and encryption key, so share them privately and
+only accept sessions with someone you trust.
+
 ### Windows client updates
 
 The Windows launcher can check stable GitHub Releases before starting the
@@ -145,9 +162,11 @@ milestone settings. The tabs organize the more detailed features:
 | **Alerts** | Configure the Generic fallback and individual gameplay alert profiles. |
 | **Forge** | Draw, preview, save, rename, and manage custom patterns. |
 | **Music** | Enable Windows audio sync and tune its response. |
+| **Click** | Configure click feedback, XP click rules, and phrase triggers. |
 
 The bottom of the panel contains the Intiface connection controls, global test
-button, emergency stop, update controls, and connected-device list.
+button, emergency stop, update controls, Remote Control, and connected-device
+list.
 
 ## Requirements
 
@@ -306,6 +325,13 @@ notification text to Intiface.
 
 Music sync analyzes a small rolling window of the current Windows output mix
 in memory. Audio is never recorded, saved, or transmitted by HapticScape.
+
+Remote Control sends HapticScape feedback configuration—including configured
+click phrase rules—to the paired client through the relay. It does not send
+RuneScape account details, actual chat messages, notification text, device
+identifiers, or Intiface credentials. Settings and session control messages
+are encrypted before reaching the relay. The relay still sees connection
+metadata such as each client's IP address, the random room ID, and role.
 
 When update checks are enabled, the Windows launcher requests public release
 metadata from GitHub. It does not add account, character, chat, device, or

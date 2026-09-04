@@ -23,6 +23,7 @@ public final class ClickerService implements AutoCloseable
 	private final ThreadPoolExecutor executor;
 	private volatile ClickerSettings settings;
 	private volatile boolean closed;
+	private volatile boolean paused;
 
 	public ClickerService(ClickPlayback playback, ClickerSettings initialSettings)
 	{
@@ -53,10 +54,20 @@ public final class ClickerService implements AutoCloseable
 		settings = Objects.requireNonNull(updatedSettings);
 	}
 
+	public void setPaused(boolean paused)
+	{
+		this.paused = paused;
+	}
+
+	public boolean isPaused()
+	{
+		return paused;
+	}
+
 	public void click()
 	{
 		ClickerSettings current = settings;
-		if (closed || !current.isEnabled() || current.getVolumePercent() == 0)
+		if (closed || paused || !current.isEnabled() || current.getVolumePercent() == 0)
 		{
 			return;
 		}

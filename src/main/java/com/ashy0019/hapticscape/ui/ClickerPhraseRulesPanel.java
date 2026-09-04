@@ -20,11 +20,10 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.ListSelectionModel;
-import net.runelite.client.config.ConfigManager;
 
 final class ClickerPhraseRulesPanel extends JPanel
 {
-	private final ConfigManager configManager;
+	private final SettingsChangeSink settingsSink;
 	private final DefaultListModel<ClickerPhraseRule> ruleModel =
 		new DefaultListModel<>();
 	private final JList<ClickerPhraseRule> ruleList =
@@ -35,12 +34,13 @@ final class ClickerPhraseRulesPanel extends JPanel
 
 	private volatile ClickerPhraseRules rules;
 	private boolean clickerEnabled;
+	private boolean remoteReadOnly;
 
 	ClickerPhraseRulesPanel(
 		HapticScapeConfig config,
-		ConfigManager configManager)
+		SettingsChangeSink settingsSink)
 	{
-		this.configManager = configManager;
+		this.settingsSink = settingsSink;
 		rules = ClickerPhraseRules.fromConfigValue(
 			config.clickerPhraseRules()
 		);
@@ -90,9 +90,21 @@ final class ClickerPhraseRulesPanel extends JPanel
 		return rules;
 	}
 
+	void applyDisplayedRules(ClickerPhraseRules displayedRules)
+	{
+		rules = displayedRules;
+		refreshModel();
+	}
+
 	void setClickerEnabled(boolean enabled)
 	{
 		clickerEnabled = enabled;
+		refreshEnabledState();
+	}
+
+	void setRemoteReadOnly(boolean remoteReadOnly)
+	{
+		this.remoteReadOnly = remoteReadOnly;
 		refreshEnabledState();
 	}
 
@@ -261,20 +273,21 @@ final class ClickerPhraseRulesPanel extends JPanel
 	private void refreshEnabledState()
 	{
 		boolean selected = ruleList.getSelectedIndex() >= 0;
-		ruleList.setEnabled(clickerEnabled);
+		// The list remains browsable while remote-controlled; only mutations lock.
+		ruleList.setEnabled(remoteReadOnly || clickerEnabled);
 		addButton.setEnabled(
-			clickerEnabled
+			!remoteReadOnly
+				&& clickerEnabled
 				&& rules.getRules().size()
 					< ClickerPhraseRules.MAXIMUM_RULES
 		);
-		editButton.setEnabled(clickerEnabled && selected);
-		deleteButton.setEnabled(clickerEnabled && selected);
+		editButton.setEnabled(!remoteReadOnly && clickerEnabled && selected);
+		deleteButton.setEnabled(!remoteReadOnly && clickerEnabled && selected);
 	}
 
 	private void persist()
 	{
-		configManager.setConfiguration(
-			HapticScapeConfig.GROUP,
+		settingsSink.set(
 			HapticScapeConfig.CLICKER_PHRASE_RULES_KEY,
 			rules.toConfigValue()
 		);

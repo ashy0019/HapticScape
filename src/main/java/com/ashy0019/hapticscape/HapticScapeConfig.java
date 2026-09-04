@@ -43,6 +43,7 @@ public interface HapticScapeConfig extends Config
 	String CLICKER_GENERIC_NOTIFICATION_ENABLED_KEY = "clickerGenericNotificationEnabled";
 	String CLICKER_ALERT_SETTINGS_KEY = "clickerAlertSettings";
 	String CLICKER_PHRASE_RULES_KEY = "clickerPhraseRules";
+	String REMOTE_RELAY_URL_KEY = "remoteRelayUrl";
 
 	@ConfigItem(
 		keyName = "intifaceServer",
@@ -472,4 +473,18 @@ public interface HapticScapeConfig extends Config
 	default String clickerPhraseRules()
 	{
 		return "";
-	}}
+	}
+
+	@ConfigItem(
+		keyName = REMOTE_RELAY_URL_KEY,
+		name = "Remote relay URL",
+		description = "WebSocket relay used for opt-in Remote Control sessions",
+		position = 35,
+		hidden = true,
+		warning = "Remote Control connects to a 3rd-party relay. The relay operator can see your IP address; HapticScape does not directly send it to the paired client."
+	)
+	default String remoteRelayUrl()
+	{
+		return "";
+	}
+}

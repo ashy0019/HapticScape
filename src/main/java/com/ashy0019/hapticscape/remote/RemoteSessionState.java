@@ -1,0 +1,13 @@
+package com.ashy0019.hapticscape.remote;
+
+public enum RemoteSessionState
+{
+	LOCAL,
+	CONNECTING,
+	WAITING_FOR_PEER,
+	WAITING_FOR_SETTINGS,
+	ACTIVE,
+	EMERGENCY_PAUSED,
+	PEER_EMERGENCY_PAUSED,
+	DISCONNECTED
+}

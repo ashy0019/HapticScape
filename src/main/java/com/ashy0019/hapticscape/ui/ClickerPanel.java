@@ -15,11 +15,10 @@ import javax.swing.JPanel;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
 import javax.swing.SpinnerNumberModel;
-import net.runelite.client.config.ConfigManager;
 
 final class ClickerPanel extends JPanel
 {
-	private final ConfigManager configManager;
+	private final SettingsChangeSink settingsSink;
 	private final Consumer<ClickerSettings> settingsListener;
 	private final JCheckBox enabledCheckBox = new JCheckBox("Enable clicker");
 	private final JSlider volumeSlider = new JSlider(
@@ -40,16 +39,19 @@ final class ClickerPanel extends JPanel
 	private volatile ClickerSettings settings;
 	private volatile ClickerXpSettings xpSettings;
 	private final ClickerPhraseRulesPanel phraseRulesPanel;
+	private boolean updating;
+	private boolean remoteReadOnly;
+	private boolean previewAllowed = true;
 
 	ClickerPanel(
 		HapticScapeConfig config,
-		ConfigManager configManager,
+		SettingsChangeSink settingsSink,
 		Consumer<ClickerSettings> settingsListener,
 		Runnable testAction)
 	{
-		this.configManager = configManager;
+		this.settingsSink = settingsSink;
 		this.settingsListener = settingsListener;
-		phraseRulesPanel = new ClickerPhraseRulesPanel(config, configManager);
+		phraseRulesPanel = new ClickerPhraseRulesPanel(config, settingsSink);
 		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
 		setBorder(BorderFactory.createEmptyBorder(5, 4, 4, 4));
 
@@ -112,6 +114,53 @@ final class ClickerPanel extends JPanel
 		configureListeners(testAction);
 	}
 
+	void applyDisplayedSettings(
+		ClickerSettings displayedSettings,
+		ClickerXpSettings displayedXpSettings,
+		ClickerPhraseRules displayedPhraseRules)
+	{
+		settings = displayedSettings;
+		xpSettings = displayedXpSettings;
+		updating = true;
+		try
+		{
+			enabledCheckBox.setSelected(displayedSettings.isEnabled());
+			volumeSlider.setValue(clamp(
+				displayedSettings.getVolumePercent(),
+				ClickerSettings.MINIMUM_VOLUME_PERCENT,
+				ClickerSettings.MAXIMUM_VOLUME_PERCENT
+			));
+			minimumXpSpinner.setValue(clamp(
+				displayedXpSettings.getMinimumXpGain(),
+				ClickerXpSettings.MINIMUM_XP_GAIN,
+				ClickerXpSettings.MAXIMUM_XP_GAIN
+			));
+			levelUpCheckBox.setSelected(displayedXpSettings.isLevelUpEnabled());
+			milestoneCheckBox.setSelected(displayedXpSettings.isMilestoneEnabled());
+			level99CheckBox.setSelected(displayedXpSettings.isLevel99Enabled());
+			phraseRulesPanel.applyDisplayedRules(displayedPhraseRules);
+			refreshLabel();
+		}
+		finally
+		{
+			updating = false;
+		}
+		refreshEnabledState();
+	}
+
+	void setRemoteReadOnly(boolean remoteReadOnly)
+	{
+		this.remoteReadOnly = remoteReadOnly;
+		phraseRulesPanel.setRemoteReadOnly(remoteReadOnly);
+		refreshEnabledState();
+	}
+
+	void setPreviewAllowed(boolean previewAllowed)
+	{
+		this.previewAllowed = previewAllowed;
+		refreshEnabledState();
+	}
+
 	ClickerSettings getSettings()
 	{
 		return settings;
@@ -126,16 +175,26 @@ final class ClickerPanel extends JPanel
 	ClickerPhraseRules getPhraseRules()
 	{
 		return phraseRulesPanel.getRules();
-	}	private void configureListeners(Runnable testAction)
+	}
+
+	private void configureListeners(Runnable testAction)
 	{
 		enabledCheckBox.addActionListener(event ->
 		{
+			if (updating || remoteReadOnly)
+			{
+				return;
+			}
 			persist(HapticScapeConfig.CLICKER_ENABLED_KEY, enabledCheckBox.isSelected());
 			refreshEnabledState();
 			fireSettings();
 		});
 		volumeSlider.addChangeListener(event ->
 		{
+			if (updating || remoteReadOnly)
+			{
+				return;
+			}
 			refreshLabel();
 			if (!volumeSlider.getValueIsAdjusting())
 			{
@@ -148,6 +207,10 @@ final class ClickerPanel extends JPanel
 		});
 		minimumXpSpinner.addChangeListener(event ->
 		{
+			if (updating || remoteReadOnly)
+			{
+				return;
+			}
 			persist(
 				HapticScapeConfig.CLICKER_MINIMUM_XP_GAIN_KEY,
 				((Number) minimumXpSpinner.getValue()).intValue()
@@ -156,6 +219,10 @@ final class ClickerPanel extends JPanel
 		});
 		levelUpCheckBox.addActionListener(event ->
 		{
+			if (updating || remoteReadOnly)
+			{
+				return;
+			}
 			persist(
 				HapticScapeConfig.CLICKER_LEVEL_UP_ENABLED_KEY,
 				levelUpCheckBox.isSelected()
@@ -164,6 +231,10 @@ final class ClickerPanel extends JPanel
 		});
 		milestoneCheckBox.addActionListener(event ->
 		{
+			if (updating || remoteReadOnly)
+			{
+				return;
+			}
 			persist(
 				HapticScapeConfig.CLICKER_MILESTONE_ENABLED_KEY,
 				milestoneCheckBox.isSelected()
@@ -172,6 +243,10 @@ final class ClickerPanel extends JPanel
 		});
 		level99CheckBox.addActionListener(event ->
 		{
+			if (updating || remoteReadOnly)
+			{
+				return;
+			}
 			persist(
 				HapticScapeConfig.CLICKER_LEVEL_99_ENABLED_KEY,
 				level99CheckBox.isSelected()
@@ -188,14 +263,19 @@ final class ClickerPanel extends JPanel
 
 	private void refreshEnabledState()
 	{
+		boolean editable = !remoteReadOnly;
 		boolean enabled = enabledCheckBox.isSelected();
-		volumeSlider.setEnabled(enabled);
-		minimumXpSpinner.setEnabled(enabled);
-		levelUpCheckBox.setEnabled(enabled);
-		milestoneCheckBox.setEnabled(enabled);
-		level99CheckBox.setEnabled(enabled);
+		enabledCheckBox.setEnabled(editable);
+		volumeSlider.setEnabled(editable && enabled);
+		minimumXpSpinner.setEnabled(editable && enabled);
+		levelUpCheckBox.setEnabled(editable && enabled);
+		milestoneCheckBox.setEnabled(editable && enabled);
+		level99CheckBox.setEnabled(editable && enabled);
 		phraseRulesPanel.setClickerEnabled(enabled);
-		testButton.setEnabled(enabled && volumeSlider.getValue() > 0);
+		phraseRulesPanel.setRemoteReadOnly(remoteReadOnly);
+		testButton.setEnabled(
+			previewAllowed && editable && enabled && volumeSlider.getValue() > 0
+		);
 	}
 
 	private void fireSettings()
@@ -220,7 +300,7 @@ final class ClickerPanel extends JPanel
 
 	private void persist(String key, Object value)
 	{
-		configManager.setConfiguration(HapticScapeConfig.GROUP, key, value);
+		settingsSink.set(key, value);
 	}
 
 	private static JPanel row(String name, java.awt.Component control)
