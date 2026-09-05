@@ -57,7 +57,7 @@ final class RemoteMessageRouter
 				settings.handleSettings(role, state, permissions.getLocal(), message);
 				break;
 			case SETTINGS_ACK:
-				settings.handleAcknowledgement(role, state, permissions.getPeer(), message);
+				settings.handleAcknowledgement(role, message);
 				break;
 			case SETTINGS_REJECTED:
 				settings.handleRejected(role, state);

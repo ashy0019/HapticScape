@@ -61,6 +61,7 @@ import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPasswordField;
+import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
@@ -150,7 +151,6 @@ public final class HapticScapePanel extends PluginPanel
 	private final SettingsLockService settingsLockService;
 	private final RemoteControlPanel remoteControlPanel;
 	private final SidebarScrollRouter pageScrollRouter;
-	private final SidebarActionFocusGuard sidebarActionFocusGuard;
 	private final RoguePanel roguePanel;
 	private final RogueLauncherPanel rogueLauncher;
 	private boolean rogueModeUnlocked;
@@ -178,6 +178,7 @@ public final class HapticScapePanel extends PluginPanel
 	private boolean subjectWorkspaceSelected = true;
 	private boolean controllerSubjectAvailable;
 	private boolean updatingControllerWorkspaceTabs;
+	private RemoteSessionSnapshot appliedRemoteSessionSnapshot = RemoteSessionSnapshot.local();
 
 	public HapticScapePanel(
 		HapticScapeConfig config,
@@ -502,7 +503,6 @@ public final class HapticScapePanel extends PluginPanel
 		JScrollPane pageScrollPane = getScrollPane();
 		pageScrollPane.getVerticalScrollBar().setUnitIncrement(16);
 		pageScrollRouter = SidebarScrollRouter.install(pageScrollPane, this);
-		sidebarActionFocusGuard = SidebarActionFocusGuard.install(this);
 		contentLayout.show(contentHost, NORMAL_CARD);
 
 		if (Boolean.parseBoolean(configManager.getConfiguration(HapticScapeConfig.GROUP, ROGUE_UNLOCKED_KEY)))
@@ -943,7 +943,6 @@ public final class HapticScapePanel extends PluginPanel
 
 	public void close()
 	{
-		sidebarActionFocusGuard.close();
 		pageScrollRouter.close();
 		remoteSessionManager.removeListener(this);
 		settingsLockService.removeListener(this);
@@ -1448,6 +1447,13 @@ public final class HapticScapePanel extends PluginPanel
 
 	private void applyRemoteSessionState(RemoteSessionSnapshot snapshot)
 	{
+		boolean preserveControllerViewport = isContinuingControllerSession(
+			appliedRemoteSessionSnapshot,
+			snapshot
+		);
+		JScrollBar pageScrollBar = getScrollPane().getVerticalScrollBar();
+		int anchoredScrollPosition = pageScrollBar.getValue();
+
 		boolean participantControlled = snapshot.isParticipantControlled();
 		boolean controllerSession = snapshot.getRole() == RemoteRole.CONTROLLER
 			&& snapshot.getState() != RemoteSessionState.LOCAL;
@@ -1541,6 +1547,36 @@ public final class HapticScapePanel extends PluginPanel
 		applySettingsLockState(settingsLockService.isLocked());
 		revalidate();
 		repaint();
+		appliedRemoteSessionSnapshot = snapshot;
+		if (preserveControllerViewport)
+		{
+			// Session banners and the hidden Remote card both participate in the
+			// PluginPanel's preferred height. Restore after every queued layout pass
+			// so Emergency Off and Resume cannot move the controller's viewport.
+			SwingUtilities.invokeLater(() ->
+			{
+				RemoteSessionSnapshot current = remoteSessionManager.getSnapshot();
+				if (current.getRole() == snapshot.getRole()
+					&& current.getState() == snapshot.getState())
+				{
+					pageScrollBar.setValue(anchoredScrollPosition);
+				}
+			});
+		}
+	}
+
+	private static boolean isContinuingControllerSession(
+		RemoteSessionSnapshot previous,
+		RemoteSessionSnapshot next)
+	{
+		return isConnectedController(previous) && isConnectedController(next);
+	}
+
+	private static boolean isConnectedController(RemoteSessionSnapshot snapshot)
+	{
+		return snapshot.getRole() == RemoteRole.CONTROLLER
+			&& (snapshot.getState() == RemoteSessionState.ACTIVE
+				|| snapshot.getState() == RemoteSessionState.PEER_EMERGENCY_PAUSED);
 	}
 
 	private void applySettingsLockState(boolean locked)

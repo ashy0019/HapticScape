@@ -203,7 +203,7 @@ final class RemoteSettingsCoordinator
 			sender.send(RemoteMessageType.SETTINGS_SEED_ACK, 0, "");
 			if (peerPermissions.isSettingsAllowed())
 			{
-				sendSettings(true, role, RemoteSessionState.ACTIVE, peerPermissions);
+				sendSettings(true, role);
 			}
 		}
 		catch (RuntimeException e)
@@ -235,8 +235,6 @@ final class RemoteSettingsCoordinator
 
 	void handleAcknowledgement(
 		RemoteRole role,
-		RemoteSessionState state,
-		RemotePermissions peerPermissions,
 		RemoteProtocolMessage message)
 	{
 		if (role != RemoteRole.CONTROLLER)
@@ -260,8 +258,9 @@ final class RemoteSettingsCoordinator
 				return;
 			}
 			canonical.validate();
+			RemoteSettingsSnapshot acknowledgedDraft = controllerSettings;
 			boolean draftStillMatchesAcknowledgedRequest =
-				controllerSettings != null && controllerSettings.equals(lastSentSettings);
+				acknowledgedDraft != null && acknowledgedDraft.equals(lastSentSettings);
 			lastAcknowledgedVersion = acknowledgedVersion;
 			if (acknowledgedVersion == nextSettingsVersion)
 			{
@@ -269,10 +268,16 @@ final class RemoteSettingsCoordinator
 				if (draftStillMatchesAcknowledgedRequest)
 				{
 					controllerSettings = canonical;
-					settingsPublisher.accept(canonical);
+					// The controller UI already displays its optimistic draft. Reapplying
+					// an identical full snapshot rebuilds every Swing control and can move
+					// RuneLite's sidebar viewport. Publish only when the participant
+					// actually canonicalized the submitted values differently.
+					if (!canonical.equals(acknowledgedDraft))
+					{
+						settingsPublisher.accept(canonical);
+					}
 				}
 			}
-			sessionPublisher.accept(state, statusForController(state, peerPermissions));
 		}
 		catch (RuntimeException e)
 		{
@@ -299,11 +304,7 @@ final class RemoteSettingsCoordinator
 		sender.send(RemoteMessageType.SETTINGS_SEED, 0, gson.toJson(settings));
 	}
 
-	void sendSettings(
-		boolean force,
-		RemoteRole role,
-		RemoteSessionState state,
-		RemotePermissions peerPermissions)
+	void sendSettings(boolean force, RemoteRole role)
 	{
 		if (role != RemoteRole.CONTROLLER || controllerSettings == null)
 		{
@@ -320,7 +321,6 @@ final class RemoteSettingsCoordinator
 					nextSettingsVersion,
 					gson.toJson(settings)
 				);
-				sessionPublisher.accept(state, statusForController(state, peerPermissions));
 			}
 			return;
 		}
@@ -337,34 +337,6 @@ final class RemoteSettingsCoordinator
 				nextSettingsVersion = previousVersion;
 			}
 		}
-		sessionPublisher.accept(state, statusForController(state, peerPermissions));
-	}
-
-	String statusForController(
-		RemoteSessionState state,
-		RemotePermissions peerPermissions)
-	{
-		if (state == RemoteSessionState.PEER_EMERGENCY_PAUSED)
-		{
-			return "Participant used Emergency Off";
-		}
-		if (!peerPermissions.isSettingsAllowed())
-		{
-			return "Participant disabled remote settings";
-		}
-		if (nextSettingsVersion == 0)
-		{
-			return "Participant connected";
-		}
-		if (controllerSettings != null && !controllerSettings.equals(lastSentSettings))
-		{
-			return "Saving changes on participant...";
-		}
-		if (lastAcknowledgedVersion >= nextSettingsVersion)
-		{
-			return "Saved on participant";
-		}
-		return "Saving changes on participant...";
 	}
 
 	void reset()

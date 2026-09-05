@@ -368,7 +368,6 @@ public final class RemoteSessionManager implements AutoCloseable
 			SETTINGS_DEBOUNCE_MILLIS,
 			TimeUnit.MILLISECONDS
 		);
-		publish(snapshot.getState(), "Saving changes on participant...");
 		return true;
 	}
 
@@ -731,12 +730,7 @@ public final class RemoteSessionManager implements AutoCloseable
 
 	private void sendSettings(boolean force)
 	{
-		settingsCoordinator.sendSettings(
-			force,
-			role,
-			snapshot.getState(),
-			permissionsCoordinator.getPeer()
-		);
+		settingsCoordinator.sendSettings(force, role);
 	}
 
 	private boolean send(RemoteMessageType type, long version, String payload)

@@ -10,6 +10,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 import org.junit.Rule;
 import org.junit.Test;
@@ -55,6 +56,15 @@ public class RemoteSessionManagerTest
 		{
 			List<RemoteSettingsSnapshot> controllerViews = new ArrayList<>();
 			controller.addListener(new RecordingListener(controllerViews));
+			AtomicInteger controllerSessionEvents = new AtomicInteger();
+			controller.addListener(new RemoteSessionListener()
+			{
+				@Override
+				public void onRemoteSessionChanged(RemoteSessionSnapshot snapshot)
+				{
+					controllerSessionEvents.incrementAndGet();
+				}
+			});
 			RemoteInvitation invitation = controller.startController(
 				"wss://relay.example/relay"
 			);
@@ -67,6 +77,8 @@ public class RemoteSessionManagerTest
 				.getIntensityPercent());
 			assertEquals(12, controllerEffective.current().getGlobalXpFeedbackSettings()
 				.getIntensityPercent());
+			int controllerViewCountAfterSeed = controllerViews.size();
+			int controllerSessionEventsAfterSeed = controllerSessionEvents.get();
 
 			assertTrue(controller.updateControllerSetting(
 				HapticScapeConfig.INTENSITY_PERCENT_KEY,
@@ -74,9 +86,18 @@ public class RemoteSessionManagerTest
 			));
 			relay.dropNextFrom(RemoteRole.PARTICIPANT);
 			await(() -> participantConfig.intensityPercent() == 68);
-			assertEquals("Saving changes on participant...", controller.getSnapshot().getMessage());
 			controller.reconcileSettingsSafely();
-			assertEquals("Saved on participant", controller.getSnapshot().getMessage());
+			assertEquals("Participant settings loaded", controller.getSnapshot().getMessage());
+			assertEquals(
+				"An unchanged acknowledgement must not rebuild the controller UI",
+				controllerViewCountAfterSeed,
+				controllerViews.size()
+			);
+			assertEquals(
+				"Settings synchronization must not masquerade as a lifecycle change",
+				controllerSessionEventsAfterSeed,
+				controllerSessionEvents.get()
+			);
 
 			assertEquals(68, participantStore.capture().getGlobalXpFeedbackSettings()
 				.getIntensityPercent());
