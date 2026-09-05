@@ -150,6 +150,7 @@ public final class HapticScapePanel extends PluginPanel
 	private final SettingsLockService settingsLockService;
 	private final RemoteControlPanel remoteControlPanel;
 	private final SidebarScrollRouter pageScrollRouter;
+	private final SidebarActionFocusGuard sidebarActionFocusGuard;
 	private final RoguePanel roguePanel;
 	private final RogueLauncherPanel rogueLauncher;
 	private boolean rogueModeUnlocked;
@@ -501,6 +502,7 @@ public final class HapticScapePanel extends PluginPanel
 		JScrollPane pageScrollPane = getScrollPane();
 		pageScrollPane.getVerticalScrollBar().setUnitIncrement(16);
 		pageScrollRouter = SidebarScrollRouter.install(pageScrollPane, this);
+		sidebarActionFocusGuard = SidebarActionFocusGuard.install(this);
 		contentLayout.show(contentHost, NORMAL_CARD);
 
 		if (Boolean.parseBoolean(configManager.getConfiguration(HapticScapeConfig.GROUP, ROGUE_UNLOCKED_KEY)))
@@ -941,6 +943,7 @@ public final class HapticScapePanel extends PluginPanel
 
 	public void close()
 	{
+		sidebarActionFocusGuard.close();
 		pageScrollRouter.close();
 		remoteSessionManager.removeListener(this);
 		settingsLockService.removeListener(this);
