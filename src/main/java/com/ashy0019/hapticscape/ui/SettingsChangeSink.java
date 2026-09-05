@@ -1,5 +1,7 @@
 package com.ashy0019.hapticscape.ui;
 
+import com.ashy0019.hapticscape.remote.SettingsLockTarget;
+
 /**
  * Receives one editable HapticScape setting from a panel control.
  *
@@ -10,5 +12,10 @@ package com.ashy0019.hapticscape.ui;
 @FunctionalInterface
 interface SettingsChangeSink
 {
-	void set(String key, Object value);
+	void set(SettingsLockTarget target, String key, Object value);
+
+	default void set(String key, Object value)
+	{
+		set(null, key, value);
+	}
 }

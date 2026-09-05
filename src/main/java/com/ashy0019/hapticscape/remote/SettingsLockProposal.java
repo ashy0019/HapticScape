@@ -5,7 +5,11 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
@@ -16,7 +20,8 @@ import javax.crypto.spec.PBEKeySpec;
  */
 public final class SettingsLockProposal
 {
-	static final int SCHEMA_VERSION = 1;
+	static final int LEGACY_SCHEMA_VERSION = 1;
+	static final int SCHEMA_VERSION = 2;
 	static final String ALGORITHM = "PBKDF2WithHmacSHA256";
 	static final int ITERATIONS = 310_000;
 	static final int KEY_LENGTH_BITS = 256;
@@ -29,6 +34,7 @@ public final class SettingsLockProposal
 	private final int iterations;
 	private final String salt;
 	private final String verifier;
+	private final List<String> targets;
 
 	private SettingsLockProposal(
 		int schemaVersion,
@@ -36,7 +42,8 @@ public final class SettingsLockProposal
 		String algorithm,
 		int iterations,
 		String salt,
-		String verifier)
+		String verifier,
+		List<String> targets)
 	{
 		this.schemaVersion = schemaVersion;
 		this.proposalId = proposalId;
@@ -44,9 +51,31 @@ public final class SettingsLockProposal
 		this.iterations = iterations;
 		this.salt = salt;
 		this.verifier = verifier;
+		this.targets = targets;
 	}
 
+	/** Creates a legacy whole-settings proposal for API compatibility. */
 	public static SettingsLockProposal create(char[] password)
+	{
+		return createVerifier(password, LEGACY_SCHEMA_VERSION, Collections.emptyList());
+	}
+
+	public static SettingsLockProposal create(
+		char[] password,
+		Collection<SettingsLockTarget> targets)
+	{
+		List<String> targetIds = SettingsLockCatalog.ids(targets);
+		if (targetIds.isEmpty())
+		{
+			throw new IllegalArgumentException("Select at least one setting to lock");
+		}
+		return createVerifier(password, SCHEMA_VERSION, targetIds);
+	}
+
+	private static SettingsLockProposal createVerifier(
+		char[] password,
+		int schemaVersion,
+		List<String> targets)
 	{
 		Objects.requireNonNull(password, "password");
 		if (password.length < MINIMUM_PASSWORD_LENGTH)
@@ -62,12 +91,13 @@ public final class SettingsLockProposal
 		{
 			Base64.Encoder encoder = Base64.getEncoder();
 			return new SettingsLockProposal(
-				SCHEMA_VERSION,
+				schemaVersion,
 				UUID.randomUUID().toString(),
 				ALGORITHM,
 				ITERATIONS,
 				encoder.encodeToString(saltBytes),
-				encoder.encodeToString(derived)
+				encoder.encodeToString(derived),
+				targets
 			);
 		}
 		finally
@@ -82,11 +112,38 @@ public final class SettingsLockProposal
 		return proposalId;
 	}
 
+	public boolean isLegacyFullLock()
+	{
+		return schemaVersion == LEGACY_SCHEMA_VERSION;
+	}
+
+	public Set<SettingsLockTarget> getTargets()
+	{
+		return isLegacyFullLock()
+			? SettingsLockCatalog.allTargets()
+			: SettingsLockCatalog.resolve(targets);
+	}
+
 	public void validate()
 	{
-		if (schemaVersion != SCHEMA_VERSION)
+		if (schemaVersion != LEGACY_SCHEMA_VERSION && schemaVersion != SCHEMA_VERSION)
 		{
 			throw new IllegalArgumentException("Unsupported settings-lock format");
+		}
+		if (isLegacyFullLock())
+		{
+			if (targets != null && !targets.isEmpty())
+			{
+				throw new IllegalArgumentException("Legacy settings lock cannot contain targets");
+			}
+		}
+		else
+		{
+			if (targets == null || targets.isEmpty() || targets.size() > 128)
+			{
+				throw new IllegalArgumentException("Invalid settings-lock target count");
+			}
+			SettingsLockCatalog.resolve(targets);
 		}
 		if (!ALGORITHM.equals(algorithm))
 		{

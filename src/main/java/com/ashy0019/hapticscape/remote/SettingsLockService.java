@@ -4,8 +4,14 @@ import com.ashy0019.hapticscape.HapticScapeConfig;
 import com.google.gson.Gson;
 import java.nio.file.Path;
 import java.security.SecureRandom;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import net.runelite.client.RuneLite;
 
@@ -21,7 +27,7 @@ public final class SettingsLockService
 	private final SecureRandom random = new SecureRandom();
 	private final CopyOnWriteArrayList<SettingsLockListener> listeners =
 		new CopyOnWriteArrayList<>();
-	private volatile SettingsLockProposal current;
+	private volatile List<SettingsLockProposal> locks;
 
 	public SettingsLockService(Gson gson)
 	{
@@ -39,12 +45,31 @@ public final class SettingsLockService
 			Objects.requireNonNull(gson, "gson"),
 			Objects.requireNonNull(path, "path")
 		);
-		current = store.load().orElse(null);
+		locks = Collections.unmodifiableList(new ArrayList<>(store.load()));
 	}
 
 	public boolean isLocked()
 	{
-		return current != null;
+		return !locks.isEmpty();
+	}
+
+	public SettingsLockSnapshot getSnapshot()
+	{
+		Set<String> lockIds = new HashSet<>();
+		Set<SettingsLockTarget> targets = new HashSet<>();
+		boolean legacy = false;
+		for (SettingsLockProposal lock : locks)
+		{
+			lockIds.add(lock.getProposalId());
+			targets.addAll(lock.getTargets());
+			legacy |= lock.isLegacyFullLock();
+		}
+		return new SettingsLockSnapshot(lockIds, targets, legacy);
+	}
+
+	public boolean isLocked(SettingsLockTarget target)
+	{
+		return getSnapshot().isLocked(Objects.requireNonNull(target, "target"));
 	}
 
 	/**
@@ -54,13 +79,19 @@ public final class SettingsLockService
 	 */
 	public boolean canEditLocally(String configKey)
 	{
-		return !isLocked()
+		return !getSnapshot().isLegacyFullLock()
 			|| HapticScapeConfig.CUSTOM_PATTERNS_KEY.equals(configKey)
 			|| HapticScapeConfig.MUSIC_SYNC_ENABLED_KEY.equals(configKey)
 			|| HapticScapeConfig.MUSIC_RESPONSE_KEY.equals(configKey)
 			|| HapticScapeConfig.MUSIC_SENSITIVITY_PERCENT_KEY.equals(configKey)
 			|| HapticScapeConfig.MUSIC_MINIMUM_INTENSITY_PERCENT_KEY.equals(configKey)
 			|| HapticScapeConfig.MUSIC_MAXIMUM_INTENSITY_PERCENT_KEY.equals(configKey);
+	}
+
+	public boolean canEditLocally(SettingsLockTarget target, String configKey)
+	{
+		return canEditLocally(configKey)
+			&& (target == null || !isLocked(target));
 	}
 
 	/**
@@ -104,23 +135,75 @@ public final class SettingsLockService
 		}
 	}
 
+	public SettingsLockProposal createProposal(
+		char[] password,
+		Collection<SettingsLockTarget> targets)
+	{
+		char[] copy = Arrays.copyOf(
+			Objects.requireNonNull(password, "password"),
+			password.length
+		);
+		try
+		{
+			return SettingsLockProposal.create(copy, targets);
+		}
+		finally
+		{
+			Arrays.fill(copy, '\0');
+		}
+	}
+
 	public synchronized void arm(SettingsLockProposal proposal)
 	{
 		SettingsLockProposal validated = Objects.requireNonNull(proposal, "proposal");
 		validated.validate();
-		if (current != null)
+		validateCanArm(validated);
+		List<SettingsLockProposal> updated = new ArrayList<>(locks);
+		updated.add(validated);
+		store.save(updated);
+		locks = Collections.unmodifiableList(updated);
+		publish();
+	}
+
+	void validateCanArm(SettingsLockProposal proposal)
+	{
+		SettingsLockProposal validated = Objects.requireNonNull(proposal, "proposal");
+		SettingsLockSnapshot current = getSnapshot();
+		Set<SettingsLockTarget> overlap = new HashSet<>(validated.getTargets());
+		overlap.retainAll(current.getTargets());
+		if (current.isLegacyFullLock() || !overlap.isEmpty())
 		{
-			throw new IllegalStateException("Settings are already locked");
+			String conflict = overlap.isEmpty()
+				? "Settings are already locked"
+				: overlap.iterator().next().getDisplayName() + " is already locked";
+			throw new IllegalStateException(conflict);
 		}
-		store.save(validated);
-		current = validated;
-		publish(true);
+	}
+
+	public synchronized boolean removeLock(String lockId)
+	{
+		List<SettingsLockProposal> updated = new ArrayList<>(locks);
+		boolean removed = updated.removeIf(lock -> lock.getProposalId().equals(lockId));
+		if (!removed)
+		{
+			return false;
+		}
+		if (updated.isEmpty())
+		{
+			store.clear();
+		}
+		else
+		{
+			store.save(updated);
+		}
+		locks = Collections.unmodifiableList(updated);
+		publish();
+		return true;
 	}
 
 	public synchronized boolean unlock(char[] password)
 	{
-		SettingsLockProposal lock = current;
-		if (lock == null)
+		if (locks.isEmpty())
 		{
 			return true;
 		}
@@ -130,11 +213,31 @@ public final class SettingsLockService
 		);
 		try
 		{
-			if (!lock.verifies(copy))
+			int matchingIndex = -1;
+			for (int index = 0; index < locks.size(); index++)
+			{
+				if (locks.get(index).verifies(copy))
+				{
+					matchingIndex = index;
+					break;
+				}
+			}
+			if (matchingIndex < 0)
 			{
 				return false;
 			}
-			clearAllLocks();
+			List<SettingsLockProposal> updated = new ArrayList<>(locks);
+			updated.remove(matchingIndex);
+			if (updated.isEmpty())
+			{
+				store.clear();
+			}
+			else
+			{
+				store.save(updated);
+			}
+			locks = Collections.unmodifiableList(updated);
+			publish();
 			return true;
 		}
 		finally
@@ -146,11 +249,11 @@ public final class SettingsLockService
 	public synchronized void clearAllLocks()
 	{
 		store.clear();
-		boolean changed = current != null;
-		current = null;
+		boolean changed = !locks.isEmpty();
+		locks = Collections.emptyList();
 		if (changed)
 		{
-			publish(false);
+			publish();
 		}
 	}
 
@@ -158,7 +261,7 @@ public final class SettingsLockService
 	{
 		SettingsLockListener required = Objects.requireNonNull(listener, "listener");
 		listeners.add(required);
-		required.onSettingsLockChanged(isLocked());
+		required.onSettingsLockChanged(getSnapshot());
 	}
 
 	public void removeListener(SettingsLockListener listener)
@@ -166,11 +269,12 @@ public final class SettingsLockService
 		listeners.remove(listener);
 	}
 
-	private void publish(boolean locked)
+	private void publish()
 	{
+		SettingsLockSnapshot snapshot = getSnapshot();
 		for (SettingsLockListener listener : listeners)
 		{
-			listener.onSettingsLockChanged(locked);
+			listener.onSettingsLockChanged(snapshot);
 		}
 	}
 }

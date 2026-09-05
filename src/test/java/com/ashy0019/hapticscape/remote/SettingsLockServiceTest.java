@@ -6,11 +6,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.Collections;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -122,5 +124,94 @@ public class SettingsLockServiceTest
 		));
 		assertFalse(service.canEditLocally(HapticScapeConfig.INTENSITY_PERCENT_KEY));
 		assertFalse(service.canEditLocally(HapticScapeConfig.CLICKER_ENABLED_KEY));
+	}
+
+	@Test
+	public void disjointTargetLocksKeepIndependentKeysAcrossRestart() throws Exception
+	{
+		Gson gson = new Gson();
+		Path path = temporaryFolder.getRoot().toPath().resolve("atomic-locks.json");
+		char[] levelUpKey = "level up lock password".toCharArray();
+		char[] clickerKey = "clicker lock password".toCharArray();
+		try
+		{
+			SettingsLockService service = new SettingsLockService(gson, path);
+			service.arm(service.createProposal(
+				levelUpKey,
+				Collections.singleton(SettingsLockCatalog.LEVEL_UP_HAPTICS)
+			));
+			service.arm(service.createProposal(
+				clickerKey,
+				Collections.singleton(SettingsLockCatalog.CLICKER_ENABLED)
+			));
+
+			assertTrue(service.isLocked(SettingsLockCatalog.LEVEL_UP_HAPTICS));
+			assertTrue(service.isLocked(SettingsLockCatalog.CLICKER_ENABLED));
+			assertFalse(service.isLocked(SettingsLockCatalog.MILESTONE_HAPTICS));
+			assertFalse(service.canEditLocally(
+				SettingsLockCatalog.LEVEL_UP_HAPTICS,
+				HapticScapeConfig.LEVEL_UP_FEEDBACK_ENABLED_KEY
+			));
+			assertTrue(service.canEditLocally(
+				SettingsLockCatalog.MILESTONE_HAPTICS,
+				HapticScapeConfig.MILESTONE_FEEDBACK_ENABLED_KEY
+			));
+			assertEquals(2, service.getSnapshot().getLockCount());
+
+			assertTrue(service.unlock(levelUpKey));
+			assertFalse(service.isLocked(SettingsLockCatalog.LEVEL_UP_HAPTICS));
+			assertTrue(service.isLocked(SettingsLockCatalog.CLICKER_ENABLED));
+
+			SettingsLockService restarted = new SettingsLockService(gson, path);
+			assertFalse(restarted.isLocked(SettingsLockCatalog.LEVEL_UP_HAPTICS));
+			assertTrue(restarted.isLocked(SettingsLockCatalog.CLICKER_ENABLED));
+			assertTrue(restarted.unlock(clickerKey));
+			assertFalse(restarted.isLocked());
+		}
+		finally
+		{
+			Arrays.fill(levelUpKey, '\0');
+			Arrays.fill(clickerKey, '\0');
+		}
+	}
+
+	@Test(expected = IllegalStateException.class)
+	public void overlappingTargetProposalIsRejectedAtomically()
+	{
+		SettingsLockService service = new SettingsLockService(
+			new Gson(),
+			temporaryFolder.getRoot().toPath().resolve("overlap-lock.json")
+		);
+		service.arm(service.createProposal(
+			"first target password".toCharArray(),
+			Collections.singleton(SettingsLockCatalog.LEVEL_UP_HAPTICS)
+		));
+		service.arm(service.createProposal(
+			"second target password".toCharArray(),
+			Collections.singleton(SettingsLockCatalog.LEVEL_UP_HAPTICS)
+		));
+	}
+
+	@Test
+	public void legacySingleProposalFileStillLoadsAsFullLock() throws Exception
+	{
+		Gson gson = new Gson();
+		Path path = temporaryFolder.getRoot().toPath().resolve("legacy-lock.json");
+		char[] password = "legacy lock password".toCharArray();
+		try
+		{
+			SettingsLockProposal legacy = SettingsLockProposal.create(password);
+			Files.write(path, gson.toJson(legacy).getBytes(StandardCharsets.UTF_8));
+
+			SettingsLockService service = new SettingsLockService(gson, path);
+			assertTrue(service.getSnapshot().isLegacyFullLock());
+			assertTrue(service.isLocked(SettingsLockCatalog.LEVEL_UP_HAPTICS));
+			assertFalse(service.canEditLocally(HapticScapeConfig.CLICKER_ENABLED_KEY));
+			assertTrue(service.unlock(password));
+		}
+		finally
+		{
+			Arrays.fill(password, '\0');
+		}
 	}
 }

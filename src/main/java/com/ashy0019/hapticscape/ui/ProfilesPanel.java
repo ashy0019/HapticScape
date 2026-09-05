@@ -6,8 +6,13 @@ import com.ashy0019.hapticscape.HapticScapeConfig;
 import com.ashy0019.hapticscape.SkillFeedbackProfiles;
 import com.ashy0019.hapticscape.SkillSelection;
 import com.ashy0019.hapticscape.XpFeedbackSettings;
+import com.ashy0019.hapticscape.remote.RemoteSessionManager;
+import com.ashy0019.hapticscape.remote.SettingsLockCatalog;
+import com.ashy0019.hapticscape.remote.SettingsLockService;
+import com.ashy0019.hapticscape.remote.SettingsLockTarget;
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -37,6 +42,7 @@ final class ProfilesPanel extends JPanel
 	private final JComboBox<HapticPatternSelection> patternComboBox;
 	private final JSpinner durationSpinner;
 	private final JButton testButton = new JButton("Test selected skill");
+	private final LockableCheckBoxBinding useGlobalLockBinding;
 
 	private volatile SkillFeedbackProfiles profiles;
 	private volatile Skill selectedSkill;
@@ -51,7 +57,12 @@ final class ProfilesPanel extends JPanel
 		SettingsChangeSink settingsSink,
 		Supplier<XpFeedbackSettings> globalSettingsSupplier,
 		Supplier<CustomPatternLibrary> customPatternsSupplier,
-		Runnable testAction)
+		Runnable testAction,
+		RemoteSessionManager sessionManager,
+		SettingsLockService lockService,
+		SettingsLockDraft lockDraft,
+		BooleanSupplier editingRemoteSubject,
+		BooleanSupplier lockSelectionEnabled)
 	{
 		this.profiles = profiles;
 		this.settingsSink = settingsSink;
@@ -151,7 +162,23 @@ final class ProfilesPanel extends JPanel
 				loadSelectedProfile();
 			}
 		});
-		useGlobalCheckBox.addActionListener(event -> toggleOverride());
+		useGlobalLockBinding = new LockableCheckBoxBinding(
+			useGlobalCheckBox,
+			() -> SettingsLockCatalog.profileUsesGlobal(selectedSkill),
+			lockDraft,
+			lockService,
+			sessionManager::getLockSnapshot,
+			editingRemoteSubject,
+			lockSelectionEnabled,
+			() -> !profiles.getOverride(selectedSkill).isPresent()
+		);
+		useGlobalCheckBox.addActionListener(event ->
+		{
+			if (!useGlobalLockBinding.handleAction(event))
+			{
+				toggleOverride();
+			}
+		});
 		minimumXpSpinner.addChangeListener(event -> updateSelectedProfile());
 		intensitySlider.addChangeListener(event ->
 		{
@@ -255,7 +282,10 @@ final class ProfilesPanel extends JPanel
 
 	private void toggleOverride()
 	{
-		if (remoteReadOnly || updatingControls || selectedSkill == null)
+		if (remoteReadOnly
+			|| updatingControls
+			|| selectedSkill == null
+			|| useGlobalLockBinding.isEditLocked())
 		{
 			return;
 		}
@@ -267,7 +297,7 @@ final class ProfilesPanel extends JPanel
 		{
 			profiles = profiles.withOverride(selectedSkill, globalSettingsSupplier.get());
 		}
-		persist();
+		persist(SettingsLockCatalog.profileUsesGlobal(selectedSkill));
 		loadSelectedProfile();
 	}
 
@@ -336,7 +366,8 @@ final class ProfilesPanel extends JPanel
 		boolean externallyScaled = pattern == null || !pattern.isCustom();
 		// Skill selection is navigation only and remains available in remote mode.
 		skillComboBox.setEnabled(true);
-		useGlobalCheckBox.setEnabled(editable);
+		useGlobalLockBinding.refresh();
+		useGlobalCheckBox.setEnabled(editable && !useGlobalLockBinding.isEditLocked());
 		minimumXpSpinner.setEnabled(editable && overridden);
 		patternComboBox.setEnabled(editable && overridden);
 		intensitySlider.setEnabled(editable && overridden && externallyScaled);
@@ -348,6 +379,15 @@ final class ProfilesPanel extends JPanel
 	private void persist()
 	{
 		settingsSink.set(
+			HapticScapeConfig.SKILL_FEEDBACK_PROFILES_KEY,
+			profiles.toConfigValue()
+		);
+	}
+
+	private void persist(SettingsLockTarget target)
+	{
+		settingsSink.set(
+			target,
 			HapticScapeConfig.SKILL_FEEDBACK_PROFILES_KEY,
 			profiles.toConfigValue()
 		);

@@ -6,6 +6,7 @@ import com.ashy0019.hapticscape.HapticScapeConfig;
 import com.google.gson.Gson;
 import java.time.Clock;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -208,6 +209,60 @@ public class RemoteSessionManagerTest
 			assertTrue(participantLock.unlock(password));
 			assertFalse(participantLock.isLocked());
 			assertFalse(controllerLock.isLocked());
+		}
+		finally
+		{
+			java.util.Arrays.fill(password, '\0');
+		}
+	}
+
+	@Test
+	public void targetedLockProposalPreservesExactTargetAcrossRelay()
+	{
+		Gson gson = new Gson();
+		TestRelay relay = new TestRelay();
+		MutableConfig controllerConfig = new MutableConfig(20);
+		MutableConfig participantConfig = new MutableConfig(60);
+		SettingsLockService participantLock = lockService("targeted-participant.json");
+		char[] password = "targeted lock password".toCharArray();
+		try (RemoteSessionManager controller = new RemoteSessionManager(
+			gson,
+			new MemoryStore(controllerConfig),
+			new EffectiveSettingsService(controllerConfig),
+			lockService("targeted-controller.json"),
+			relay);
+			RemoteSessionManager participant = new RemoteSessionManager(
+				gson,
+				new MemoryStore(participantConfig),
+				new EffectiveSettingsService(participantConfig),
+				participantLock,
+				relay))
+		{
+			RemoteInvitation invitation = controller.startController(
+				"wss://relay.example/relay"
+			);
+			participant.joinParticipant(invitation.encode());
+			controller.proposeSettingsLock(
+				password,
+				Collections.singleton(SettingsLockCatalog.skillClicks(
+					net.runelite.api.Skill.FISHING
+				))
+			);
+
+			assertEquals(
+				Collections.singleton(SettingsLockCatalog.skillClicks(
+					net.runelite.api.Skill.FISHING
+				)),
+				participant.getLockSnapshot().getTargets()
+			);
+			participant.acceptPendingSettingsLock();
+			assertTrue(participantLock.isLocked(
+				SettingsLockCatalog.skillClicks(net.runelite.api.Skill.FISHING)
+			));
+			assertFalse(participantLock.isLocked(
+				SettingsLockCatalog.skillHaptics(net.runelite.api.Skill.FISHING)
+			));
+			assertTrue(participantLock.unlock(password));
 		}
 		finally
 		{

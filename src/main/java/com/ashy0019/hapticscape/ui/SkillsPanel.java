@@ -2,10 +2,18 @@ package com.ashy0019.hapticscape.ui;
 
 import com.ashy0019.hapticscape.HapticScapeConfig;
 import com.ashy0019.hapticscape.SkillSelection;
+import com.ashy0019.hapticscape.remote.RemoteSessionManager;
+import com.ashy0019.hapticscape.remote.SettingsLockCatalog;
+import com.ashy0019.hapticscape.remote.SettingsLockService;
+import com.ashy0019.hapticscape.remote.SettingsLockTarget;
 import java.awt.BorderLayout;
 import java.awt.GridLayout;
+import java.awt.event.ActionEvent;
+import java.util.LinkedHashSet;
 import java.util.EnumMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.BooleanSupplier;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
@@ -19,10 +27,16 @@ final class SkillsPanel extends JPanel
 	private final SettingsChangeSink settingsSink;
 	private final JLabel enabledSkillsValueLabel = new JLabel();
 	private final Map<Skill, JCheckBox> skillCheckBoxes = new EnumMap<>(Skill.class);
+	private final Map<Skill, LockableCheckBoxBinding> lockBindings =
+		new EnumMap<>(Skill.class);
 	private final JComboBox<SkillOutput> outputSelector =
 		new JComboBox<>(SkillOutput.values());
 	private final JButton allSkillsButton = new JButton("All");
 	private final JButton noSkillsButton = new JButton("None");
+	private final RemoteSessionManager sessionManager;
+	private final SettingsLockDraft lockDraft;
+	private final BooleanSupplier editingRemoteSubject;
+	private final BooleanSupplier lockSelectionEnabled;
 	private volatile SkillSelection hapticSkillSelection;
 	private volatile SkillSelection clickSkillSelection;
 	private boolean updatingSkillCheckBoxes;
@@ -31,11 +45,20 @@ final class SkillsPanel extends JPanel
 	SkillsPanel(
 		SkillSelection hapticSkillSelection,
 		SkillSelection clickSkillSelection,
-		SettingsChangeSink settingsSink)
+		SettingsChangeSink settingsSink,
+		RemoteSessionManager sessionManager,
+		SettingsLockService lockService,
+		SettingsLockDraft lockDraft,
+		BooleanSupplier editingRemoteSubject,
+		BooleanSupplier lockSelectionEnabled)
 	{
 		this.hapticSkillSelection = hapticSkillSelection;
 		this.clickSkillSelection = clickSkillSelection;
 		this.settingsSink = settingsSink;
+		this.sessionManager = sessionManager;
+		this.lockDraft = lockDraft;
+		this.editingRemoteSubject = editingRemoteSubject;
+		this.lockSelectionEnabled = lockSelectionEnabled;
 		setLayout(new BorderLayout(0, 4));
 		setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
 
@@ -47,10 +70,30 @@ final class SkillsPanel extends JPanel
 		outputRow.add(outputSelector, BorderLayout.EAST);
 
 		allSkillsButton.setToolTipText("Enable every skill for the selected output");
-		allSkillsButton.addActionListener(event -> setAllSkillsEnabled(true));
+		allSkillsButton.addActionListener(event ->
+		{
+			if (isShift(event) && lockSelectionEnabled.getAsBoolean())
+			{
+				setAllSkillsLockSelected(true);
+			}
+			else
+			{
+				setAllSkillsEnabled(true);
+			}
+		});
 
 		noSkillsButton.setToolTipText("Disable every skill for the selected output");
-		noSkillsButton.addActionListener(event -> setAllSkillsEnabled(false));
+		noSkillsButton.addActionListener(event ->
+		{
+			if (isShift(event) && lockSelectionEnabled.getAsBoolean())
+			{
+				setAllSkillsLockSelected(false);
+			}
+			else
+			{
+				setAllSkillsEnabled(false);
+			}
+		});
 
 		JPanel bulkSkillButtons = new JPanel(new GridLayout(1, 2, 4, 0));
 		bulkSkillButtons.add(allSkillsButton);
@@ -71,8 +114,25 @@ final class SkillsPanel extends JPanel
 				skill.getName(),
 				hapticSkillSelection.isEnabled(skill)
 			);
-			checkBox.addActionListener(event -> setSkillEnabled(skill, checkBox.isSelected()));
+			LockableCheckBoxBinding binding = new LockableCheckBoxBinding(
+				checkBox,
+				() -> targetFor(selectedOutput(), skill),
+				lockDraft,
+				lockService,
+				sessionManager::getLockSnapshot,
+				editingRemoteSubject,
+				lockSelectionEnabled,
+				() -> selectionFor(selectedOutput()).isEnabled(skill)
+			);
+			checkBox.addActionListener(event ->
+			{
+				if (!binding.handleAction(event))
+				{
+					setSkillEnabled(skill, checkBox.isSelected());
+				}
+			});
 			skillCheckBoxes.put(skill, checkBox);
+			lockBindings.put(skill, binding);
 			skillGrid.add(checkBox);
 		}
 		add(skillGrid, BorderLayout.CENTER);
@@ -118,7 +178,7 @@ final class SkillsPanel extends JPanel
 		SkillOutput output = selectedOutput();
 		SkillSelection updated = selectionFor(output).withEnabled(skill, enabled);
 		setSelection(output, updated);
-		persist(output, updated);
+		persist(output, skill, updated);
 		updateEnabledSkillsLabel();
 	}
 
@@ -129,7 +189,15 @@ final class SkillsPanel extends JPanel
 			return;
 		}
 		SkillOutput output = selectedOutput();
-		SkillSelection updated = selectionFor(output).withAllEnabled(enabled);
+		SkillSelection updated = selectionFor(output);
+		for (Skill skill : SkillSelection.getSelectableSkills())
+		{
+			LockableCheckBoxBinding binding = lockBindings.get(skill);
+			if (editingRemoteSubject.getAsBoolean() || !binding.isEditLocked())
+			{
+				updated = updated.withEnabled(skill, enabled);
+			}
+		}
 		setSelection(output, updated);
 		updatingSkillCheckBoxes = true;
 		try
@@ -143,13 +211,30 @@ final class SkillsPanel extends JPanel
 		{
 			updatingSkillCheckBoxes = false;
 		}
-		persist(output, updated);
+		persist(output, null, updated);
 		updateEnabledSkillsLabel();
 	}
 
-	private void persist(SkillOutput output, SkillSelection selection)
+	private void setAllSkillsLockSelected(boolean selected)
 	{
+		Set<SettingsLockTarget> targets = new LinkedHashSet<>();
+		SkillOutput output = selectedOutput();
+		for (Skill skill : SkillSelection.getSelectableSkills())
+		{
+			targets.add(targetFor(output, skill));
+		}
+		lockDraft.setAll(targets, selected);
+		refreshReadOnlyState();
+	}
+
+	private void persist(
+		SkillOutput output,
+		Skill skill,
+		SkillSelection selection)
+	{
+		SettingsLockTarget target = skill == null ? null : targetFor(output, skill);
 		settingsSink.set(
+			target,
 			output == SkillOutput.HAPTICS
 				? HapticScapeConfig.DISABLED_SKILLS_KEY
 				: HapticScapeConfig.CLICKER_DISABLED_SKILLS_KEY,
@@ -189,9 +274,11 @@ final class SkillsPanel extends JPanel
 
 	private void refreshReadOnlyState()
 	{
-		for (JCheckBox checkBox : skillCheckBoxes.values())
+		for (Map.Entry<Skill, JCheckBox> entry : skillCheckBoxes.entrySet())
 		{
-			checkBox.setEnabled(!remoteReadOnly);
+			LockableCheckBoxBinding binding = lockBindings.get(entry.getKey());
+			binding.refresh();
+			entry.getValue().setEnabled(!remoteReadOnly && !binding.isEditLocked());
 		}
 		allSkillsButton.setEnabled(!remoteReadOnly);
 		noSkillsButton.setEnabled(!remoteReadOnly);
@@ -222,6 +309,18 @@ final class SkillsPanel extends JPanel
 		{
 			clickSkillSelection = selection;
 		}
+	}
+
+	private SettingsLockTarget targetFor(SkillOutput output, Skill skill)
+	{
+		return output == SkillOutput.HAPTICS
+			? SettingsLockCatalog.skillHaptics(skill)
+			: SettingsLockCatalog.skillClicks(skill);
+	}
+
+	private static boolean isShift(ActionEvent event)
+	{
+		return (event.getModifiers() & ActionEvent.SHIFT_MASK) != 0;
 	}
 
 	private enum SkillOutput

@@ -11,7 +11,12 @@ import com.ashy0019.hapticscape.HapticPatternSelection;
 import com.ashy0019.hapticscape.HapticScapeConfig;
 import com.ashy0019.hapticscape.NotificationFeedbackSettings;
 import com.ashy0019.hapticscape.clicker.ClickerAlertSettings;
+import com.ashy0019.hapticscape.remote.RemoteSessionManager;
+import com.ashy0019.hapticscape.remote.SettingsLockCatalog;
+import com.ashy0019.hapticscape.remote.SettingsLockService;
+import com.ashy0019.hapticscape.remote.SettingsLockTarget;
 import java.awt.BorderLayout;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import javax.swing.BorderFactory;
@@ -56,6 +61,10 @@ final class AlertsPanel extends JPanel
 	private final JComboBox<HapticPatternSelection> specificPatternComboBox;
 	private final JSpinner specificDurationSpinner;
 	private final JButton testSpecificButton = new JButton("Test alert");
+	private final LockableCheckBoxBinding genericEnabledLockBinding;
+	private final LockableCheckBoxBinding genericClickLockBinding;
+	private final LockableCheckBoxBinding respectFocusLockBinding;
+	private final LockableCheckBoxBinding specificClickLockBinding;
 
 	private volatile boolean genericEnabled;
 	private volatile boolean genericClickEnabled;
@@ -79,7 +88,12 @@ final class AlertsPanel extends JPanel
 		SettingsChangeSink settingsSink,
 		Supplier<CustomPatternLibrary> customPatternsSupplier,
 		Runnable testGenericAction,
-		Consumer<AlertCategory> testSpecificAction)
+		Consumer<AlertCategory> testSpecificAction,
+		RemoteSessionManager sessionManager,
+		SettingsLockService lockService,
+		SettingsLockDraft lockDraft,
+		BooleanSupplier editingRemoteSubject,
+		BooleanSupplier lockSelectionEnabled)
 	{
 		this.settingsSink = settingsSink;
 		this.customPatternsSupplier = customPatternsSupplier;
@@ -148,6 +162,46 @@ final class AlertsPanel extends JPanel
 		add(createGenericPanel());
 		add(Box.createVerticalStrut(6));
 		add(createSpecificPanel());
+		genericEnabledLockBinding = binding(
+			genericEnabledCheckBox,
+			SettingsLockCatalog.GENERIC_NOTIFICATION_HAPTICS,
+			lockDraft,
+			lockService,
+			sessionManager,
+			editingRemoteSubject,
+			lockSelectionEnabled,
+			() -> genericEnabled
+		);
+		genericClickLockBinding = binding(
+			genericClickEnabledCheckBox,
+			SettingsLockCatalog.GENERIC_NOTIFICATION_CLICKS,
+			lockDraft,
+			lockService,
+			sessionManager,
+			editingRemoteSubject,
+			lockSelectionEnabled,
+			() -> genericClickEnabled
+		);
+		respectFocusLockBinding = binding(
+			respectFocusCheckBox,
+			SettingsLockCatalog.NOTIFICATION_RESPECT_FOCUS,
+			lockDraft,
+			lockService,
+			sessionManager,
+			editingRemoteSubject,
+			lockSelectionEnabled,
+			() -> respectFocus
+		);
+		specificClickLockBinding = new LockableCheckBoxBinding(
+			specificClickEnabledCheckBox,
+			() -> SettingsLockCatalog.alertClicks(selectedCategory),
+			lockDraft,
+			lockService,
+			sessionManager::getLockSnapshot,
+			editingRemoteSubject,
+			lockSelectionEnabled,
+			() -> clickerAlertSettings.isEnabled(selectedCategory)
+		);
 		configureListeners(testGenericAction, testSpecificAction);
 
 		persistMigratedSettings(configuredProfiles, config.alertTriggerSettings());
@@ -388,8 +442,17 @@ final class AlertsPanel extends JPanel
 	{
 		genericEnabledCheckBox.addActionListener(event ->
 		{
+			if (updatingGenericControls || genericEnabledLockBinding.handleAction(event))
+			{
+				return;
+			}
+			if (remoteReadOnly || genericEnabledLockBinding.isEditLocked())
+			{
+				return;
+			}
 			genericEnabled = genericEnabledCheckBox.isSelected();
 			settingsSink.set(
+				SettingsLockCatalog.GENERIC_NOTIFICATION_HAPTICS,
 				HapticScapeConfig.NOTIFICATION_FEEDBACK_ENABLED_KEY,
 				genericEnabled
 			);
@@ -397,8 +460,17 @@ final class AlertsPanel extends JPanel
 		});
 		genericClickEnabledCheckBox.addActionListener(event ->
 		{
+			if (updatingGenericControls || genericClickLockBinding.handleAction(event))
+			{
+				return;
+			}
+			if (remoteReadOnly || genericClickLockBinding.isEditLocked())
+			{
+				return;
+			}
 			genericClickEnabled = genericClickEnabledCheckBox.isSelected();
 			settingsSink.set(
+				SettingsLockCatalog.GENERIC_NOTIFICATION_CLICKS,
 				HapticScapeConfig.CLICKER_GENERIC_NOTIFICATION_ENABLED_KEY,
 				genericClickEnabled
 			);
@@ -406,8 +478,17 @@ final class AlertsPanel extends JPanel
 		});
 		respectFocusCheckBox.addActionListener(event ->
 		{
+			if (updatingGenericControls || respectFocusLockBinding.handleAction(event))
+			{
+				return;
+			}
+			if (remoteReadOnly || respectFocusLockBinding.isEditLocked())
+			{
+				return;
+			}
 			respectFocus = respectFocusCheckBox.isSelected();
 			settingsSink.set(
+				SettingsLockCatalog.NOTIFICATION_RESPECT_FOCUS,
 				HapticScapeConfig.NOTIFICATION_RESPECT_FOCUS_KEY,
 				respectFocus
 			);
@@ -463,7 +544,11 @@ final class AlertsPanel extends JPanel
 		});
 		specificClickEnabledCheckBox.addActionListener(event ->
 		{
-			if (updatingSpecificControls)
+			if (updatingSpecificControls || specificClickLockBinding.handleAction(event))
+			{
+				return;
+			}
+			if (remoteReadOnly || specificClickLockBinding.isEditLocked())
 			{
 				return;
 			}
@@ -471,7 +556,7 @@ final class AlertsPanel extends JPanel
 				selectedCategory,
 				specificClickEnabledCheckBox.isSelected()
 			);
-			persistClickerAlertSettings();
+			persistClickerAlertSettings(SettingsLockCatalog.alertClicks(selectedCategory));
 			updateSpecificControlState();
 		});
 		behaviorComboBox.addActionListener(event ->
@@ -584,9 +669,12 @@ final class AlertsPanel extends JPanel
 		HapticPatternSelection pattern =
 			(HapticPatternSelection) genericPatternComboBox.getSelectedItem();
 		boolean externallyScaled = pattern == null || !pattern.isCustom();
-		genericEnabledCheckBox.setEnabled(editable);
-		genericClickEnabledCheckBox.setEnabled(editable);
-		respectFocusCheckBox.setEnabled(editable);
+		genericEnabledLockBinding.refresh();
+		genericClickLockBinding.refresh();
+		respectFocusLockBinding.refresh();
+		genericEnabledCheckBox.setEnabled(editable && !genericEnabledLockBinding.isEditLocked());
+		genericClickEnabledCheckBox.setEnabled(editable && !genericClickLockBinding.isEditLocked());
+		respectFocusCheckBox.setEnabled(editable && !respectFocusLockBinding.isEditLocked());
 		genericPatternComboBox.setEnabled(editable);
 		genericIntensitySlider.setEnabled(editable && externallyScaled);
 		genericIntensityValueLabel.setEnabled(editable && externallyScaled);
@@ -608,7 +696,10 @@ final class AlertsPanel extends JPanel
 		// Category selection is navigation only, so the participant can inspect every alert.
 		categoryComboBox.setEnabled(true);
 		behaviorComboBox.setEnabled(editable);
-		specificClickEnabledCheckBox.setEnabled(editable);
+		specificClickLockBinding.refresh();
+		specificClickEnabledCheckBox.setEnabled(
+			editable && !specificClickLockBinding.isEditLocked()
+		);
 		triggerSpinner.setEnabled(editable && selectedCategory.hasTriggerParameter());
 		specificPatternComboBox.setEnabled(editable && customConfiguration);
 		specificIntensitySlider.setEnabled(editable && customConfiguration && externallyScaled);
@@ -658,11 +749,34 @@ final class AlertsPanel extends JPanel
 		);
 	}
 
-	private void persistClickerAlertSettings()
+	private void persistClickerAlertSettings(SettingsLockTarget target)
 	{
 		settingsSink.set(
+			target,
 			HapticScapeConfig.CLICKER_ALERT_SETTINGS_KEY,
 			clickerAlertSettings.toConfigValue()
+		);
+	}
+
+	private static LockableCheckBoxBinding binding(
+		JCheckBox checkBox,
+		SettingsLockTarget target,
+		SettingsLockDraft lockDraft,
+		SettingsLockService lockService,
+		RemoteSessionManager sessionManager,
+		BooleanSupplier editingRemoteSubject,
+		BooleanSupplier lockSelectionEnabled,
+		BooleanSupplier authoritativeValue)
+	{
+		return new LockableCheckBoxBinding(
+			checkBox,
+			target,
+			lockDraft,
+			lockService,
+			sessionManager::getLockSnapshot,
+			editingRemoteSubject,
+			lockSelectionEnabled,
+			authoritativeValue
 		);
 	}
 
