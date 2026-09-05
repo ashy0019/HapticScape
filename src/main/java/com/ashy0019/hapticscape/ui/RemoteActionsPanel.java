@@ -247,6 +247,9 @@ final class RemoteActionsPanel extends JPanel
 			setActionStatus("Ready for remote actions");
 		}
 
+		// Raise the controls from the pre-handshake 0% / 50 ms sentinel to the
+		// participant's real ranges before assigning their session defaults.
+		applySafetyCaps();
 		if (controllerSession && settings != null)
 		{
 			XpFeedbackSettings global = settings.getGlobalXpFeedbackSettings();
@@ -256,12 +259,9 @@ final class RemoteActionsPanel extends JPanel
 			customPatterns = settings.getCustomPatterns();
 			PanelUi.setPatternChoices(pattern, selected, customPatterns);
 			updatePatternTooltip();
-			if (!controllerValuesInitialized)
+			if (!controllerValuesInitialized && hasAdvertisedHapticLimits())
 			{
-				intensity.setValue(Math.min(
-					DEFAULT_INTENSITY_PERCENT,
-					permissions.getMaximumIntensityPercent()
-				));
+				intensity.setValue(permissions.getMaximumIntensityPercent());
 				duration.setValue(Math.min(
 					DEFAULT_DURATION_MILLIS,
 					permissions.getMaximumDurationMillis()
@@ -270,10 +270,20 @@ final class RemoteActionsPanel extends JPanel
 			}
 		}
 
-		applySafetyCaps();
 		updateEnabledState();
 		revalidate();
 		repaint();
+	}
+
+	private boolean hasAdvertisedHapticLimits()
+	{
+		// The controller starts with RemotePermissions.none() until the
+		// participant's encrypted permission snapshot arrives. Do not turn that
+		// temporary 0% / 50 ms sentinel into the session's permanent defaults.
+		return permissions.isHapticsAllowed()
+			|| permissions.getMaximumIntensityPercent() > 0
+			|| permissions.getMaximumDurationMillis()
+				> RemotePermissions.MINIMUM_DURATION_MILLIS;
 	}
 
 	void showAcknowledgement(RemoteActionAcknowledgement acknowledgement)

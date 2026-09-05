@@ -230,6 +230,32 @@ public class RemoteActionsPanelTest
 		assertEquals(500, dispatcher.duration);
 	}
 
+	@Test
+	public void waitsForParticipantCapsBeforeInitializingBuzzDefaults() throws Exception
+	{
+		RecordingDispatcher dispatcher = new RecordingDispatcher();
+		RemoteActionsPanel panel = onEdt(() -> new RemoteActionsPanel(dispatcher));
+		RemotePermissions pendingPermissions = new RemotePermissions(
+			false, false, false, false, false, 0, 50
+		);
+		RemotePermissions participantPermissions = new RemotePermissions(
+			true, true, false, true, true, 80, 3_000
+		);
+
+		onEdt(() ->
+		{
+			// Settings and permissions are independent encrypted messages. Reproduce
+			// the ordering where the settings seed reaches the controller first.
+			panel.apply(activeController(), pendingPermissions, subjectSettings());
+			panel.apply(activeController(), participantPermissions, subjectSettings());
+			component(panel, "remoteBuzz", AbstractButton.class).doClick();
+			return null;
+		});
+
+		assertEquals(80, dispatcher.intensity);
+		assertEquals(500, dispatcher.duration);
+	}
+
 	private static RemoteSessionSnapshot activeController()
 	{
 		return new RemoteSessionSnapshot(

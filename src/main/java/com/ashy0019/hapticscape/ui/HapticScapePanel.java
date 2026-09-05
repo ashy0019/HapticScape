@@ -61,6 +61,7 @@ import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPasswordField;
+import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
@@ -177,6 +178,7 @@ public final class HapticScapePanel extends PluginPanel
 	private boolean subjectWorkspaceSelected = true;
 	private boolean controllerSubjectAvailable;
 	private boolean updatingControllerWorkspaceTabs;
+	private RemoteSessionSnapshot appliedRemoteSessionSnapshot = RemoteSessionSnapshot.local();
 
 	public HapticScapePanel(
 		HapticScapeConfig config,
@@ -214,8 +216,8 @@ public final class HapticScapePanel extends PluginPanel
 		statusLabel.setBorder(BorderFactory.createEmptyBorder(4, 2, 4, 2));
 		updatesButton.setMargin(new java.awt.Insets(2, 5, 2, 5));
 		updatesButton.setToolTipText("Configure HapticScape client updates");
-		remoteButton.setMargin(new java.awt.Insets(2, 5, 2, 5));
-		remoteButton.setToolTipText("Create or join an opt-in encrypted Remote Control session");
+		remoteButton.setText("Remote Play");
+		remoteButton.setToolTipText("Create or join an opt-in encrypted Remote Play session");
 		developerStatusTimer = new Timer(1600, event ->
 			statusLabel.setText(latestConnectionSnapshot.getMessage()));
 		developerStatusTimer.setRepeats(false);
@@ -479,12 +481,15 @@ public final class HapticScapePanel extends PluginPanel
 		buttons.setLayout(new BoxLayout(buttons, BoxLayout.Y_AXIS));
 		PanelUi.addVerticalComponent(buttons, primaryButtons);
 		PanelUi.addVerticalComponent(buttons, updatesButton);
-		PanelUi.addVerticalComponent(buttons, remoteButton);
 
-		JPanel normalView = new JPanel(new BorderLayout(0, 8));
-		normalView.add(topPanel, BorderLayout.NORTH);
-		normalView.add(scrollPane, BorderLayout.CENTER);
-		normalView.add(buttons, BorderLayout.SOUTH);
+		JPanel normalContent = new JPanel(new BorderLayout(0, 8));
+		normalContent.add(topPanel, BorderLayout.NORTH);
+		normalContent.add(scrollPane, BorderLayout.CENTER);
+		normalContent.add(buttons, BorderLayout.SOUTH);
+
+		JPanel normalView = new JPanel(new BorderLayout(0, 6));
+		normalView.add(remoteButton, BorderLayout.NORTH);
+		normalView.add(normalContent, BorderLayout.CENTER);
 
 		JPanel remoteView = new JPanel(new BorderLayout(0, 6));
 		remoteBackButton.setToolTipText("Return to the main HapticScape controls");
@@ -1445,6 +1450,13 @@ public final class HapticScapePanel extends PluginPanel
 
 	private void applyRemoteSessionState(RemoteSessionSnapshot snapshot)
 	{
+		boolean preserveControllerViewport = isContinuingControllerSession(
+			appliedRemoteSessionSnapshot,
+			snapshot
+		);
+		JScrollBar pageScrollBar = getScrollPane().getVerticalScrollBar();
+		int anchoredScrollPosition = pageScrollBar.getValue();
+
 		boolean participantControlled = snapshot.isParticipantControlled();
 		boolean controllerSession = snapshot.getRole() == RemoteRole.CONTROLLER
 			&& snapshot.getState() != RemoteSessionState.LOCAL;
@@ -1538,6 +1550,36 @@ public final class HapticScapePanel extends PluginPanel
 		applySettingsLockState(settingsLockService.isLocked());
 		revalidate();
 		repaint();
+		appliedRemoteSessionSnapshot = snapshot;
+		if (preserveControllerViewport)
+		{
+			// Session banners and the hidden Remote card both participate in the
+			// PluginPanel's preferred height. Restore after every queued layout pass
+			// so Emergency Off and Resume cannot move the controller's viewport.
+			SwingUtilities.invokeLater(() ->
+			{
+				RemoteSessionSnapshot current = remoteSessionManager.getSnapshot();
+				if (current.getRole() == snapshot.getRole()
+					&& current.getState() == snapshot.getState())
+				{
+					pageScrollBar.setValue(anchoredScrollPosition);
+				}
+			});
+		}
+	}
+
+	private static boolean isContinuingControllerSession(
+		RemoteSessionSnapshot previous,
+		RemoteSessionSnapshot next)
+	{
+		return isConnectedController(previous) && isConnectedController(next);
+	}
+
+	private static boolean isConnectedController(RemoteSessionSnapshot snapshot)
+	{
+		return snapshot.getRole() == RemoteRole.CONTROLLER
+			&& (snapshot.getState() == RemoteSessionState.ACTIVE
+				|| snapshot.getState() == RemoteSessionState.PEER_EMERGENCY_PAUSED);
 	}
 
 	private void applySettingsLockState(boolean locked)

@@ -3,11 +3,8 @@ package com.ashy0019.hapticscape.remote;
 import com.google.gson.Gson;
 import java.security.SecureRandom;
 import java.time.Clock;
-import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
@@ -32,17 +29,16 @@ public final class RemoteSessionManager implements AutoCloseable
 	private static final long SETTINGS_DEBOUNCE_MILLIS = 40;
 	private static final long SETTINGS_RECONCILE_INTERVAL_MILLIS = 5_000;
 	private static final long HELLO_INTERVAL_MILLIS = 1_000;
-	private static final long LOCK_PROPOSAL_RETRY_MILLIS = 2_000;
 	private static final Base64.Encoder ENCODER = Base64.getUrlEncoder().withoutPadding();
 
 	private final Gson gson;
-	private final RemoteSettingsStore settingsStore;
 	private final EffectiveSettingsService effectiveSettings;
 	private final SettingsLockService settingsLockService;
-	private final SavedUnlockKeyStore savedUnlockKeyStore;
-	private final RemotePermissionsStore permissionsStore;
-	private final RemoteActionService remoteActionService;
-	private final RemoteLiveHapticService remoteLiveHapticService;
+	private final RemoteActionCoordinator actionCoordinator;
+	private final RemoteLockCoordinator lockCoordinator;
+	private final RemotePermissionsCoordinator permissionsCoordinator;
+	private final RemoteSettingsCoordinator settingsCoordinator;
+	private final RemoteMessageRouter messageRouter;
 	private final Clock clock;
 	private final RemoteTransportFactory transportFactory;
 	private final SettingsLockListener settingsLockListener = this::handleLocalSettingsLockChanged;
@@ -50,30 +46,13 @@ public final class RemoteSessionManager implements AutoCloseable
 	private final ScheduledExecutorService scheduler;
 	private final CopyOnWriteArrayList<RemoteSessionListener> listeners =
 		new CopyOnWriteArrayList<>();
-	private final Map<String, Long> pendingRemoteActions = new LinkedHashMap<>();
 
 	private volatile RemoteSessionSnapshot snapshot = RemoteSessionSnapshot.local();
 	private volatile RemoteTransport relayClient;
 	private volatile RemoteRole role = RemoteRole.NONE;
 	private volatile RemoteCrypto crypto;
 	private volatile RemoteInvitation invitation;
-	private volatile RemoteSettingsSnapshot lastSentSettings;
-	private volatile RemoteSettingsSnapshot controllerSettings;
-	private volatile RemotePermissions localPermissions;
-	private volatile RemotePermissions peerPermissions = RemotePermissions.none();
 	private volatile long lastHelloNanos;
-	private volatile long nextSettingsVersion;
-	private volatile long lastReceivedSettingsVersion;
-	private volatile long lastAcknowledgedVersion;
-	private volatile RemoteLockSnapshot lockSnapshot = RemoteLockSnapshot.inactive();
-	private volatile SettingsLockProposal controllerLockProposal;
-	private char[] pendingControllerUnlockKey;
-	private volatile SettingsLockProposal participantLockProposal;
-	private volatile String participantArmedLockId;
-	private volatile String participantDeclinedLockId;
-	private volatile long lastLockProposalNanos;
-	private String controllerLiveStreamId;
-	private long controllerLiveSequence;
 	private ScheduledFuture<?> pendingSettingsSync;
 	private volatile boolean closed;
 
@@ -173,24 +152,64 @@ public final class RemoteSessionManager implements AutoCloseable
 		RemoteTransportFactory transportFactory)
 	{
 		this.gson = Objects.requireNonNull(gson, "gson");
-		this.settingsStore = Objects.requireNonNull(settingsStore, "settingsStore");
+		RemoteSettingsStore requiredSettingsStore = Objects.requireNonNull(
+			settingsStore,
+			"settingsStore"
+		);
 		this.effectiveSettings = Objects.requireNonNull(effectiveSettings, "effectiveSettings");
 		this.settingsLockService = Objects.requireNonNull(settingsLockService, "settingsLockService");
-		this.savedUnlockKeyStore = Objects.requireNonNull(
+		SavedUnlockKeyStore requiredSavedUnlockKeyStore = Objects.requireNonNull(
 			savedUnlockKeyStore,
 			"savedUnlockKeyStore"
 		);
-		this.permissionsStore = Objects.requireNonNull(permissionsStore, "permissionsStore");
-		this.localPermissions = permissionsStore.capture();
-		this.localPermissions.validate();
+		RemotePermissionsStore requiredPermissionsStore = Objects.requireNonNull(
+			permissionsStore,
+			"permissionsStore"
+		);
 		this.clock = Objects.requireNonNull(clock, "clock");
 		RemoteActionExecutor actionExecutor = Objects.requireNonNull(
 			remoteActionExecutor,
 			"remoteActionExecutor"
 		);
-		this.remoteActionService = new RemoteActionService(actionExecutor, clock);
-		this.remoteLiveHapticService = new RemoteLiveHapticService(actionExecutor, clock);
 		this.transportFactory = Objects.requireNonNull(transportFactory, "transportFactory");
+		this.actionCoordinator = new RemoteActionCoordinator(
+			gson,
+			actionExecutor,
+			clock,
+			this::send,
+			this::publishActionAcknowledgement
+		);
+		this.lockCoordinator = new RemoteLockCoordinator(
+			gson,
+			settingsLockService,
+			requiredSavedUnlockKeyStore,
+			this::send,
+			this::publishLockSnapshot,
+			this::publishLockProposal
+		);
+		this.permissionsCoordinator = new RemotePermissionsCoordinator(
+			gson,
+			requiredPermissionsStore,
+			this::send,
+			this::publishPermissions,
+			actionCoordinator::clearControllerLiveStream
+		);
+		this.settingsCoordinator = new RemoteSettingsCoordinator(
+			gson,
+			requiredSettingsStore,
+			effectiveSettings,
+			this::send,
+			this::publish,
+			this::publishSettings,
+			this::emergencyPause
+		);
+		this.messageRouter = new RemoteMessageRouter(
+			settingsCoordinator,
+			permissionsCoordinator,
+			lockCoordinator,
+			actionCoordinator,
+			new LifecycleMessages()
+		);
 		this.settingsLockService.addListener(settingsLockListener);
 		this.scheduler = Executors.newSingleThreadScheduledExecutor(task ->
 		{
@@ -219,13 +238,13 @@ public final class RemoteSessionManager implements AutoCloseable
 
 	public RemoteLockSnapshot getLockSnapshot()
 	{
-		return lockSnapshot;
+		return lockCoordinator.getSnapshot();
 	}
 
 	/** Returns the controller's current participant draft, if one has loaded. */
 	public RemoteSettingsSnapshot getControllerSettingsSnapshot()
 	{
-		return controllerSettings;
+		return settingsCoordinator.getControllerSettings();
 	}
 
 	/** Participant-owned local permissions, or the controller's read-only peer view. */
@@ -236,29 +255,16 @@ public final class RemoteSessionManager implements AutoCloseable
 
 	public RemotePermissions getPeerPermissions()
 	{
-		return peerPermissions;
+		return permissionsCoordinator.getPeer();
 	}
 
 	public synchronized RemotePermissions updateLocalPermissions(RemotePermissions permissions)
 	{
-		if (role == RemoteRole.CONTROLLER)
-		{
-			throw new IllegalStateException("A controller cannot change participant permissions");
-		}
-		RemotePermissions saved = permissionsStore.save(
-			Objects.requireNonNull(permissions, "permissions")
-		);
-		saved.validate();
-		localPermissions = saved;
-		remoteLiveHapticService.permissionsChanged(
+		RemotePermissions saved = permissionsCoordinator.updateLocal(role, permissions);
+		actionCoordinator.permissionsChanged(
 			saved,
 			snapshot.getState() != RemoteSessionState.ACTIVE
 		);
-		publishPermissions(saved);
-		if (role == RemoteRole.PARTICIPANT)
-		{
-			sendPermissions();
-		}
 		return saved;
 	}
 
@@ -267,17 +273,18 @@ public final class RemoteSessionManager implements AutoCloseable
 		int intensityPercent,
 		int durationMillis)
 	{
-		return sendRemoteAction(RemoteAction.haptic(
+		return actionCoordinator.sendHaptic(
+			role,
+			snapshot.getState(),
 			patternSelection,
 			intensityPercent,
-			durationMillis,
-			clock
-		));
+			durationMillis
+		);
 	}
 
 	public synchronized String sendRemoteClick()
 	{
-		return sendRemoteAction(RemoteAction.click(clock));
+		return actionCoordinator.sendClick(role, snapshot.getState());
 	}
 
 	public synchronized String sendRemoteMessage(
@@ -285,85 +292,43 @@ public final class RemoteSessionManager implements AutoCloseable
 		boolean desktopNotification,
 		boolean localChatboxMessage)
 	{
-		return sendRemoteAction(RemoteAction.message(
+		return actionCoordinator.sendMessage(
+			role,
+			snapshot.getState(),
 			message,
 			desktopNotification,
-			localChatboxMessage,
-			clock
-		));
+			localChatboxMessage
+		);
 	}
 
 	public synchronized String stopRemoteOutput()
 	{
-		clearControllerLiveStream();
-		return sendRemoteAction(RemoteAction.stop(clock));
+		return actionCoordinator.stop(role, snapshot.getState());
 	}
 
 	public synchronized void beginRemoteLiveHaptic(int intensityPercent)
 	{
-		requireLiveController();
-		if (controllerLiveStreamId != null)
-		{
-			endRemoteLiveHaptic();
-		}
-		byte[] streamBytes = new byte[12];
-		random.nextBytes(streamBytes);
-		String streamId = ENCODER.encodeToString(streamBytes);
-		RemoteLiveHapticFrame frame = RemoteLiveHapticFrame.start(
-			streamId,
-			clampLiveIntensity(intensityPercent),
-			clock
+		actionCoordinator.beginLive(
+			role,
+			snapshot.getState(),
+			permissionsCoordinator.getPeer(),
+			intensityPercent
 		);
-		controllerLiveStreamId = streamId;
-		controllerLiveSequence = 0;
-		if (!send(RemoteMessageType.REMOTE_LIVE_HAPTIC, 0, gson.toJson(frame)))
-		{
-			clearControllerLiveStream();
-			throw new IllegalStateException("Live haptic stream could not be started");
-		}
 	}
 
 	public synchronized void updateRemoteLiveHaptic(int intensityPercent)
 	{
-		requireLiveController();
-		if (controllerLiveStreamId == null)
-		{
-			throw new IllegalStateException("Live haptic stream is not active");
-		}
-		long sequence = controllerLiveSequence + 1;
-		RemoteLiveHapticFrame frame = RemoteLiveHapticFrame.update(
-			controllerLiveStreamId,
-			sequence,
-			clampLiveIntensity(intensityPercent),
-			clock
+		actionCoordinator.updateLive(
+			role,
+			snapshot.getState(),
+			permissionsCoordinator.getPeer(),
+			intensityPercent
 		);
-		controllerLiveSequence = sequence;
-		if (!send(RemoteMessageType.REMOTE_LIVE_HAPTIC, 0, gson.toJson(frame)))
-		{
-			clearControllerLiveStream();
-			throw new IllegalStateException("Live haptic update could not be sent");
-		}
 	}
 
 	public synchronized void endRemoteLiveHaptic()
 	{
-		String streamId = controllerLiveStreamId;
-		if (streamId == null)
-		{
-			return;
-		}
-		long sequence = controllerLiveSequence + 1;
-		clearControllerLiveStream();
-		if (role == RemoteRole.CONTROLLER
-			&& snapshot.getState() == RemoteSessionState.ACTIVE)
-		{
-			RemoteLiveHapticFrame frame = RemoteLiveHapticFrame.end(
-				streamId,
-				sequence,
-				clock
-			);
-			send(RemoteMessageType.REMOTE_LIVE_HAPTIC, 0, gson.toJson(frame));
-		}
+		actionCoordinator.endLive(role, snapshot.getState());
 	}
 
 	public void addListener(RemoteSessionListener listener)
@@ -371,7 +336,7 @@ public final class RemoteSessionManager implements AutoCloseable
 		RemoteSessionListener required = Objects.requireNonNull(listener, "listener");
 		listeners.add(required);
 		required.onRemoteSessionChanged(snapshot);
-		required.onRemoteLockChanged(lockSnapshot);
+		required.onRemoteLockChanged(lockCoordinator.getSnapshot());
 		required.onRemotePermissionsChanged(visiblePermissions());
 	}
 
@@ -382,15 +347,17 @@ public final class RemoteSessionManager implements AutoCloseable
 
 	public synchronized boolean updateControllerSetting(String key, Object value)
 	{
-		if (role != RemoteRole.CONTROLLER
-			|| controllerSettings == null
-			|| !peerPermissions.isSettingsAllowed()
-			|| (snapshot.getState() != RemoteSessionState.ACTIVE
-				&& snapshot.getState() != RemoteSessionState.PEER_EMERGENCY_PAUSED))
+		boolean updated = settingsCoordinator.updateControllerSetting(
+			role,
+			snapshot.getState(),
+			permissionsCoordinator.getPeer(),
+			key,
+			value
+		);
+		if (!updated)
 		{
 			return false;
 		}
-		controllerSettings = controllerSettings.withConfigurationValue(gson, key, value);
 
 		if (pendingSettingsSync != null)
 		{
@@ -401,27 +368,7 @@ public final class RemoteSessionManager implements AutoCloseable
 			SETTINGS_DEBOUNCE_MILLIS,
 			TimeUnit.MILLISECONDS
 		);
-		publish(snapshot.getState(), "Saving changes on participant...");
 		return true;
-	}
-
-	private String sendRemoteAction(RemoteAction action)
-	{
-		if (role != RemoteRole.CONTROLLER
-			|| (snapshot.getState() != RemoteSessionState.ACTIVE
-				&& !(action.getType() == RemoteActionType.STOP
-					&& snapshot.getState() == RemoteSessionState.PEER_EMERGENCY_PAUSED)))
-		{
-			throw new IllegalStateException("A participant must be connected and active");
-		}
-		action.validate();
-		pendingRemoteActions.put(action.getActionId(), action.getExpiresAtEpochMillis());
-		if (!send(RemoteMessageType.REMOTE_ACTION, 0, gson.toJson(action)))
-		{
-			pendingRemoteActions.remove(action.getActionId());
-			throw new IllegalStateException("Remote action could not be sent");
-		}
-		return action.getActionId();
 	}
 
 	public boolean isControllerSession()
@@ -432,27 +379,27 @@ public final class RemoteSessionManager implements AutoCloseable
 
 	public char[] generateSettingsLockKey()
 	{
-		return settingsLockService.generateUnlockKey();
+		return lockCoordinator.generateUnlockKey();
 	}
 
 	public List<SavedUnlockKey> getSavedUnlockKeys()
 	{
-		return savedUnlockKeyStore.list();
+		return lockCoordinator.getSavedUnlockKeys();
 	}
 
 	public boolean isSavedUnlockKeyVaultAvailable()
 	{
-		return savedUnlockKeyStore.isAvailable();
+		return lockCoordinator.isSavedUnlockKeyVaultAvailable();
 	}
 
 	public String getSavedUnlockKeyVaultMessage()
 	{
-		return savedUnlockKeyStore.getUnavailableMessage();
+		return lockCoordinator.getSavedUnlockKeyVaultMessage();
 	}
 
 	public char[] revealSavedUnlockKey(String id)
 	{
-		return savedUnlockKeyStore.reveal(id);
+		return lockCoordinator.revealSavedUnlockKey(id);
 	}
 
 	public SavedUnlockKey updateSavedUnlockKey(
@@ -460,99 +407,32 @@ public final class RemoteSessionManager implements AutoCloseable
 		String label,
 		String note)
 	{
-		return savedUnlockKeyStore.updateDetails(id, label, note);
+		return lockCoordinator.updateSavedUnlockKey(id, label, note);
 	}
 
 	public boolean forgetSavedUnlockKey(String id)
 	{
-		return savedUnlockKeyStore.forget(id);
+		return lockCoordinator.forgetSavedUnlockKey(id);
 	}
 
 	public synchronized void proposeSettingsLock(char[] password)
 	{
-		if (role != RemoteRole.CONTROLLER
-			|| (snapshot.getState() != RemoteSessionState.ACTIVE
-				&& snapshot.getState() != RemoteSessionState.PEER_EMERGENCY_PAUSED))
-		{
-			throw new IllegalStateException("A participant must be connected first");
-		}
-		if (lockSnapshot.getState() == RemoteLockState.AWAITING_APPROVAL
-			|| lockSnapshot.getState() == RemoteLockState.ARMED)
-		{
-			throw new IllegalStateException(
-				"Cancel the current post-session lock before creating another"
-			);
-		}
-		SettingsLockProposal proposal = settingsLockService.createProposal(password);
-		char[] pendingKey = Arrays.copyOf(password, password.length);
-		clearPendingControllerUnlockKey();
-		controllerLockProposal = proposal;
-		pendingControllerUnlockKey = pendingKey;
-		lastLockProposalNanos = 0;
-		publishLock(
-			RemoteLockState.AWAITING_APPROVAL,
-			"Waiting for participant approval"
-		);
-		sendControllerLockProposal();
+		lockCoordinator.propose(role, snapshot.getState(), password);
 	}
 
 	public synchronized void cancelSettingsLock()
 	{
-		if (role != RemoteRole.CONTROLLER || controllerLockProposal == null)
-		{
-			return;
-		}
-		if (lockSnapshot.getState() == RemoteLockState.DECLINED)
-		{
-			clearPendingControllerUnlockKey();
-			controllerLockProposal = null;
-			publishLock(RemoteLockState.INACTIVE, "No post-session lock requested");
-			return;
-		}
-		send(
-			RemoteMessageType.LOCK_CANCEL_REQUEST,
-			0,
-			controllerLockProposal.getProposalId()
-		);
+		lockCoordinator.cancel(role);
 	}
 
 	public synchronized void acceptPendingSettingsLock()
 	{
-		if (role != RemoteRole.PARTICIPANT || participantLockProposal == null)
-		{
-			return;
-		}
-		SettingsLockProposal proposal = participantLockProposal;
-		try
-		{
-			participantArmedLockId = proposal.getProposalId();
-			settingsLockService.arm(proposal);
-			participantLockProposal = null;
-			participantDeclinedLockId = null;
-			publishLock(RemoteLockState.ARMED, "Post-session settings lock armed");
-			send(RemoteMessageType.LOCK_ACCEPTED, 0, participantArmedLockId);
-		}
-		catch (RuntimeException e)
-		{
-			participantArmedLockId = null;
-			participantLockProposal = null;
-			participantDeclinedLockId = proposal.getProposalId();
-			publishLock(RemoteLockState.DECLINED, "Settings lock could not be saved");
-			send(RemoteMessageType.LOCK_DECLINED, 0, participantDeclinedLockId);
-			LOG.log(Level.WARNING, "Unable to arm participant settings lock", e);
-		}
+		lockCoordinator.accept(role);
 	}
 
 	public synchronized void declinePendingSettingsLock()
 	{
-		if (role != RemoteRole.PARTICIPANT || participantLockProposal == null)
-		{
-			return;
-		}
-		participantDeclinedLockId = participantLockProposal.getProposalId();
-		participantLockProposal = null;
-		publishLock(RemoteLockState.DECLINED, "Post-session lock declined");
-		send(RemoteMessageType.LOCK_DECLINED, 0, participantDeclinedLockId);
+		lockCoordinator.decline(role);
 	}
 
 	public synchronized RemoteInvitation startController(String relayUrl)
@@ -594,10 +474,13 @@ public final class RemoteSessionManager implements AutoCloseable
 		{
 			return;
 		}
-		remoteLiveHapticService.stopImmediately();
-		remoteActionService.stopOutputSafely();
+		actionCoordinator.stopParticipantOutput();
 		publish(RemoteSessionState.EMERGENCY_PAUSED, "Emergency Off active");
-		send(RemoteMessageType.EMERGENCY_PAUSED, lastReceivedSettingsVersion, "");
+		send(
+			RemoteMessageType.EMERGENCY_PAUSED,
+			settingsCoordinator.getLastReceivedVersion(),
+			""
+		);
 	}
 
 	public synchronized void resumeParticipant()
@@ -622,7 +505,11 @@ public final class RemoteSessionManager implements AutoCloseable
 		publish(next, next == RemoteSessionState.ACTIVE
 			? "Remote control active"
 			: "Waiting for controller settings");
-		send(RemoteMessageType.SESSION_RESUMED, lastReceivedSettingsVersion, "");
+		send(
+			RemoteMessageType.SESSION_RESUMED,
+			settingsCoordinator.getLastReceivedVersion(),
+			""
+		);
 	}
 
 	public synchronized void endSession()
@@ -647,26 +534,13 @@ public final class RemoteSessionManager implements AutoCloseable
 	private void beginSession(RemoteRole nextRole, RemoteInvitation nextInvitation)
 	{
 		role = nextRole;
-		localPermissions = permissionsStore.capture();
-		localPermissions.validate();
-		peerPermissions = RemotePermissions.none();
-		remoteActionService.reset();
-		remoteLiveHapticService.reset();
-		clearControllerLiveStream();
+		permissionsCoordinator.beginSession();
+		actionCoordinator.reset();
 		invitation = nextInvitation;
 		crypto = new RemoteCrypto(nextInvitation.getKey());
-		lastSentSettings = null;
-		controllerSettings = null;
 		lastHelloNanos = 0;
-		nextSettingsVersion = 0;
-		lastReceivedSettingsVersion = 0;
-		lastAcknowledgedVersion = 0;
-		controllerLockProposal = null;
-		participantLockProposal = null;
-		participantArmedLockId = null;
-		participantDeclinedLockId = null;
-		lastLockProposalNanos = 0;
-		lockSnapshot = RemoteLockSnapshot.inactive();
+		settingsCoordinator.reset();
+		lockCoordinator.reset();
 		if (nextRole == RemoteRole.PARTICIPANT)
 		{
 			effectiveSettings.clearRemote();
@@ -693,22 +567,22 @@ public final class RemoteSessionManager implements AutoCloseable
 
 	private synchronized void tick()
 	{
-		if (role == RemoteRole.PARTICIPANT)
-		{
-			remoteLiveHapticService.tick(
-				localPermissions,
-				snapshot.getState() != RemoteSessionState.ACTIVE
-			);
-		}
-		if (closed || role == RemoteRole.NONE || relayClient == null || !relayClient.isOpen())
+		boolean activeTransport = !closed
+			&& role != RemoteRole.NONE
+			&& relayClient != null
+			&& relayClient.isOpen();
+		actionCoordinator.tick(
+			role,
+			snapshot.getState(),
+			permissionsCoordinator.getLocal(),
+			activeTransport
+		);
+		if (!activeTransport)
 		{
 			return;
 		}
 
 		long now = System.nanoTime();
-		pendingRemoteActions.entrySet().removeIf(
-			entry -> clock.millis() > entry.getValue() + 5_000
-		);
 		if (now - lastHelloNanos >= TimeUnit.MILLISECONDS.toNanos(HELLO_INTERVAL_MILLIS)
 			&& (snapshot.getState() == RemoteSessionState.WAITING_FOR_PEER
 				|| snapshot.getState() == RemoteSessionState.WAITING_FOR_SETTINGS))
@@ -716,15 +590,7 @@ public final class RemoteSessionManager implements AutoCloseable
 			lastHelloNanos = now;
 			retryHandshake();
 		}
-		if (role == RemoteRole.CONTROLLER
-			&& controllerLockProposal != null
-			&& lockSnapshot.getState() == RemoteLockState.AWAITING_APPROVAL
-			&& now - lastLockProposalNanos >= TimeUnit.MILLISECONDS.toNanos(
-				LOCK_PROPOSAL_RETRY_MILLIS
-			))
-		{
-			sendControllerLockProposal();
-		}
+		lockCoordinator.tick(role, snapshot.getState(), now);
 	}
 
 	/** Retries every idempotent frame needed to finish the initial handshake. */
@@ -802,13 +668,13 @@ public final class RemoteSessionManager implements AutoCloseable
 	private boolean canSendControllerSettings()
 	{
 		RemoteTransport relay = relayClient;
-		return !closed
-			&& role == RemoteRole.CONTROLLER
-			&& peerPermissions.isSettingsAllowed()
-			&& relay != null
-			&& relay.isOpen()
-			&& (snapshot.getState() == RemoteSessionState.ACTIVE
-				|| snapshot.getState() == RemoteSessionState.PEER_EMERGENCY_PAUSED);
+		return settingsCoordinator.canSendControllerSettings(
+			closed,
+			relay != null && relay.isOpen(),
+			role,
+			snapshot.getState(),
+			permissionsCoordinator.getPeer()
+		);
 	}
 
 	private synchronized void handleOpen()
@@ -849,649 +715,22 @@ public final class RemoteSessionManager implements AutoCloseable
 			return;
 		}
 
-		switch (message.getType())
-		{
-			case HELLO:
-				if (role == RemoteRole.CONTROLLER)
-				{
-					if (controllerSettings == null)
-					{
-						publish(
-							RemoteSessionState.WAITING_FOR_SETTINGS,
-							"Participant connected. Loading their settings..."
-						);
-					}
-					send(RemoteMessageType.SETTINGS_SEED_REQUEST, 0, "");
-				}
-				else if (role == RemoteRole.PARTICIPANT)
-				{
-					send(RemoteMessageType.HELLO, 0, role.name());
-					sendPermissions();
-					sendSettingsSeed();
-				}
-				break;
-			case SETTINGS_SEED_REQUEST:
-				if (role == RemoteRole.PARTICIPANT)
-				{
-					sendPermissions();
-					sendSettingsSeed();
-				}
-				break;
-			case PERMISSIONS:
-				handlePermissions(message);
-				break;
-			case SETTINGS_SEED:
-				handleSettingsSeed(message);
-				break;
-			case SETTINGS_SEED_ACK:
-				if (role == RemoteRole.PARTICIPANT
-					&& snapshot.getState() == RemoteSessionState.WAITING_FOR_SETTINGS)
-				{
-					publish(
-						RemoteSessionState.ACTIVE,
-						localPermissions.isSettingsAllowed()
-							? "Remote control active"
-							: "Remote actions active; settings changes disabled"
-					);
-				}
-				break;
-			case SETTINGS:
-				handleSettingsMessage(message);
-				break;
-			case SETTINGS_ACK:
-				if (role == RemoteRole.CONTROLLER)
-				{
-					handleSettingsAcknowledgement(message);
-				}
-				break;
-			case SETTINGS_REJECTED:
-				if (role == RemoteRole.CONTROLLER)
-				{
-					publish(snapshot.getState(), "Participant disabled remote settings");
-				}
-				break;
-			case REMOTE_ACTION:
-				handleRemoteAction(message);
-				break;
-			case REMOTE_ACTION_ACK:
-				handleRemoteActionAcknowledgement(message);
-				break;
-			case REMOTE_LIVE_HAPTIC:
-				handleRemoteLiveHaptic(message);
-				break;
-			case LOCK_PROPOSAL:
-				handleLockProposal(message);
-				break;
-			case LOCK_ACCEPTED:
-				handleLockAccepted(message);
-				break;
-			case LOCK_DECLINED:
-				handleLockDeclined(message);
-				break;
-			case LOCK_CANCEL_REQUEST:
-				handleLockCancelRequest(message);
-				break;
-			case LOCK_CANCELLED:
-				handleLockCancelled(message);
-				break;
-			case EMERGENCY_PAUSED:
-				if (role == RemoteRole.CONTROLLER)
-				{
-					clearControllerLiveStream();
-					publish(RemoteSessionState.PEER_EMERGENCY_PAUSED, "Participant used Emergency Off");
-				}
-				break;
-			case SESSION_RESUMED:
-				if (role == RemoteRole.CONTROLLER)
-				{
-					if (controllerSettings == null)
-					{
-						publish(
-							RemoteSessionState.WAITING_FOR_SETTINGS,
-							"Participant resumed. Loading their settings..."
-						);
-						send(RemoteMessageType.SETTINGS_SEED_REQUEST, 0, "");
-					}
-					else
-					{
-						publish(RemoteSessionState.ACTIVE, "Participant resumed remote control");
-						sendSettings(true);
-					}
-				}
-				break;
-			case SESSION_END:
-				endSessionInternal(false, "Remote peer ended the session");
-				break;
-			default:
-				break;
-		}
-	}
-
-	private void handleSettingsMessage(RemoteProtocolMessage message)
-	{
-		if (role != RemoteRole.PARTICIPANT
-			|| message.getVersion() < lastReceivedSettingsVersion)
-		{
-			return;
-		}
-		if (!localPermissions.isSettingsAllowed())
-		{
-			send(
-				RemoteMessageType.SETTINGS_REJECTED,
-				message.getVersion(),
-				"Participant disabled remote settings"
-			);
-			return;
-		}
-		if (message.getVersion() == lastReceivedSettingsVersion)
-		{
-			if (lastReceivedSettingsVersion > 0)
-			{
-				send(
-					RemoteMessageType.SETTINGS_ACK,
-					lastReceivedSettingsVersion,
-					gson.toJson(settingsStore.capture())
-				);
-			}
-			return;
-		}
-
-		try
-		{
-			RemoteSettingsSnapshot settings = gson.fromJson(
-				message.getPayload(),
-				RemoteSettingsSnapshot.class
-			);
-			if (settings == null)
-			{
-				return;
-			}
-			settings.validate();
-			RemoteSettingsSnapshot canonical = settingsStore.save(settings);
-			effectiveSettings.applyRemote(canonical);
-			lastReceivedSettingsVersion = message.getVersion();
-			for (RemoteSessionListener listener : listeners)
-			{
-				listener.onRemoteSettingsChanged(canonical);
-			}
-			if (snapshot.getState() != RemoteSessionState.EMERGENCY_PAUSED)
-			{
-				publish(RemoteSessionState.ACTIVE, "Remote control active");
-			}
-			send(
-				RemoteMessageType.SETTINGS_ACK,
-				lastReceivedSettingsVersion,
-				gson.toJson(canonical)
-			);
-		}
-		catch (RuntimeException e)
-		{
-			LOG.log(Level.WARNING, "Rejected invalid remote settings snapshot", e);
-			emergencyPause();
-		}
-	}
-
-	private void handleSettingsSeed(RemoteProtocolMessage message)
-	{
-		if (role != RemoteRole.CONTROLLER)
-		{
-			return;
-		}
-		if (controllerSettings != null)
-		{
-			// The first acknowledgement may have been lost. Acknowledge duplicate
-			// seeds so the participant can leave its guarded waiting state.
-			if (snapshot.getState() == RemoteSessionState.WAITING_FOR_SETTINGS)
-			{
-				publish(RemoteSessionState.ACTIVE, "Participant settings loaded");
-			}
-			send(RemoteMessageType.SETTINGS_SEED_ACK, 0, "");
-			return;
-		}
-		try
-		{
-			RemoteSettingsSnapshot settings = gson.fromJson(
-				message.getPayload(),
-				RemoteSettingsSnapshot.class
-			);
-			if (settings == null)
-			{
-				return;
-			}
-			settings.validate();
-			controllerSettings = settings;
-			for (RemoteSessionListener listener : listeners)
-			{
-				listener.onRemoteSettingsChanged(settings);
-			}
-			publish(RemoteSessionState.ACTIVE, "Participant settings loaded");
-			send(RemoteMessageType.SETTINGS_SEED_ACK, 0, "");
-			if (peerPermissions.isSettingsAllowed())
-			{
-				sendSettings(true);
-			}
-		}
-		catch (RuntimeException e)
-		{
-			LOG.log(Level.WARNING, "Rejected invalid participant settings seed", e);
-			publish(RemoteSessionState.DISCONNECTED, "Participant settings could not be loaded");
-		}
-	}
-
-	private void handlePermissions(RemoteProtocolMessage message)
-	{
-		if (role != RemoteRole.CONTROLLER)
-		{
-			return;
-		}
-		try
-		{
-			RemotePermissions permissions = gson.fromJson(
-				message.getPayload(),
-				RemotePermissions.class
-			);
-			if (permissions == null)
-			{
-				return;
-			}
-			permissions.validate();
-			peerPermissions = permissions;
-			if (!permissions.isLiveHapticsAllowed())
-			{
-				clearControllerLiveStream();
-			}
-			publishPermissions(permissions);
-			if (!permissions.isSettingsAllowed())
-			{
-				publish(snapshot.getState(), "Participant disabled remote settings");
-			}
-		}
-		catch (RuntimeException e)
-		{
-			LOG.log(Level.FINE, "Ignored invalid remote permissions", e);
-		}
-	}
-
-	private void handleRemoteAction(RemoteProtocolMessage message)
-	{
-		if (role != RemoteRole.PARTICIPANT)
-		{
-			return;
-		}
-		RemoteAction action;
-		try
-		{
-			action = gson.fromJson(message.getPayload(), RemoteAction.class);
-		}
-		catch (RuntimeException e)
-		{
-			LOG.log(Level.FINE, "Ignored malformed remote action", e);
-			return;
-		}
-		if (action != null && action.getType() == RemoteActionType.STOP)
-		{
-			remoteLiveHapticService.stopImmediately();
-		}
-		RemoteActionAcknowledgement acknowledgement = remoteActionService.process(
-			action,
-			localPermissions,
-			snapshot.getState() != RemoteSessionState.ACTIVE
-		);
-		if (acknowledgement != null)
-		{
-			send(RemoteMessageType.REMOTE_ACTION_ACK, 0, gson.toJson(acknowledgement));
-		}
-	}
-
-	private void handleRemoteLiveHaptic(RemoteProtocolMessage message)
-	{
-		if (role != RemoteRole.PARTICIPANT)
-		{
-			return;
-		}
-		try
-		{
-			RemoteLiveHapticFrame frame = gson.fromJson(
-				message.getPayload(),
-				RemoteLiveHapticFrame.class
-			);
-			remoteLiveHapticService.process(
-				frame,
-				localPermissions,
-				snapshot.getState() != RemoteSessionState.ACTIVE
-			);
-		}
-		catch (RuntimeException e)
-		{
-			LOG.log(Level.FINE, "Ignored malformed remote live-haptic frame", e);
-		}
-	}
-
-	private void handleRemoteActionAcknowledgement(RemoteProtocolMessage message)
-	{
-		if (role != RemoteRole.CONTROLLER)
-		{
-			return;
-		}
-		try
-		{
-			RemoteActionAcknowledgement acknowledgement = gson.fromJson(
-				message.getPayload(),
-				RemoteActionAcknowledgement.class
-			);
-			if (acknowledgement == null)
-			{
-				return;
-			}
-			acknowledgement.validate();
-			if (pendingRemoteActions.remove(acknowledgement.getActionId()) == null)
-			{
-				return;
-			}
-			for (RemoteSessionListener listener : listeners)
-			{
-				listener.onRemoteActionAcknowledged(acknowledgement);
-			}
-		}
-		catch (RuntimeException e)
-		{
-			LOG.log(Level.FINE, "Ignored invalid remote action acknowledgement", e);
-		}
-	}
-
-	private void handleLockProposal(RemoteProtocolMessage message)
-	{
-		if (role != RemoteRole.PARTICIPANT)
-		{
-			return;
-		}
-		try
-		{
-			SettingsLockProposal proposal = gson.fromJson(
-				message.getPayload(),
-				SettingsLockProposal.class
-			);
-			if (proposal == null)
-			{
-				return;
-			}
-			proposal.validate();
-			String proposalId = proposal.getProposalId();
-			if (proposalId.equals(participantArmedLockId))
-			{
-				send(RemoteMessageType.LOCK_ACCEPTED, 0, proposalId);
-				return;
-			}
-			if (proposalId.equals(participantDeclinedLockId))
-			{
-				send(RemoteMessageType.LOCK_DECLINED, 0, proposalId);
-				return;
-			}
-			if (participantLockProposal != null
-				&& proposalId.equals(participantLockProposal.getProposalId()))
-			{
-				return;
-			}
-			if (settingsLockService.isLocked())
-			{
-				participantDeclinedLockId = proposalId;
-				publishLock(RemoteLockState.DECLINED, "Settings are already locked");
-				send(RemoteMessageType.LOCK_DECLINED, 0, proposalId);
-				return;
-			}
-			participantLockProposal = proposal;
-			publishLock(
-				RemoteLockState.APPROVAL_REQUIRED,
-				"Controller requests a post-session settings lock"
-			);
-			for (RemoteSessionListener listener : listeners)
-			{
-				listener.onRemoteLockProposal(proposal);
-			}
-		}
-		catch (RuntimeException e)
-		{
-			LOG.log(Level.WARNING, "Rejected invalid settings-lock proposal", e);
-		}
-	}
-
-	private void handleLockAccepted(RemoteProtocolMessage message)
-	{
-		if (role == RemoteRole.CONTROLLER
-			&& matchesControllerLockProposal(message.getPayload()))
-		{
-			String status = "Participant accepted; settings lock armed";
-			try
-			{
-				if (pendingControllerUnlockKey == null)
-				{
-					status = savedUnlockKeyStore.findByLockId(message.getPayload()).isPresent()
-						? "Participant accepted; unlock key saved"
-						: "Participant accepted; unlock key is not available";
-				}
-				else if (savedUnlockKeyStore.isAvailable())
-				{
-					savedUnlockKeyStore.saveAcceptedKey(
-						message.getPayload(),
-						pendingControllerUnlockKey
-					);
-					status = "Participant accepted; unlock key saved";
-				}
-				else
-				{
-					status = "Participant accepted; secure key vault unavailable";
-				}
-			}
-			catch (RuntimeException e)
-			{
-				status = "Participant accepted; unlock key could not be saved";
-				LOG.log(Level.WARNING, "Unable to save accepted unlock key", e);
-			}
-			finally
-			{
-				clearPendingControllerUnlockKey();
-			}
-			publishLock(RemoteLockState.ARMED, status);
-		}
-	}
-
-	private void handleLockDeclined(RemoteProtocolMessage message)
-	{
-		if (role == RemoteRole.CONTROLLER
-			&& matchesControllerLockProposal(message.getPayload()))
-		{
-			clearPendingControllerUnlockKey();
-			publishLock(RemoteLockState.DECLINED, "Participant declined the settings lock");
-		}
-	}
-
-	private void handleLockCancelRequest(RemoteProtocolMessage message)
-	{
-		if (role != RemoteRole.PARTICIPANT)
-		{
-			return;
-		}
-		String proposalId = message.getPayload();
-		boolean pendingMatch = participantLockProposal != null
-			&& participantLockProposal.getProposalId().equals(proposalId);
-		boolean armedMatch = proposalId != null && proposalId.equals(participantArmedLockId);
-		if (!pendingMatch && !armedMatch)
-		{
-			return;
-		}
-		participantLockProposal = null;
-		participantDeclinedLockId = null;
-		if (armedMatch)
-		{
-			participantArmedLockId = null;
-			settingsLockService.clearAllLocks();
-		}
-		publishLock(RemoteLockState.INACTIVE, "Post-session settings lock cancelled");
-		send(RemoteMessageType.LOCK_CANCELLED, 0, proposalId);
-	}
-
-	private void handleLockCancelled(RemoteProtocolMessage message)
-	{
-		if (role == RemoteRole.CONTROLLER
-			&& matchesControllerLockProposal(message.getPayload()))
-		{
-			String lockId = controllerLockProposal.getProposalId();
-			clearPendingControllerUnlockKey();
-			controllerLockProposal = null;
-			String status = "Post-session settings lock cancelled";
-			try
-			{
-				savedUnlockKeyStore.forgetByLockId(lockId);
-			}
-			catch (RuntimeException e)
-			{
-				status = "Settings lock cancelled; saved key could not be removed";
-				LOG.log(Level.WARNING, "Unable to remove cancelled unlock key", e);
-			}
-			publishLock(RemoteLockState.INACTIVE, status);
-		}
-	}
-
-	private boolean matchesControllerLockProposal(String proposalId)
-	{
-		return controllerLockProposal != null
-			&& controllerLockProposal.getProposalId().equals(proposalId);
-	}
-
-	private void sendControllerLockProposal()
-	{
-		SettingsLockProposal proposal = controllerLockProposal;
-		if (proposal == null)
-		{
-			return;
-		}
-		lastLockProposalNanos = System.nanoTime();
-		send(RemoteMessageType.LOCK_PROPOSAL, 0, gson.toJson(proposal));
-	}
-
-	private void handleSettingsAcknowledgement(RemoteProtocolMessage message)
-	{
-		long acknowledgedVersion = message.getVersion();
-		if (acknowledgedVersion <= lastAcknowledgedVersion
-			|| acknowledgedVersion > nextSettingsVersion)
-		{
-			return;
-		}
-		try
-		{
-			RemoteSettingsSnapshot canonical = gson.fromJson(
-				message.getPayload(),
-				RemoteSettingsSnapshot.class
-			);
-			if (canonical == null)
-			{
-				return;
-			}
-			canonical.validate();
-			boolean draftStillMatchesAcknowledgedRequest =
-				controllerSettings != null && controllerSettings.equals(lastSentSettings);
-			lastAcknowledgedVersion = acknowledgedVersion;
-			if (acknowledgedVersion == nextSettingsVersion)
-			{
-				lastSentSettings = canonical;
-				if (draftStillMatchesAcknowledgedRequest)
-				{
-					controllerSettings = canonical;
-					for (RemoteSessionListener listener : listeners)
-					{
-						listener.onRemoteSettingsChanged(canonical);
-					}
-				}
-			}
-			publish(snapshot.getState(), statusForController());
-		}
-		catch (RuntimeException e)
-		{
-			LOG.log(Level.WARNING, "Ignored invalid settings acknowledgement", e);
-		}
+		messageRouter.route(role, snapshot.getState(), message);
 	}
 
 	private void sendSettingsSeed()
 	{
-		if (role != RemoteRole.PARTICIPANT)
-		{
-			return;
-		}
-		RemoteSettingsSnapshot settings = settingsStore.capture();
-		settings.validate();
-		send(RemoteMessageType.SETTINGS_SEED, 0, gson.toJson(settings));
+		settingsCoordinator.sendSeed(role);
 	}
 
 	private void sendPermissions()
 	{
-		if (role == RemoteRole.PARTICIPANT)
-		{
-			send(RemoteMessageType.PERMISSIONS, 0, gson.toJson(localPermissions));
-		}
+		permissionsCoordinator.send(role);
 	}
 
 	private void sendSettings(boolean force)
 	{
-		if (role != RemoteRole.CONTROLLER || controllerSettings == null)
-		{
-			return;
-		}
-		RemoteSettingsSnapshot settings = controllerSettings;
-		settings.validate();
-		if (!force && settings.equals(lastSentSettings))
-		{
-			if (lastAcknowledgedVersion < nextSettingsVersion)
-			{
-				send(
-					RemoteMessageType.SETTINGS,
-					nextSettingsVersion,
-					gson.toJson(settings)
-				);
-				publish(snapshot.getState(), statusForController());
-			}
-			return;
-		}
-		long version = nextSettingsVersion + 1;
-		RemoteSettingsSnapshot previousSent = lastSentSettings;
-		long previousVersion = nextSettingsVersion;
-		lastSentSettings = settings;
-		nextSettingsVersion = version;
-		if (!send(RemoteMessageType.SETTINGS, version, gson.toJson(settings)))
-		{
-			// Preserve a newer update if a synchronous transport callback already
-			// advanced the session while this send was in flight.
-			if (nextSettingsVersion == version && Objects.equals(lastSentSettings, settings))
-			{
-				lastSentSettings = previousSent;
-				nextSettingsVersion = previousVersion;
-			}
-		}
-		publish(snapshot.getState(), statusForController());
-	}
-
-	private String statusForController()
-	{
-		if (snapshot.getState() == RemoteSessionState.PEER_EMERGENCY_PAUSED)
-		{
-			return "Participant used Emergency Off";
-		}
-		if (!peerPermissions.isSettingsAllowed())
-		{
-			return "Participant disabled remote settings";
-		}
-		if (nextSettingsVersion == 0)
-		{
-			return "Participant connected";
-		}
-		if (controllerSettings != null && !controllerSettings.equals(lastSentSettings))
-		{
-			return "Saving changes on participant...";
-		}
-		if (lastAcknowledgedVersion >= nextSettingsVersion)
-		{
-			return "Saved on participant";
-		}
-		return "Saving changes on participant...";
+		settingsCoordinator.sendSettings(force, role);
 	}
 
 	private boolean send(RemoteMessageType type, long version, String payload)
@@ -1531,8 +770,7 @@ public final class RemoteSessionManager implements AutoCloseable
 
 		if (role == RemoteRole.PARTICIPANT)
 		{
-			remoteLiveHapticService.stopImmediately();
-			remoteActionService.stopOutputSafely();
+			actionCoordinator.stopParticipantOutput();
 			publish(
 				RemoteSessionState.EMERGENCY_PAUSED,
 				"Remote connection lost. Emergency Off active."
@@ -1540,19 +778,15 @@ public final class RemoteSessionManager implements AutoCloseable
 		}
 		else
 		{
-			clearControllerLiveStream();
-			clearPendingControllerUnlockKey();
-			controllerLockProposal = null;
-			publishLock(RemoteLockState.INACTIVE, "Pending unlock key discarded");
+			actionCoordinator.clearControllerLiveStream();
+			lockCoordinator.handleControllerConnectionLost();
 			publish(RemoteSessionState.DISCONNECTED, "Remote connection lost");
 		}
 	}
 
 	private void publish(RemoteSessionState state, String message)
 	{
-		long version = role == RemoteRole.CONTROLLER
-			? nextSettingsVersion
-			: lastReceivedSettingsVersion;
+		long version = settingsCoordinator.sessionVersion(role);
 		RemoteSessionSnapshot next = new RemoteSessionSnapshot(role, state, message, version);
 		snapshot = next;
 		for (RemoteSessionListener listener : listeners)
@@ -1561,19 +795,42 @@ public final class RemoteSessionManager implements AutoCloseable
 		}
 	}
 
-	private void publishLock(RemoteLockState state, String message)
+	private void publishLockSnapshot(RemoteLockSnapshot next)
 	{
-		RemoteLockSnapshot next = new RemoteLockSnapshot(state, message);
-		lockSnapshot = next;
 		for (RemoteSessionListener listener : listeners)
 		{
 			listener.onRemoteLockChanged(next);
 		}
 	}
 
+	private void publishLockProposal(SettingsLockProposal proposal)
+	{
+		for (RemoteSessionListener listener : listeners)
+		{
+			listener.onRemoteLockProposal(proposal);
+		}
+	}
+
+	private void publishSettings(RemoteSettingsSnapshot settings)
+	{
+		for (RemoteSessionListener listener : listeners)
+		{
+			listener.onRemoteSettingsChanged(settings);
+		}
+	}
+
+	private void publishActionAcknowledgement(
+		RemoteActionAcknowledgement acknowledgement)
+	{
+		for (RemoteSessionListener listener : listeners)
+		{
+			listener.onRemoteActionAcknowledged(acknowledgement);
+		}
+	}
+
 	private RemotePermissions visiblePermissions()
 	{
-		return role == RemoteRole.CONTROLLER ? peerPermissions : localPermissions;
+		return permissionsCoordinator.getVisible(role);
 	}
 
 	private void publishPermissions(RemotePermissions permissions)
@@ -1586,14 +843,7 @@ public final class RemoteSessionManager implements AutoCloseable
 
 	private synchronized void handleLocalSettingsLockChanged(boolean locked)
 	{
-		if (locked || role != RemoteRole.PARTICIPANT || participantArmedLockId == null)
-		{
-			return;
-		}
-		String clearedId = participantArmedLockId;
-		participantArmedLockId = null;
-		publishLock(RemoteLockState.INACTIVE, "Settings lock cleared locally");
-		send(RemoteMessageType.LOCK_CANCELLED, 0, clearedId);
+		lockCoordinator.handleLocalSettingsLockChanged(role, locked);
 	}
 
 	private synchronized void endSessionInternal(boolean notifyPeer, String message)
@@ -1615,32 +865,17 @@ public final class RemoteSessionManager implements AutoCloseable
 		}
 		if (role == RemoteRole.PARTICIPANT)
 		{
-			remoteLiveHapticService.stopImmediately();
-			remoteActionService.stopOutputSafely();
+			actionCoordinator.stopParticipantOutput();
 			effectiveSettings.clearRemote();
 		}
 		role = RemoteRole.NONE;
-		remoteActionService.reset();
-		remoteLiveHapticService.reset();
-		clearControllerLiveStream();
-		pendingRemoteActions.clear();
+		actionCoordinator.reset();
 		crypto = null;
 		invitation = null;
-		lastSentSettings = null;
-		controllerSettings = null;
-		peerPermissions = RemotePermissions.none();
-		localPermissions = permissionsStore.capture();
+		settingsCoordinator.reset();
+		permissionsCoordinator.endSession();
 		lastHelloNanos = 0;
-		nextSettingsVersion = 0;
-		lastReceivedSettingsVersion = 0;
-		lastAcknowledgedVersion = 0;
-		controllerLockProposal = null;
-		clearPendingControllerUnlockKey();
-		participantLockProposal = null;
-		participantArmedLockId = null;
-		participantDeclinedLockId = null;
-		lastLockProposalNanos = 0;
-		lockSnapshot = RemoteLockSnapshot.inactive();
+		lockCoordinator.reset();
 		snapshot = new RemoteSessionSnapshot(
 			RemoteRole.NONE,
 			RemoteSessionState.LOCAL,
@@ -1651,48 +886,9 @@ public final class RemoteSessionManager implements AutoCloseable
 		{
 			listener.onRemoteSessionChanged(snapshot);
 			listener.onRemoteSettingsChanged(effectiveSettings.current());
-			listener.onRemoteLockChanged(lockSnapshot);
-			listener.onRemotePermissionsChanged(localPermissions);
+			listener.onRemoteLockChanged(lockCoordinator.getSnapshot());
+			listener.onRemotePermissionsChanged(permissionsCoordinator.getLocal());
 		}
-	}
-
-	private void clearPendingControllerUnlockKey()
-	{
-		if (pendingControllerUnlockKey != null)
-		{
-			Arrays.fill(pendingControllerUnlockKey, '\0');
-			pendingControllerUnlockKey = null;
-		}
-	}
-
-	private void requireLiveController()
-	{
-		if (role != RemoteRole.CONTROLLER || snapshot.getState() != RemoteSessionState.ACTIVE)
-		{
-			throw new IllegalStateException("A participant must be connected and active");
-		}
-		if (!peerPermissions.isLiveHapticsAllowed())
-		{
-			throw new IllegalStateException("The participant has not allowed live haptics");
-		}
-		if (peerPermissions.getMaximumIntensityPercent() <= 0)
-		{
-			throw new IllegalStateException("The participant's maximum remote intensity is 0%");
-		}
-	}
-
-	private int clampLiveIntensity(int intensityPercent)
-	{
-		return Math.max(
-			0,
-			Math.min(intensityPercent, peerPermissions.getMaximumIntensityPercent())
-		);
-	}
-
-	private void clearControllerLiveStream()
-	{
-		controllerLiveStreamId = null;
-		controllerLiveSequence = 0;
 	}
 
 	private void requireOpen()
@@ -1700,6 +896,88 @@ public final class RemoteSessionManager implements AutoCloseable
 		if (closed)
 		{
 			throw new IllegalStateException("Remote session service is closed");
+		}
+	}
+
+	private final class LifecycleMessages implements RemoteLifecycleMessageHandler
+	{
+		@Override
+		public void handleHello()
+		{
+			if (role == RemoteRole.CONTROLLER)
+			{
+				if (!settingsCoordinator.hasControllerSettings())
+				{
+					publish(
+						RemoteSessionState.WAITING_FOR_SETTINGS,
+						"Participant connected. Loading their settings..."
+					);
+				}
+				send(RemoteMessageType.SETTINGS_SEED_REQUEST, 0, "");
+			}
+			else if (role == RemoteRole.PARTICIPANT)
+			{
+				send(RemoteMessageType.HELLO, 0, role.name());
+				sendPermissions();
+				sendSettingsSeed();
+			}
+		}
+
+		@Override
+		public void handleSettingsSeedRequest()
+		{
+			if (role == RemoteRole.PARTICIPANT)
+			{
+				sendPermissions();
+				sendSettingsSeed();
+			}
+		}
+
+		@Override
+		public void handlePeerEmergencyPause()
+		{
+			if (role == RemoteRole.CONTROLLER)
+			{
+				actionCoordinator.clearControllerLiveStream();
+				publish(
+					RemoteSessionState.PEER_EMERGENCY_PAUSED,
+					"Participant used Emergency Off"
+				);
+			}
+		}
+
+		@Override
+		public void handlePeerResume()
+		{
+			if (role != RemoteRole.CONTROLLER)
+			{
+				return;
+			}
+			if (!settingsCoordinator.hasControllerSettings())
+			{
+				publish(
+					RemoteSessionState.WAITING_FOR_SETTINGS,
+					"Participant resumed. Loading their settings..."
+				);
+				send(RemoteMessageType.SETTINGS_SEED_REQUEST, 0, "");
+			}
+			else
+			{
+				publish(RemoteSessionState.ACTIVE, "Participant resumed remote control");
+				sendSettings(true);
+			}
+		}
+
+		@Override
+		public void handlePeerEnd()
+		{
+			endSessionInternal(false, "Remote peer ended the session");
+		}
+
+		@Override
+		public void publishStatus(String message)
+		{
+			publish(snapshot.getState(), message);
 		}
 	}
 
