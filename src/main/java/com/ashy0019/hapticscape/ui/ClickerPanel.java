@@ -4,7 +4,12 @@ import com.ashy0019.hapticscape.HapticScapeConfig;
 import com.ashy0019.hapticscape.clicker.ClickerSettings;
 import com.ashy0019.hapticscape.clicker.ClickerXpSettings;
 import com.ashy0019.hapticscape.clicker.ClickerPhraseRules;
+import com.ashy0019.hapticscape.remote.RemoteSessionManager;
+import com.ashy0019.hapticscape.remote.SettingsLockCatalog;
+import com.ashy0019.hapticscape.remote.SettingsLockService;
+import com.ashy0019.hapticscape.remote.SettingsLockTarget;
 import java.awt.BorderLayout;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
@@ -39,6 +44,11 @@ final class ClickerPanel extends JPanel
 	private volatile ClickerSettings settings;
 	private volatile ClickerXpSettings xpSettings;
 	private final ClickerPhraseRulesPanel phraseRulesPanel;
+	private final LockableCheckBoxBinding enabledLockBinding;
+	private final LockableCheckBoxBinding levelUpLockBinding;
+	private final LockableCheckBoxBinding milestoneLockBinding;
+	private final LockableCheckBoxBinding level99LockBinding;
+	private final LockableSectionHeader clickSettingsBlockHeader;
 	private boolean updating;
 	private boolean remoteReadOnly;
 	private boolean previewAllowed = true;
@@ -47,11 +57,24 @@ final class ClickerPanel extends JPanel
 		HapticScapeConfig config,
 		SettingsChangeSink settingsSink,
 		Consumer<ClickerSettings> settingsListener,
-		Runnable testAction)
+		Runnable testAction,
+		RemoteSessionManager sessionManager,
+		SettingsLockService lockService,
+		SettingsLockDraft lockDraft,
+		BooleanSupplier editingRemoteSubject,
+		BooleanSupplier lockSelectionEnabled)
 	{
 		this.settingsSink = settingsSink;
 		this.settingsListener = settingsListener;
-		phraseRulesPanel = new ClickerPhraseRulesPanel(config, settingsSink);
+		phraseRulesPanel = new ClickerPhraseRulesPanel(
+			config,
+			settingsSink,
+			sessionManager,
+			lockService,
+			lockDraft,
+			editingRemoteSubject,
+			lockSelectionEnabled
+		);
 		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
 		setBorder(BorderFactory.createEmptyBorder(5, 4, 4, 4));
 
@@ -83,10 +106,63 @@ final class ClickerPanel extends JPanel
 		levelUpCheckBox.setToolTipText("Click even when a level-up XP gain is below the threshold");
 		milestoneCheckBox.setToolTipText("Give decade milestones priority over ordinary level-ups");
 		level99CheckBox.setToolTipText("Click once when a skill reaches level 99");
+		enabledLockBinding = binding(
+			enabledCheckBox,
+			SettingsLockCatalog.CLICKER_ENABLED,
+			lockDraft,
+			lockService,
+			sessionManager,
+			editingRemoteSubject,
+			lockSelectionEnabled,
+			() -> settings.isEnabled()
+		);
+		levelUpLockBinding = binding(
+			levelUpCheckBox,
+			SettingsLockCatalog.CLICKER_LEVEL_UP,
+			lockDraft,
+			lockService,
+			sessionManager,
+			editingRemoteSubject,
+			lockSelectionEnabled,
+			() -> xpSettings.isLevelUpEnabled()
+		);
+		milestoneLockBinding = binding(
+			milestoneCheckBox,
+			SettingsLockCatalog.CLICKER_MILESTONE,
+			lockDraft,
+			lockService,
+			sessionManager,
+			editingRemoteSubject,
+			lockSelectionEnabled,
+			() -> xpSettings.isMilestoneEnabled()
+		);
+		level99LockBinding = binding(
+			level99CheckBox,
+			SettingsLockCatalog.CLICKER_LEVEL_99,
+			lockDraft,
+			lockService,
+			sessionManager,
+			editingRemoteSubject,
+			lockSelectionEnabled,
+			() -> xpSettings.isLevel99Enabled()
+		);
+		clickSettingsBlockHeader = new LockableSectionHeader(
+			"",
+			() -> SettingsLockCatalog.CLICK_SETTINGS_BLOCK,
+			lockDraft,
+			lockService,
+			sessionManager::getLockSnapshot,
+			editingRemoteSubject,
+			lockSelectionEnabled
+		);
 
-		PanelUi.addVerticalComponent(this, enabledCheckBox);
-		PanelUi.addVerticalComponent(this, row("Volume", volumeValue));
-		PanelUi.addVerticalComponent(this, volumeSlider);
+		JPanel clickSettingsPanel = new JPanel();
+		clickSettingsPanel.setLayout(new BoxLayout(clickSettingsPanel, BoxLayout.Y_AXIS));
+		clickSettingsPanel.setBorder(BorderFactory.createTitledBorder("Click settings"));
+		PanelUi.addVerticalComponent(clickSettingsPanel, clickSettingsBlockHeader);
+		PanelUi.addVerticalComponent(clickSettingsPanel, enabledCheckBox);
+		PanelUi.addVerticalComponent(clickSettingsPanel, row("Volume", volumeValue));
+		PanelUi.addVerticalComponent(clickSettingsPanel, volumeSlider);
 
 		JPanel xpSettings = new JPanel();
 		xpSettings.setLayout(new BoxLayout(xpSettings, BoxLayout.Y_AXIS));
@@ -101,7 +177,8 @@ final class ClickerPanel extends JPanel
 		PanelUi.addVerticalComponent(xpSettings, levelUpCheckBox);
 		PanelUi.addVerticalComponent(xpSettings, milestoneCheckBox);
 		PanelUi.addVerticalComponent(xpSettings, level99CheckBox);
-		PanelUi.addVerticalComponent(this, xpSettings);
+		PanelUi.addVerticalComponent(clickSettingsPanel, xpSettings);
+		PanelUi.addVerticalComponent(this, clickSettingsPanel);
 		PanelUi.addVerticalComponent(this, phraseRulesPanel);
 		PanelUi.addVerticalComponent(this, testButton);
 
@@ -181,17 +258,25 @@ final class ClickerPanel extends JPanel
 	{
 		enabledCheckBox.addActionListener(event ->
 		{
-			if (updating || remoteReadOnly)
+			if (updating || enabledLockBinding.handleAction(event))
 			{
 				return;
 			}
-			persist(HapticScapeConfig.CLICKER_ENABLED_KEY, enabledCheckBox.isSelected());
+			if (isClickSettingsReadOnly() || enabledLockBinding.isEditLocked())
+			{
+				return;
+			}
+			persist(
+				SettingsLockCatalog.CLICKER_ENABLED,
+				HapticScapeConfig.CLICKER_ENABLED_KEY,
+				enabledCheckBox.isSelected()
+			);
 			refreshEnabledState();
 			fireSettings();
 		});
 		volumeSlider.addChangeListener(event ->
 		{
-			if (updating || remoteReadOnly)
+			if (updating || isClickSettingsReadOnly())
 			{
 				return;
 			}
@@ -199,6 +284,7 @@ final class ClickerPanel extends JPanel
 			if (!volumeSlider.getValueIsAdjusting())
 			{
 				persist(
+					SettingsLockCatalog.CLICK_SETTINGS_BLOCK,
 					HapticScapeConfig.CLICKER_VOLUME_PERCENT_KEY,
 					volumeSlider.getValue()
 				);
@@ -207,11 +293,12 @@ final class ClickerPanel extends JPanel
 		});
 		minimumXpSpinner.addChangeListener(event ->
 		{
-			if (updating || remoteReadOnly)
+			if (updating || isClickSettingsReadOnly())
 			{
 				return;
 			}
 			persist(
+				SettingsLockCatalog.CLICK_SETTINGS_BLOCK,
 				HapticScapeConfig.CLICKER_MINIMUM_XP_GAIN_KEY,
 				((Number) minimumXpSpinner.getValue()).intValue()
 			);
@@ -219,11 +306,16 @@ final class ClickerPanel extends JPanel
 		});
 		levelUpCheckBox.addActionListener(event ->
 		{
-			if (updating || remoteReadOnly)
+			if (updating || levelUpLockBinding.handleAction(event))
+			{
+				return;
+			}
+			if (isClickSettingsReadOnly() || levelUpLockBinding.isEditLocked())
 			{
 				return;
 			}
 			persist(
+				SettingsLockCatalog.CLICKER_LEVEL_UP,
 				HapticScapeConfig.CLICKER_LEVEL_UP_ENABLED_KEY,
 				levelUpCheckBox.isSelected()
 			);
@@ -231,11 +323,16 @@ final class ClickerPanel extends JPanel
 		});
 		milestoneCheckBox.addActionListener(event ->
 		{
-			if (updating || remoteReadOnly)
+			if (updating || milestoneLockBinding.handleAction(event))
+			{
+				return;
+			}
+			if (isClickSettingsReadOnly() || milestoneLockBinding.isEditLocked())
 			{
 				return;
 			}
 			persist(
+				SettingsLockCatalog.CLICKER_MILESTONE,
 				HapticScapeConfig.CLICKER_MILESTONE_ENABLED_KEY,
 				milestoneCheckBox.isSelected()
 			);
@@ -243,11 +340,16 @@ final class ClickerPanel extends JPanel
 		});
 		level99CheckBox.addActionListener(event ->
 		{
-			if (updating || remoteReadOnly)
+			if (updating || level99LockBinding.handleAction(event))
+			{
+				return;
+			}
+			if (isClickSettingsReadOnly() || level99LockBinding.isEditLocked())
 			{
 				return;
 			}
 			persist(
+				SettingsLockCatalog.CLICKER_LEVEL_99,
 				HapticScapeConfig.CLICKER_LEVEL_99_ENABLED_KEY,
 				level99CheckBox.isSelected()
 			);
@@ -264,13 +366,21 @@ final class ClickerPanel extends JPanel
 	private void refreshEnabledState()
 	{
 		boolean editable = !remoteReadOnly;
+		clickSettingsBlockHeader.refresh();
+		boolean blockEditable = editable && !clickSettingsBlockHeader.isEditLocked();
 		boolean enabled = enabledCheckBox.isSelected();
-		enabledCheckBox.setEnabled(editable);
-		volumeSlider.setEnabled(editable && enabled);
-		minimumXpSpinner.setEnabled(editable && enabled);
-		levelUpCheckBox.setEnabled(editable && enabled);
-		milestoneCheckBox.setEnabled(editable && enabled);
-		level99CheckBox.setEnabled(editable && enabled);
+		enabledLockBinding.refresh();
+		levelUpLockBinding.refresh();
+		milestoneLockBinding.refresh();
+		level99LockBinding.refresh();
+		enabledCheckBox.setEnabled(blockEditable && !enabledLockBinding.isEditLocked());
+		volumeSlider.setEnabled(blockEditable && enabled);
+		minimumXpSpinner.setEnabled(blockEditable && enabled);
+		levelUpCheckBox.setEnabled(blockEditable && enabled && !levelUpLockBinding.isEditLocked());
+		milestoneCheckBox.setEnabled(
+			blockEditable && enabled && !milestoneLockBinding.isEditLocked()
+		);
+		level99CheckBox.setEnabled(blockEditable && enabled && !level99LockBinding.isEditLocked());
 		phraseRulesPanel.setClickerEnabled(enabled);
 		phraseRulesPanel.setRemoteReadOnly(remoteReadOnly);
 		testButton.setEnabled(
@@ -288,6 +398,11 @@ final class ClickerPanel extends JPanel
 		refreshEnabledState();
 	}
 
+	private boolean isClickSettingsReadOnly()
+	{
+		return remoteReadOnly || clickSettingsBlockHeader.isEditLocked();
+	}
+
 	private void refreshXpSettings()
 	{
 		xpSettings = new ClickerXpSettings(
@@ -301,6 +416,33 @@ final class ClickerPanel extends JPanel
 	private void persist(String key, Object value)
 	{
 		settingsSink.set(key, value);
+	}
+
+	private void persist(SettingsLockTarget target, String key, Object value)
+	{
+		settingsSink.set(target, key, value);
+	}
+
+	private static LockableCheckBoxBinding binding(
+		JCheckBox checkBox,
+		SettingsLockTarget target,
+		SettingsLockDraft lockDraft,
+		SettingsLockService lockService,
+		RemoteSessionManager sessionManager,
+		BooleanSupplier editingRemoteSubject,
+		BooleanSupplier lockSelectionEnabled,
+		BooleanSupplier authoritativeValue)
+	{
+		return new LockableCheckBoxBinding(
+			checkBox,
+			target,
+			lockDraft,
+			lockService,
+			sessionManager::getLockSnapshot,
+			editingRemoteSubject,
+			lockSelectionEnabled,
+			authoritativeValue
+		);
 	}
 
 	private static JPanel row(String name, java.awt.Component control)

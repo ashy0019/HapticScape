@@ -2,12 +2,14 @@ package com.ashy0019.hapticscape.clicker;
 
 import java.util.Locale;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 public final class ClickerPhraseRule
 {
 	public static final int MAXIMUM_EXPRESSION_LENGTH = 500;
 
+	private final String id;
 	private final boolean enabled;
 	private final ClickerPhraseMatchMode mode;
 	private final String expression;
@@ -19,6 +21,16 @@ public final class ClickerPhraseRule
 		ClickerPhraseMatchMode mode,
 		String expression)
 	{
+		this(UUID.randomUUID().toString(), enabled, mode, expression);
+	}
+
+	ClickerPhraseRule(
+		String id,
+		boolean enabled,
+		ClickerPhraseMatchMode mode,
+		String expression)
+	{
+		this.id = canonicalUuid(id);
 		this.enabled = enabled;
 		this.mode = Objects.requireNonNull(mode, "mode");
 		this.expression = Objects.requireNonNull(expression, "expression");
@@ -44,6 +56,19 @@ public final class ClickerPhraseRule
 		regexPattern = mode == ClickerPhraseMatchMode.REGEX
 			? Pattern.compile(expression)
 			: null;
+	}
+
+	public String getId()
+	{
+		return id;
+	}
+
+	public ClickerPhraseRule withValues(
+		boolean enabled,
+		ClickerPhraseMatchMode mode,
+		String expression)
+	{
+		return new ClickerPhraseRule(id, enabled, mode, expression);
 	}
 
 	public boolean isEnabled()
@@ -95,7 +120,8 @@ public final class ClickerPhraseRule
 		}
 
 		ClickerPhraseRule that = (ClickerPhraseRule) other;
-		return enabled == that.enabled
+		return id.equals(that.id)
+			&& enabled == that.enabled
 			&& mode == that.mode
 			&& expression.equals(that.expression);
 	}
@@ -103,7 +129,7 @@ public final class ClickerPhraseRule
 	@Override
 	public int hashCode()
 	{
-		return Objects.hash(enabled, mode, expression);
+		return Objects.hash(id, enabled, mode, expression);
 	}
 
 	@Override
@@ -122,5 +148,22 @@ public final class ClickerPhraseRule
 			+ mode
 			+ ": "
 			+ preview;
+	}
+
+	private static String canonicalUuid(String value)
+	{
+		try
+		{
+			String canonical = UUID.fromString(Objects.requireNonNull(value, "id")).toString();
+			if (!canonical.equals(value.toLowerCase(Locale.ROOT)))
+			{
+				throw new IllegalArgumentException("Invalid phrase-rule ID");
+			}
+			return canonical;
+		}
+		catch (IllegalArgumentException | NullPointerException exception)
+		{
+			throw new IllegalArgumentException("Invalid phrase-rule ID", exception);
+		}
 	}
 }

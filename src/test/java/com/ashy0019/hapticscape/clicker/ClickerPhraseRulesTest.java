@@ -75,4 +75,38 @@ public class ClickerPhraseRulesTest
 
 		assertTrue(restored.getRules().isEmpty());
 	}
+
+	@Test
+	public void legacyRulesReceiveStableIdsAndMigrateToVersionTwo()
+	{
+		String legacy = "v1;1,CONTAINS,aGVsbG8;1,CONTAINS,aGVsbG8";
+		ClickerPhraseRules first = ClickerPhraseRules.fromConfigValue(legacy);
+		ClickerPhraseRules second = ClickerPhraseRules.fromConfigValue(legacy);
+
+		assertTrue(ClickerPhraseRules.requiresMigration(legacy));
+		assertEquals(first, second);
+		assertFalse(first.getRules().get(0).getId().equals(
+			first.getRules().get(1).getId()
+		));
+		assertTrue(first.toConfigValue().startsWith("v2;"));
+		assertEquals(first, ClickerPhraseRules.fromConfigValue(first.toConfigValue()));
+	}
+
+	@Test
+	public void editingRulePreservesItsIdentity()
+	{
+		ClickerPhraseRule original = new ClickerPhraseRule(
+			true,
+			ClickerPhraseMatchMode.CONTAINS,
+			"hello"
+		);
+		ClickerPhraseRule edited = original.withValues(
+			false,
+			ClickerPhraseMatchMode.EXACT,
+			"goodbye"
+		);
+
+		assertEquals(original.getId(), edited.getId());
+		assertFalse(original.equals(edited));
+	}
 }

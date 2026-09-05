@@ -420,6 +420,13 @@ public final class RemoteSessionManager implements AutoCloseable
 		lockCoordinator.propose(role, snapshot.getState(), password);
 	}
 
+	public synchronized void proposeSettingsLock(
+		char[] password,
+		java.util.Collection<SettingsLockTarget> targets)
+	{
+		lockCoordinator.propose(role, snapshot.getState(), password, targets);
+	}
+
 	public synchronized void cancelSettingsLock()
 	{
 		lockCoordinator.cancel(role);
@@ -841,9 +848,9 @@ public final class RemoteSessionManager implements AutoCloseable
 		}
 	}
 
-	private synchronized void handleLocalSettingsLockChanged(boolean locked)
+	private synchronized void handleLocalSettingsLockChanged(SettingsLockSnapshot locks)
 	{
-		lockCoordinator.handleLocalSettingsLockChanged(role, locked);
+		lockCoordinator.handleLocalSettingsLockChanged(role, locks);
 	}
 
 	private synchronized void endSessionInternal(boolean notifyPeer, String message)

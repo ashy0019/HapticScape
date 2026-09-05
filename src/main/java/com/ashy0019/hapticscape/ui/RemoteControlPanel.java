@@ -1,6 +1,8 @@
 package com.ashy0019.hapticscape.ui;
 
 import com.ashy0019.hapticscape.HapticScapeConfig;
+import com.ashy0019.hapticscape.clicker.ClickerPhraseRule;
+import com.ashy0019.hapticscape.clicker.ClickerPhraseRules;
 import com.ashy0019.hapticscape.remote.RemoteActionAcknowledgement;
 import com.ashy0019.hapticscape.remote.RemoteInvitation;
 import com.ashy0019.hapticscape.remote.RemoteLockSnapshot;
@@ -12,7 +14,9 @@ import com.ashy0019.hapticscape.remote.RemoteSessionManager;
 import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteSessionState;
 import com.ashy0019.hapticscape.remote.RemoteSettingsSnapshot;
+import com.ashy0019.hapticscape.remote.SettingsLockCatalog;
 import com.ashy0019.hapticscape.remote.SettingsLockProposal;
+import com.ashy0019.hapticscape.remote.SettingsLockTarget;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
@@ -22,7 +26,11 @@ import java.awt.GridLayout;
 import java.awt.Toolkit;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.List;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
@@ -39,6 +47,7 @@ import net.runelite.client.config.ConfigManager;
 final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 {
 	private final ConfigManager configManager;
+	private final HapticScapeConfig config;
 	private final RemoteSessionManager sessionManager;
 	private final SidebarTextLabel statusText = new SidebarTextLabel("Local control");
 	private final JTextField relayUrlField = new JTextField();
@@ -55,6 +64,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 	private final SidebarTextLabel settingsLockStatusText = new SidebarTextLabel(
 		"No post-session lock requested"
 	);
+	private final JLabel settingsLockSelectionText = new JLabel("Selected lock targets: 0");
 	private final JButton armSettingsLockButton = new JButton("Generate unlock key");
 	private final JButton cancelSettingsLockButton = new JButton("Cancel lock");
 	private final JPanel controllerPanel = new JPanel();
@@ -63,16 +73,22 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 	private final RemotePermissionsPanel permissionsPanel;
 	private final RemoteActionsPanel actionsPanel;
 	private final RemoteLiveForgePanel liveForgePanel;
+	private final SettingsLockDraft settingsLockDraft;
+	private final Runnable settingsLockDraftListener;
 	private int nextLayoutRow;
 	private boolean wasLocal = true;
 
 	RemoteControlPanel(
 		HapticScapeConfig config,
 		ConfigManager configManager,
-		RemoteSessionManager sessionManager)
+		RemoteSessionManager sessionManager,
+		SettingsLockDraft settingsLockDraft)
 	{
+		this.config = config;
 		this.configManager = configManager;
 		this.sessionManager = sessionManager;
+		this.settingsLockDraft = settingsLockDraft;
+		this.settingsLockDraftListener = this::handleSettingsLockDraftChanged;
 		this.savedUnlockKeysPanel = new SavedUnlockKeysPanel(sessionManager);
 		this.permissionsPanel = new RemotePermissionsPanel(sessionManager);
 		this.actionsPanel = new RemoteActionsPanel(sessionManager);
@@ -152,9 +168,17 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		SidebarTextLabel lockExplanation = new SidebarTextLabel(
 			"Ask the participant to keep the final feedback settings locked after "
 				+ "the session. They must approve the request. HapticScape generates "
-				+ "the unlock key for you."
+				+ "the unlock key for you. Shift-click settings in the Subject workspace "
+				+ "to select individual settings, section headers, or phrase rules."
 		);
 		PanelUi.addVerticalComponent(settingsLockPanel, lockExplanation);
+		Dimension selectionSize = new Dimension(
+			180,
+			settingsLockSelectionText.getPreferredSize().height
+		);
+		settingsLockSelectionText.setPreferredSize(selectionSize);
+		settingsLockSelectionText.setMinimumSize(new Dimension(0, selectionSize.height));
+		PanelUi.addVerticalComponent(settingsLockPanel, settingsLockSelectionText);
 		JPanel settingsLockButtons = new JPanel(new GridLayout(0, 1, 0, 4));
 		allowHorizontalShrink(settingsLockButtons);
 		configureCompactButton(armSettingsLockButton);
@@ -185,6 +209,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		cancelSettingsLockButton.addActionListener(event -> sessionManager.cancelSettingsLock());
 
 		sessionManager.addListener(this);
+		settingsLockDraft.addListener(settingsLockDraftListener);
 		savedUnlockKeysPanel.refresh();
 		applySnapshot(sessionManager.getSnapshot());
 	}
@@ -192,6 +217,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 	void close()
 	{
 		liveForgePanel.close();
+		settingsLockDraft.removeListener(settingsLockDraftListener);
 		sessionManager.removeListener(this);
 	}
 
@@ -241,7 +267,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 	@Override
 	public void onRemoteLockProposal(SettingsLockProposal proposal)
 	{
-		SwingUtilities.invokeLater(this::confirmSettingsLockProposal);
+		SwingUtilities.invokeLater(() -> confirmSettingsLockProposal(proposal));
 	}
 
 	private void createInvitation()
@@ -305,6 +331,14 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 
 	private void armSettingsLock()
 	{
+		Collection<SettingsLockTarget> targets = settingsLockDraft.snapshot();
+		if (targets.isEmpty())
+		{
+			showError(
+				"Shift-click one or more settings in the Subject workspace first."
+			);
+			return;
+		}
 		if (!sessionManager.isSavedUnlockKeyVaultAvailable())
 		{
 			showError(sessionManager.getSavedUnlockKeyVaultMessage());
@@ -321,6 +355,13 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		JPanel content = new JPanel();
 		content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
 		PanelUi.addVerticalComponent(content, explanation);
+		PanelUi.addVerticalComponent(
+			content,
+			new JLabel(targets.size() + (targets.size() == 1
+				? " setting will be locked:"
+				: " settings will be locked:"))
+		);
+		PanelUi.addVerticalComponent(content, createTargetList(targets));
 		PanelUi.addVerticalComponent(content, keyField);
 		try
 		{
@@ -343,7 +384,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 				new StringSelection(keyField.getText()),
 				null
 			);
-			sessionManager.proposeSettingsLock(unlockKey);
+			sessionManager.proposeSettingsLock(unlockKey, targets);
 		}
 		catch (RuntimeException e)
 		{
@@ -356,15 +397,34 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		}
 	}
 
-	private void confirmSettingsLockProposal()
+	private void confirmSettingsLockProposal(SettingsLockProposal proposal)
 	{
+		if (!phraseTargetsExist(proposal.getTargets()))
+		{
+			sessionManager.declinePendingSettingsLock();
+			showError(
+				"The lock request referenced a phrase rule that no longer exists. "
+					+ "Ask the controller to create a new request."
+			);
+			return;
+		}
+		SidebarTextLabel explanation = new SidebarTextLabel(
+			"The controller requests a persistent lock on the settings listed below. "
+				+ "Their final values will stay locked after this session ends. Only the "
+				+ "controller's generated key can unlock this bundle normally."
+		);
+		SidebarTextLabel safety = new SidebarTextLabel(
+			"Emergency Off, End Session, Intiface controls, remote permissions, "
+				+ "Forge, Music, and developer recovery remain available."
+		);
+		JPanel content = new JPanel();
+		content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+		PanelUi.addVerticalComponent(content, explanation);
+		PanelUi.addVerticalComponent(content, createTargetList(proposal.getTargets()));
+		PanelUi.addVerticalComponent(content, safety);
 		int choice = JOptionPane.showConfirmDialog(
 			this,
-			"<html>The controller requests a persistent settings lock.<br><br>"
-				+ "If accepted, the final feedback settings will stay locked after "
-				+ "this session ends.<br>Only the controller's generated key can unlock "
-				+ "them normally.<br><br>Emergency Off, End Session, Intiface controls, "
-				+ "and developer recovery remain available.</html>",
+			content,
 			"Accept post-session settings lock?",
 			JOptionPane.YES_NO_OPTION,
 			JOptionPane.WARNING_MESSAGE
@@ -390,6 +450,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		{
 			invitationOutput.setText("");
 			invitationInput.setText("");
+			settingsLockDraft.clear();
 		}
 		wasLocal = local;
 
@@ -432,19 +493,15 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		RemoteLockState state = snapshot.getState();
 		settingsLockPanel.setVisible(controllerActive);
 		settingsLockStatusText.setPlainText(snapshot.getMessage());
+		if (state == RemoteLockState.ARMED && settingsLockDraft.size() > 0)
+		{
+			settingsLockDraft.clear();
+		}
+		refreshSettingsLockSelectionText();
 		savedUnlockKeysPanel.refresh();
 		boolean mayRequest = state == RemoteLockState.INACTIVE
 			|| state == RemoteLockState.DECLINED;
-		armSettingsLockButton.setEnabled(
-			controllerActive
-				&& mayRequest
-				&& sessionManager.isSavedUnlockKeyVaultAvailable()
-		);
-		armSettingsLockButton.setToolTipText(
-			sessionManager.isSavedUnlockKeyVaultAvailable()
-				? null
-				: sessionManager.getSavedUnlockKeyVaultMessage()
-		);
+		refreshArmSettingsLockButton(controllerActive, mayRequest);
 		boolean mayCancel = state == RemoteLockState.AWAITING_APPROVAL
 			|| state == RemoteLockState.ARMED
 			|| state == RemoteLockState.DECLINED;
@@ -453,6 +510,141 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		refreshSectionMinimumHeights();
 		settingsLockPanel.revalidate();
 		settingsLockPanel.repaint();
+	}
+
+	private void handleSettingsLockDraftChanged()
+	{
+		if (!SwingUtilities.isEventDispatchThread())
+		{
+			SwingUtilities.invokeLater(this::handleSettingsLockDraftChanged);
+			return;
+		}
+		RemoteSessionSnapshot session = sessionManager.getSnapshot();
+		RemoteLockState state = sessionManager.getLockSnapshot().getState();
+		boolean controllerActive = session.getRole() == RemoteRole.CONTROLLER
+			&& (session.getState() == RemoteSessionState.ACTIVE
+				|| session.getState() == RemoteSessionState.PEER_EMERGENCY_PAUSED);
+		boolean mayRequest = state == RemoteLockState.INACTIVE
+			|| state == RemoteLockState.DECLINED;
+		refreshSettingsLockSelectionText();
+		refreshArmSettingsLockButton(controllerActive, mayRequest);
+		settingsLockSelectionText.repaint();
+		armSettingsLockButton.repaint();
+	}
+
+	private void refreshSettingsLockSelectionText()
+	{
+		settingsLockSelectionText.setText(
+			"Selected lock targets: " + settingsLockDraft.size()
+		);
+	}
+
+	private void refreshArmSettingsLockButton(
+		boolean controllerActive,
+		boolean mayRequest)
+	{
+		armSettingsLockButton.setEnabled(
+			controllerActive
+				&& mayRequest
+				&& settingsLockDraft.size() > 0
+				&& sessionManager.isSavedUnlockKeyVaultAvailable()
+		);
+		armSettingsLockButton.setToolTipText(
+			!sessionManager.isSavedUnlockKeyVaultAvailable()
+				? sessionManager.getSavedUnlockKeyVaultMessage()
+				: settingsLockDraft.size() == 0
+					? "Shift-click settings in the Subject workspace first"
+					: null
+		);
+	}
+
+	private JScrollPane createTargetList(
+		Collection<SettingsLockTarget> targets)
+	{
+		JTextArea list = new JTextArea(formatTargets(targets), 9, 28);
+		list.setEditable(false);
+		list.setLineWrap(false);
+		list.setCaretPosition(0);
+		JScrollPane scroll = new JScrollPane(list);
+		scroll.setPreferredSize(new Dimension(300, 150));
+		return scroll;
+	}
+
+	private String formatTargets(
+		Collection<SettingsLockTarget> targets)
+	{
+		List<SettingsLockTarget> ordered = new ArrayList<>(targets);
+		ordered.sort(Comparator.naturalOrder());
+		StringBuilder text = new StringBuilder();
+		String group = null;
+		for (SettingsLockTarget target : ordered)
+		{
+			if (!target.getGroup().equals(group))
+			{
+				if (text.length() > 0)
+				{
+					text.append('\n');
+				}
+				group = target.getGroup();
+				text.append(group).append(':').append('\n');
+			}
+			text.append("  • ").append(displayName(target)).append('\n');
+		}
+		return text.toString();
+	}
+
+	private String displayName(SettingsLockTarget target)
+	{
+		if (!SettingsLockCatalog.isPhraseRule(target))
+		{
+			return target.getDisplayName();
+		}
+		String id = SettingsLockCatalog.phraseRuleId(target);
+		for (ClickerPhraseRule rule : visiblePhraseRules().getRules())
+		{
+			if (id.equals(rule.getId()))
+			{
+				return "Phrase rule: " + rule.toString();
+			}
+		}
+		return target.getDisplayName() + " (no longer present)";
+	}
+
+	private boolean phraseTargetsExist(Collection<SettingsLockTarget> targets)
+	{
+		ClickerPhraseRules rules = visiblePhraseRules();
+		for (SettingsLockTarget target : targets)
+		{
+			if (!SettingsLockCatalog.isPhraseRule(target))
+			{
+				continue;
+			}
+			String id = SettingsLockCatalog.phraseRuleId(target);
+			boolean found = false;
+			for (ClickerPhraseRule rule : rules.getRules())
+			{
+				if (id.equals(rule.getId()))
+				{
+					found = true;
+					break;
+				}
+			}
+			if (!found)
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	private ClickerPhraseRules visiblePhraseRules()
+	{
+		RemoteSettingsSnapshot remote = sessionManager.getControllerSettingsSnapshot();
+		if (sessionManager.getSnapshot().getRole() == RemoteRole.CONTROLLER && remote != null)
+		{
+			return remote.getClickerPhraseRules();
+		}
+		return ClickerPhraseRules.fromConfigValue(config.clickerPhraseRules());
 	}
 
 	private void copyInvitation()

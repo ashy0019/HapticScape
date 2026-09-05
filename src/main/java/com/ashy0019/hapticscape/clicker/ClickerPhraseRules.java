@@ -4,15 +4,18 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.UUID;
 
 public final class ClickerPhraseRules
 {
 	public static final int MAXIMUM_RULES = 50;
 
-	private static final String FORMAT_VERSION = "v1";
+	private static final String LEGACY_FORMAT_VERSION = "v1";
+	private static final String FORMAT_VERSION = "v2";
 	private static final Base64.Encoder ENCODER =
 		Base64.getUrlEncoder().withoutPadding();
 	private static final Base64.Decoder DECODER =
@@ -29,6 +32,14 @@ public final class ClickerPhraseRules
 					+ MAXIMUM_RULES
 					+ " phrase rules"
 			);
+		}
+		HashSet<String> ids = new HashSet<>();
+		for (ClickerPhraseRule rule : rules)
+		{
+			if (!ids.add(Objects.requireNonNull(rule, "rule").getId()))
+			{
+				throw new IllegalArgumentException("Duplicate phrase-rule ID");
+			}
 		}
 
 		this.rules = Collections.unmodifiableList(
@@ -49,10 +60,13 @@ public final class ClickerPhraseRules
 		}
 
 		String[] entries = configuredValue.split(";", -1);
-		if (entries.length == 0 || !FORMAT_VERSION.equals(entries[0]))
+		if (entries.length == 0
+			|| (!FORMAT_VERSION.equals(entries[0])
+				&& !LEGACY_FORMAT_VERSION.equals(entries[0])))
 		{
 			return empty();
 		}
+		boolean legacy = LEGACY_FORMAT_VERSION.equals(entries[0]);
 
 		List<ClickerPhraseRule> restored = new ArrayList<>();
 
@@ -66,18 +80,21 @@ public final class ClickerPhraseRules
 				continue;
 			}
 
-			String[] fields = entry.split(",", 3);
-			if (fields.length != 3)
+			String[] fields = entry.split(",", legacy ? 3 : 4);
+			if (fields.length != (legacy ? 3 : 4))
 			{
 				continue;
 			}
 
 			boolean enabled;
-			if ("1".equals(fields[0]))
+			int enabledField = legacy ? 0 : 1;
+			int modeField = legacy ? 1 : 2;
+			int expressionField = legacy ? 2 : 3;
+			if ("1".equals(fields[enabledField]))
 			{
 				enabled = true;
 			}
-			else if ("0".equals(fields[0]))
+			else if ("0".equals(fields[enabledField]))
 			{
 				enabled = false;
 			}
@@ -90,19 +107,36 @@ public final class ClickerPhraseRules
 			{
 				ClickerPhraseMatchMode mode =
 					ClickerPhraseMatchMode.valueOf(
-						fields[1].trim().toUpperCase(Locale.ROOT)
+						fields[modeField].trim().toUpperCase(Locale.ROOT)
 					);
 
 				String expression = new String(
-					DECODER.decode(fields[2]),
+					DECODER.decode(fields[expressionField]),
 					StandardCharsets.UTF_8
 				);
 
-				restored.add(new ClickerPhraseRule(
+				String id = legacy
+					? legacyId(index, entry)
+					: fields[0];
+				ClickerPhraseRule rule = new ClickerPhraseRule(
+					id,
 					enabled,
 					mode,
 					expression
-				));
+				);
+				boolean duplicate = false;
+				for (ClickerPhraseRule restoredRule : restored)
+				{
+					if (restoredRule.getId().equals(rule.getId()))
+					{
+						duplicate = true;
+						break;
+					}
+				}
+				if (!duplicate)
+				{
+					restored.add(rule);
+				}
 			}
 			catch (IllegalArgumentException ignored)
 			{
@@ -111,6 +145,13 @@ public final class ClickerPhraseRules
 		}
 
 		return new ClickerPhraseRules(restored);
+	}
+
+	public static boolean requiresMigration(String configuredValue)
+	{
+		return configuredValue != null
+			&& (configuredValue.equals(LEGACY_FORMAT_VERSION)
+				|| configuredValue.startsWith(LEGACY_FORMAT_VERSION + ";"));
 	}
 
 	public List<ClickerPhraseRule> getRules()
@@ -154,6 +195,10 @@ public final class ClickerPhraseRules
 		Objects.requireNonNull(rule, "rule");
 
 		List<ClickerPhraseRule> updated = new ArrayList<>(rules);
+		if (!updated.get(index).getId().equals(rule.getId()))
+		{
+			throw new IllegalArgumentException("Editing a phrase rule cannot change its ID");
+		}
 		updated.set(index, rule);
 		return new ClickerPhraseRules(updated);
 	}
@@ -177,6 +222,8 @@ public final class ClickerPhraseRules
 		{
 			encoded
 				.append(';')
+				.append(rule.getId())
+				.append(',')
 				.append(rule.isEnabled() ? '1' : '0')
 				.append(',')
 				.append(rule.getMode().name())
@@ -187,6 +234,14 @@ public final class ClickerPhraseRules
 		}
 
 		return encoded.toString();
+	}
+
+	private static String legacyId(int index, String entry)
+	{
+		return UUID.nameUUIDFromBytes(
+			("HapticScape phrase rule v1:" + index + ":" + entry)
+				.getBytes(StandardCharsets.UTF_8)
+		).toString();
 	}
 
 	@Override

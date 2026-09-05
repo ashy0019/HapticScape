@@ -26,6 +26,7 @@ final class RemoteLockCoordinator
 	private char[] pendingControllerUnlockKey;
 	private SettingsLockProposal participantProposal;
 	private String participantArmedLockId;
+	private SettingsLockProposal participantArmedProposal;
 	private String participantDeclinedLockId;
 	private long lastProposalNanos;
 
@@ -99,6 +100,15 @@ final class RemoteLockCoordinator
 
 	void propose(RemoteRole role, RemoteSessionState state, char[] password)
 	{
+		propose(role, state, password, null);
+	}
+
+	void propose(
+		RemoteRole role,
+		RemoteSessionState state,
+		char[] password,
+		java.util.Collection<SettingsLockTarget> targets)
+	{
 		if (role != RemoteRole.CONTROLLER
 			|| (state != RemoteSessionState.ACTIVE
 				&& state != RemoteSessionState.PEER_EMERGENCY_PAUSED))
@@ -113,7 +123,9 @@ final class RemoteLockCoordinator
 			);
 		}
 
-		SettingsLockProposal proposal = settingsLockService.createProposal(password);
+		SettingsLockProposal proposal = targets == null
+			? settingsLockService.createProposal(password)
+			: settingsLockService.createProposal(password, targets);
 		char[] pendingKey = Arrays.copyOf(password, password.length);
 		clearPendingControllerUnlockKey();
 		controllerProposal = proposal;
@@ -153,6 +165,7 @@ final class RemoteLockCoordinator
 		try
 		{
 			participantArmedLockId = proposal.getProposalId();
+			participantArmedProposal = proposal;
 			settingsLockService.arm(proposal);
 			participantProposal = null;
 			participantDeclinedLockId = null;
@@ -162,6 +175,7 @@ final class RemoteLockCoordinator
 		catch (RuntimeException e)
 		{
 			participantArmedLockId = null;
+			participantArmedProposal = null;
 			participantProposal = null;
 			participantDeclinedLockId = proposal.getProposalId();
 			publish(RemoteLockState.DECLINED, "Settings lock could not be saved");
@@ -218,14 +232,17 @@ final class RemoteLockCoordinator
 		}
 	}
 
-	void handleLocalSettingsLockChanged(RemoteRole role, boolean locked)
+	void handleLocalSettingsLockChanged(RemoteRole role, SettingsLockSnapshot localLocks)
 	{
-		if (locked || role != RemoteRole.PARTICIPANT || participantArmedLockId == null)
+		if (role != RemoteRole.PARTICIPANT
+			|| participantArmedLockId == null
+			|| localLocks.containsLock(participantArmedLockId))
 		{
 			return;
 		}
 		String clearedId = participantArmedLockId;
 		participantArmedLockId = null;
+		participantArmedProposal = null;
 		publish(RemoteLockState.INACTIVE, "Settings lock cleared locally");
 		sender.send(RemoteMessageType.LOCK_CANCELLED, 0, clearedId);
 	}
@@ -243,6 +260,7 @@ final class RemoteLockCoordinator
 		clearPendingControllerUnlockKey();
 		participantProposal = null;
 		participantArmedLockId = null;
+		participantArmedProposal = null;
 		participantDeclinedLockId = null;
 		lastProposalNanos = 0;
 		snapshot = RemoteLockSnapshot.inactive();
@@ -281,10 +299,14 @@ final class RemoteLockCoordinator
 			{
 				return;
 			}
-			if (settingsLockService.isLocked())
+			try
+			{
+				settingsLockService.validateCanArm(proposal);
+			}
+			catch (IllegalStateException conflict)
 			{
 				participantDeclinedLockId = proposalId;
-				publish(RemoteLockState.DECLINED, "Settings are already locked");
+				publish(RemoteLockState.DECLINED, conflict.getMessage());
 				sender.send(RemoteMessageType.LOCK_DECLINED, 0, proposalId);
 				return;
 			}
@@ -369,7 +391,8 @@ final class RemoteLockCoordinator
 		if (armedMatch)
 		{
 			participantArmedLockId = null;
-			settingsLockService.clearAllLocks();
+			participantArmedProposal = null;
+			settingsLockService.removeLock(proposalId);
 		}
 		publish(RemoteLockState.INACTIVE, "Post-session settings lock cancelled");
 		sender.send(RemoteMessageType.LOCK_CANCELLED, 0, proposalId);
@@ -416,7 +439,18 @@ final class RemoteLockCoordinator
 
 	private void publish(RemoteLockState state, String message)
 	{
-		RemoteLockSnapshot next = new RemoteLockSnapshot(state, message);
+		SettingsLockProposal visibleProposal = controllerProposal != null
+			? controllerProposal
+			: participantProposal != null
+				? participantProposal
+				: participantArmedProposal;
+		RemoteLockSnapshot next = new RemoteLockSnapshot(
+			state,
+			message,
+			visibleProposal == null
+				? java.util.Collections.emptySet()
+				: visibleProposal.getTargets()
+		);
 		snapshot = next;
 		snapshotPublisher.accept(next);
 	}

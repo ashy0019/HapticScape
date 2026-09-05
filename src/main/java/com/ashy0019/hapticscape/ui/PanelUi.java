@@ -90,6 +90,18 @@ final class PanelUi
 		panel.add(component);
 	}
 
+	/**
+	 * Adds content whose preferred height may legitimately change after construction.
+	 * The surrounding BoxLayout still uses the preferred height, but does not retain a
+	 * stale maximum that can clip a tab page or CardLayout child later.
+	 */
+	static void addFlexibleVerticalComponent(JPanel panel, JComponent component)
+	{
+		component.setAlignmentX(Component.LEFT_ALIGNMENT);
+		component.setMaximumSize(new Dimension(Integer.MAX_VALUE, Short.MAX_VALUE));
+		panel.add(component);
+	}
+
 	static void addCompactTab(JTabbedPane tabs, String title, Component component)
 	{
 		tabs.addTab(title, component);
