@@ -1,5 +1,6 @@
 package com.ashy0019.hapticscape.ui;
 
+import com.ashy0019.hapticscape.remote.SettingsLockCatalog;
 import com.ashy0019.hapticscape.remote.SettingsLockTarget;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -16,6 +17,7 @@ final class SettingsLockDraft
 	{
 		if (!targets.remove(target))
 		{
+			targets.removeIf(existing -> SettingsLockCatalog.conflicts(existing, target));
 			targets.add(target);
 		}
 		publish();
@@ -26,12 +28,31 @@ final class SettingsLockDraft
 		boolean selected)
 	{
 		boolean changed = selected
-			? targets.addAll(changedTargets)
+			? addAllNormalized(changedTargets)
 			: targets.removeAll(changedTargets);
 		if (changed)
 		{
 			publish();
 		}
+	}
+
+	private boolean addAllNormalized(Set<SettingsLockTarget> changedTargets)
+	{
+		boolean changed = false;
+		for (SettingsLockTarget target : changedTargets)
+		{
+			Set<SettingsLockTarget> conflicts = new LinkedHashSet<>();
+			for (SettingsLockTarget existing : targets)
+			{
+				if (SettingsLockCatalog.conflicts(existing, target))
+				{
+					conflicts.add(existing);
+				}
+			}
+			changed |= targets.removeAll(conflicts);
+			changed |= targets.add(target);
+		}
+		return changed;
 	}
 
 	synchronized boolean contains(SettingsLockTarget target)

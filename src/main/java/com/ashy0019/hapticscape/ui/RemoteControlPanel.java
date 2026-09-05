@@ -1,6 +1,8 @@
 package com.ashy0019.hapticscape.ui;
 
 import com.ashy0019.hapticscape.HapticScapeConfig;
+import com.ashy0019.hapticscape.clicker.ClickerPhraseRule;
+import com.ashy0019.hapticscape.clicker.ClickerPhraseRules;
 import com.ashy0019.hapticscape.remote.RemoteActionAcknowledgement;
 import com.ashy0019.hapticscape.remote.RemoteInvitation;
 import com.ashy0019.hapticscape.remote.RemoteLockSnapshot;
@@ -12,6 +14,7 @@ import com.ashy0019.hapticscape.remote.RemoteSessionManager;
 import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteSessionState;
 import com.ashy0019.hapticscape.remote.RemoteSettingsSnapshot;
+import com.ashy0019.hapticscape.remote.SettingsLockCatalog;
 import com.ashy0019.hapticscape.remote.SettingsLockProposal;
 import com.ashy0019.hapticscape.remote.SettingsLockTarget;
 import java.awt.BorderLayout;
@@ -44,6 +47,7 @@ import net.runelite.client.config.ConfigManager;
 final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 {
 	private final ConfigManager configManager;
+	private final HapticScapeConfig config;
 	private final RemoteSessionManager sessionManager;
 	private final SidebarTextLabel statusText = new SidebarTextLabel("Local control");
 	private final JTextField relayUrlField = new JTextField();
@@ -60,7 +64,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 	private final SidebarTextLabel settingsLockStatusText = new SidebarTextLabel(
 		"No post-session lock requested"
 	);
-	private final JLabel settingsLockSelectionText = new JLabel("Selected settings: 0");
+	private final JLabel settingsLockSelectionText = new JLabel("Selected lock targets: 0");
 	private final JButton armSettingsLockButton = new JButton("Generate unlock key");
 	private final JButton cancelSettingsLockButton = new JButton("Cancel lock");
 	private final JPanel controllerPanel = new JPanel();
@@ -80,6 +84,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		RemoteSessionManager sessionManager,
 		SettingsLockDraft settingsLockDraft)
 	{
+		this.config = config;
 		this.configManager = configManager;
 		this.sessionManager = sessionManager;
 		this.settingsLockDraft = settingsLockDraft;
@@ -164,7 +169,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 			"Ask the participant to keep the final feedback settings locked after "
 				+ "the session. They must approve the request. HapticScape generates "
 				+ "the unlock key for you. Shift-click settings in the Subject workspace "
-				+ "to select them."
+				+ "to select individual settings, section headers, or phrase rules."
 		);
 		PanelUi.addVerticalComponent(settingsLockPanel, lockExplanation);
 		Dimension selectionSize = new Dimension(
@@ -394,6 +399,15 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 
 	private void confirmSettingsLockProposal(SettingsLockProposal proposal)
 	{
+		if (!phraseTargetsExist(proposal.getTargets()))
+		{
+			sessionManager.declinePendingSettingsLock();
+			showError(
+				"The lock request referenced a phrase rule that no longer exists. "
+					+ "Ask the controller to create a new request."
+			);
+			return;
+		}
 		SidebarTextLabel explanation = new SidebarTextLabel(
 			"The controller requests a persistent lock on the settings listed below. "
 				+ "Their final values will stay locked after this session ends. Only the "
@@ -521,7 +535,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 	private void refreshSettingsLockSelectionText()
 	{
 		settingsLockSelectionText.setText(
-			"Selected settings: " + settingsLockDraft.size()
+			"Selected lock targets: " + settingsLockDraft.size()
 		);
 	}
 
@@ -544,7 +558,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		);
 	}
 
-	private static JScrollPane createTargetList(
+	private JScrollPane createTargetList(
 		Collection<SettingsLockTarget> targets)
 	{
 		JTextArea list = new JTextArea(formatTargets(targets), 9, 28);
@@ -556,7 +570,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		return scroll;
 	}
 
-	private static String formatTargets(
+	private String formatTargets(
 		Collection<SettingsLockTarget> targets)
 	{
 		List<SettingsLockTarget> ordered = new ArrayList<>(targets);
@@ -574,9 +588,63 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 				group = target.getGroup();
 				text.append(group).append(':').append('\n');
 			}
-			text.append("  • ").append(target.getDisplayName()).append('\n');
+			text.append("  • ").append(displayName(target)).append('\n');
 		}
 		return text.toString();
+	}
+
+	private String displayName(SettingsLockTarget target)
+	{
+		if (!SettingsLockCatalog.isPhraseRule(target))
+		{
+			return target.getDisplayName();
+		}
+		String id = SettingsLockCatalog.phraseRuleId(target);
+		for (ClickerPhraseRule rule : visiblePhraseRules().getRules())
+		{
+			if (id.equals(rule.getId()))
+			{
+				return "Phrase rule: " + rule.toString();
+			}
+		}
+		return target.getDisplayName() + " (no longer present)";
+	}
+
+	private boolean phraseTargetsExist(Collection<SettingsLockTarget> targets)
+	{
+		ClickerPhraseRules rules = visiblePhraseRules();
+		for (SettingsLockTarget target : targets)
+		{
+			if (!SettingsLockCatalog.isPhraseRule(target))
+			{
+				continue;
+			}
+			String id = SettingsLockCatalog.phraseRuleId(target);
+			boolean found = false;
+			for (ClickerPhraseRule rule : rules.getRules())
+			{
+				if (id.equals(rule.getId()))
+				{
+					found = true;
+					break;
+				}
+			}
+			if (!found)
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	private ClickerPhraseRules visiblePhraseRules()
+	{
+		RemoteSettingsSnapshot remote = sessionManager.getControllerSettingsSnapshot();
+		if (sessionManager.getSnapshot().getRole() == RemoteRole.CONTROLLER && remote != null)
+		{
+			return remote.getClickerPhraseRules();
+		}
+		return ClickerPhraseRules.fromConfigValue(config.clickerPhraseRules());
 	}
 
 	private void copyInvitation()

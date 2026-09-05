@@ -48,6 +48,7 @@ final class ClickerPanel extends JPanel
 	private final LockableCheckBoxBinding levelUpLockBinding;
 	private final LockableCheckBoxBinding milestoneLockBinding;
 	private final LockableCheckBoxBinding level99LockBinding;
+	private final LockableSectionHeader clickSettingsBlockHeader;
 	private boolean updating;
 	private boolean remoteReadOnly;
 	private boolean previewAllowed = true;
@@ -65,7 +66,15 @@ final class ClickerPanel extends JPanel
 	{
 		this.settingsSink = settingsSink;
 		this.settingsListener = settingsListener;
-		phraseRulesPanel = new ClickerPhraseRulesPanel(config, settingsSink);
+		phraseRulesPanel = new ClickerPhraseRulesPanel(
+			config,
+			settingsSink,
+			sessionManager,
+			lockService,
+			lockDraft,
+			editingRemoteSubject,
+			lockSelectionEnabled
+		);
 		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
 		setBorder(BorderFactory.createEmptyBorder(5, 4, 4, 4));
 
@@ -137,10 +146,23 @@ final class ClickerPanel extends JPanel
 			lockSelectionEnabled,
 			() -> xpSettings.isLevel99Enabled()
 		);
+		clickSettingsBlockHeader = new LockableSectionHeader(
+			"",
+			() -> SettingsLockCatalog.CLICK_SETTINGS_BLOCK,
+			lockDraft,
+			lockService,
+			sessionManager::getLockSnapshot,
+			editingRemoteSubject,
+			lockSelectionEnabled
+		);
 
-		PanelUi.addVerticalComponent(this, enabledCheckBox);
-		PanelUi.addVerticalComponent(this, row("Volume", volumeValue));
-		PanelUi.addVerticalComponent(this, volumeSlider);
+		JPanel clickSettingsPanel = new JPanel();
+		clickSettingsPanel.setLayout(new BoxLayout(clickSettingsPanel, BoxLayout.Y_AXIS));
+		clickSettingsPanel.setBorder(BorderFactory.createTitledBorder("Click settings"));
+		PanelUi.addVerticalComponent(clickSettingsPanel, clickSettingsBlockHeader);
+		PanelUi.addVerticalComponent(clickSettingsPanel, enabledCheckBox);
+		PanelUi.addVerticalComponent(clickSettingsPanel, row("Volume", volumeValue));
+		PanelUi.addVerticalComponent(clickSettingsPanel, volumeSlider);
 
 		JPanel xpSettings = new JPanel();
 		xpSettings.setLayout(new BoxLayout(xpSettings, BoxLayout.Y_AXIS));
@@ -155,7 +177,8 @@ final class ClickerPanel extends JPanel
 		PanelUi.addVerticalComponent(xpSettings, levelUpCheckBox);
 		PanelUi.addVerticalComponent(xpSettings, milestoneCheckBox);
 		PanelUi.addVerticalComponent(xpSettings, level99CheckBox);
-		PanelUi.addVerticalComponent(this, xpSettings);
+		PanelUi.addVerticalComponent(clickSettingsPanel, xpSettings);
+		PanelUi.addVerticalComponent(this, clickSettingsPanel);
 		PanelUi.addVerticalComponent(this, phraseRulesPanel);
 		PanelUi.addVerticalComponent(this, testButton);
 
@@ -239,7 +262,7 @@ final class ClickerPanel extends JPanel
 			{
 				return;
 			}
-			if (remoteReadOnly || enabledLockBinding.isEditLocked())
+			if (isClickSettingsReadOnly() || enabledLockBinding.isEditLocked())
 			{
 				return;
 			}
@@ -253,7 +276,7 @@ final class ClickerPanel extends JPanel
 		});
 		volumeSlider.addChangeListener(event ->
 		{
-			if (updating || remoteReadOnly)
+			if (updating || isClickSettingsReadOnly())
 			{
 				return;
 			}
@@ -261,6 +284,7 @@ final class ClickerPanel extends JPanel
 			if (!volumeSlider.getValueIsAdjusting())
 			{
 				persist(
+					SettingsLockCatalog.CLICK_SETTINGS_BLOCK,
 					HapticScapeConfig.CLICKER_VOLUME_PERCENT_KEY,
 					volumeSlider.getValue()
 				);
@@ -269,11 +293,12 @@ final class ClickerPanel extends JPanel
 		});
 		minimumXpSpinner.addChangeListener(event ->
 		{
-			if (updating || remoteReadOnly)
+			if (updating || isClickSettingsReadOnly())
 			{
 				return;
 			}
 			persist(
+				SettingsLockCatalog.CLICK_SETTINGS_BLOCK,
 				HapticScapeConfig.CLICKER_MINIMUM_XP_GAIN_KEY,
 				((Number) minimumXpSpinner.getValue()).intValue()
 			);
@@ -285,7 +310,7 @@ final class ClickerPanel extends JPanel
 			{
 				return;
 			}
-			if (remoteReadOnly || levelUpLockBinding.isEditLocked())
+			if (isClickSettingsReadOnly() || levelUpLockBinding.isEditLocked())
 			{
 				return;
 			}
@@ -302,7 +327,7 @@ final class ClickerPanel extends JPanel
 			{
 				return;
 			}
-			if (remoteReadOnly || milestoneLockBinding.isEditLocked())
+			if (isClickSettingsReadOnly() || milestoneLockBinding.isEditLocked())
 			{
 				return;
 			}
@@ -319,7 +344,7 @@ final class ClickerPanel extends JPanel
 			{
 				return;
 			}
-			if (remoteReadOnly || level99LockBinding.isEditLocked())
+			if (isClickSettingsReadOnly() || level99LockBinding.isEditLocked())
 			{
 				return;
 			}
@@ -341,19 +366,21 @@ final class ClickerPanel extends JPanel
 	private void refreshEnabledState()
 	{
 		boolean editable = !remoteReadOnly;
+		clickSettingsBlockHeader.refresh();
+		boolean blockEditable = editable && !clickSettingsBlockHeader.isEditLocked();
 		boolean enabled = enabledCheckBox.isSelected();
 		enabledLockBinding.refresh();
 		levelUpLockBinding.refresh();
 		milestoneLockBinding.refresh();
 		level99LockBinding.refresh();
-		enabledCheckBox.setEnabled(editable && !enabledLockBinding.isEditLocked());
-		volumeSlider.setEnabled(editable && enabled);
-		minimumXpSpinner.setEnabled(editable && enabled);
-		levelUpCheckBox.setEnabled(editable && enabled && !levelUpLockBinding.isEditLocked());
+		enabledCheckBox.setEnabled(blockEditable && !enabledLockBinding.isEditLocked());
+		volumeSlider.setEnabled(blockEditable && enabled);
+		minimumXpSpinner.setEnabled(blockEditable && enabled);
+		levelUpCheckBox.setEnabled(blockEditable && enabled && !levelUpLockBinding.isEditLocked());
 		milestoneCheckBox.setEnabled(
-			editable && enabled && !milestoneLockBinding.isEditLocked()
+			blockEditable && enabled && !milestoneLockBinding.isEditLocked()
 		);
-		level99CheckBox.setEnabled(editable && enabled && !level99LockBinding.isEditLocked());
+		level99CheckBox.setEnabled(blockEditable && enabled && !level99LockBinding.isEditLocked());
 		phraseRulesPanel.setClickerEnabled(enabled);
 		phraseRulesPanel.setRemoteReadOnly(remoteReadOnly);
 		testButton.setEnabled(
@@ -369,6 +396,11 @@ final class ClickerPanel extends JPanel
 		);
 		settingsListener.accept(settings);
 		refreshEnabledState();
+	}
+
+	private boolean isClickSettingsReadOnly()
+	{
+		return remoteReadOnly || clickSettingsBlockHeader.isEditLocked();
 	}
 
 	private void refreshXpSettings()

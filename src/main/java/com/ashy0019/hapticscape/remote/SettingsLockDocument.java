@@ -53,15 +53,20 @@ final class SettingsLockDocument
 					);
 				}
 				legacyFullLock = true;
+				continue;
 			}
 			for (SettingsLockTarget target : lock.getTargets())
 			{
-				if (!targets.add(target))
+				for (SettingsLockTarget existing : targets)
 				{
-					throw new IllegalArgumentException(
-						"Overlapping settings-lock target: " + target.getId()
-					);
+					if (SettingsLockCatalog.conflicts(target, existing))
+					{
+						throw new IllegalArgumentException(
+							"Overlapping settings-lock target: " + target.getId()
+						);
+					}
 				}
+				targets.add(target);
 			}
 		}
 		return Collections.unmodifiableList(new ArrayList<>(locks));

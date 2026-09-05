@@ -7,6 +7,8 @@ import com.ashy0019.hapticscape.remote.SettingsLockTarget;
 import com.google.gson.Gson;
 import java.awt.Dimension;
 import java.awt.event.ActionEvent;
+import java.awt.event.InputEvent;
+import java.awt.event.MouseEvent;
 import java.lang.reflect.Constructor;
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicReference;
@@ -118,6 +120,70 @@ public class SettingsLockDraftTest
 			assertTrue(checkBox.isSelected());
 		});
 		assertTrue(draft.snapshot().isEmpty());
+	}
+
+	@Test
+	public void sectionSelectionReplacesItsSelectedChildren()
+	{
+		SettingsLockDraft draft = new SettingsLockDraft();
+		draft.toggle(SettingsLockCatalog.LEVEL_UP_HAPTICS);
+		draft.toggle(SettingsLockCatalog.MILESTONE_HAPTICS);
+
+		draft.toggle(SettingsLockCatalog.FEEDBACK_BLOCK);
+
+		assertEquals(1, draft.size());
+		assertTrue(draft.contains(SettingsLockCatalog.FEEDBACK_BLOCK));
+		assertFalse(draft.contains(SettingsLockCatalog.LEVEL_UP_HAPTICS));
+		assertFalse(draft.contains(SettingsLockCatalog.MILESTONE_HAPTICS));
+	}
+
+	@Test
+	public void childSelectionNarrowsSelectedSection()
+	{
+		SettingsLockDraft draft = new SettingsLockDraft();
+		draft.toggle(SettingsLockCatalog.FEEDBACK_BLOCK);
+
+		draft.toggle(SettingsLockCatalog.LEVEL_UP_HAPTICS);
+
+		assertEquals(1, draft.size());
+		assertFalse(draft.contains(SettingsLockCatalog.FEEDBACK_BLOCK));
+		assertTrue(draft.contains(SettingsLockCatalog.LEVEL_UP_HAPTICS));
+	}
+
+	@Test
+	public void sectionShiftClickDoesNotChangeHeaderGeometry() throws Exception
+	{
+		SettingsLockDraft draft = new SettingsLockDraft();
+		SettingsLockService lockService = newLockService("section-header.json");
+		AtomicReference<LockableSectionHeader> header = new AtomicReference<>();
+		SwingUtilities.invokeAndWait(() -> header.set(new LockableSectionHeader(
+			"",
+			() -> SettingsLockCatalog.FEEDBACK_BLOCK,
+			draft,
+			lockService,
+			RemoteLockSnapshot::inactive,
+			() -> true,
+			() -> true
+		)));
+
+		SwingUtilities.invokeAndWait(() ->
+		{
+			Dimension preferred = header.get().getPreferredSize();
+			assertTrue(header.get().getToolTipText().contains("open padlock"));
+			header.get().dispatchEvent(new MouseEvent(
+				header.get(),
+				MouseEvent.MOUSE_CLICKED,
+				System.currentTimeMillis(),
+				InputEvent.SHIFT_DOWN_MASK,
+				2,
+				2,
+				1,
+				false
+			));
+			assertTrue(draft.contains(SettingsLockCatalog.FEEDBACK_BLOCK));
+			assertTrue(header.get().getToolTipText().contains("Shift-click again"));
+			assertEquals(preferred, header.get().getPreferredSize());
+		});
 	}
 
 	private static ActionEvent shiftAction(JCheckBox checkBox)

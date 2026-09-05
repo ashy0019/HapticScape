@@ -2,6 +2,7 @@ package com.ashy0019.hapticscape.ui;
 
 import com.ashy0019.hapticscape.remote.RemoteLockSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteLockState;
+import com.ashy0019.hapticscape.remote.SettingsLockCatalog;
 import com.ashy0019.hapticscape.remote.SettingsLockService;
 import com.ashy0019.hapticscape.remote.SettingsLockTarget;
 import java.awt.Color;
@@ -144,12 +145,13 @@ final class LockableCheckBoxBinding
 		if (editingRemoteSubject.getAsBoolean())
 		{
 			RemoteLockSnapshot remote = remoteLockSupplier.get();
-			if (remote.getTargets().contains(target())
+			if (remote.targets(target())
 				&& remote.getState() == RemoteLockState.ARMED)
 			{
 				return State.ARMED;
 			}
-			if (remote.getTargets().contains(target()) || draft.contains(target()))
+			if (remote.targets(target())
+				|| SettingsLockCatalog.isCoveredBy(draft.snapshot(), target()))
 			{
 				return State.PROPOSED;
 			}

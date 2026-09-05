@@ -69,6 +69,9 @@ public final class SettingsLockProposal
 		{
 			throw new IllegalArgumentException("Select at least one setting to lock");
 		}
+		SettingsLockCatalog.validateNonOverlapping(
+			SettingsLockCatalog.resolve(targetIds)
+		);
 		return createVerifier(password, SCHEMA_VERSION, targetIds);
 	}
 
@@ -143,7 +146,9 @@ public final class SettingsLockProposal
 			{
 				throw new IllegalArgumentException("Invalid settings-lock target count");
 			}
-			SettingsLockCatalog.resolve(targets);
+			SettingsLockCatalog.validateNonOverlapping(
+				SettingsLockCatalog.resolve(targets)
+			);
 		}
 		if (!ALGORITHM.equals(algorithm))
 		{

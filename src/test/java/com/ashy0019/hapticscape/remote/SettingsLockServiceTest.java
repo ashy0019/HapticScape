@@ -193,6 +193,59 @@ public class SettingsLockServiceTest
 	}
 
 	@Test
+	public void sectionLockCoversEveryRegisteredChild()
+	{
+		SettingsLockService service = new SettingsLockService(
+			new Gson(),
+			temporaryFolder.getRoot().toPath().resolve("section-lock.json")
+		);
+		service.arm(service.createProposal(
+			"feedback section password".toCharArray(),
+			Collections.singleton(SettingsLockCatalog.FEEDBACK_BLOCK)
+		));
+
+		assertTrue(service.isLocked(SettingsLockCatalog.FEEDBACK_BLOCK));
+		assertTrue(service.isLocked(SettingsLockCatalog.LEVEL_UP_HAPTICS));
+		assertTrue(service.isLocked(SettingsLockCatalog.MILESTONE_HAPTICS));
+		assertTrue(service.isLocked(SettingsLockCatalog.LEVEL_99_HAPTICS));
+		assertFalse(service.isLocked(SettingsLockCatalog.CLICKER_ENABLED));
+	}
+
+	@Test(expected = IllegalStateException.class)
+	public void childLockPreventsOverlappingSectionLock()
+	{
+		SettingsLockService service = new SettingsLockService(
+			new Gson(),
+			temporaryFolder.getRoot().toPath().resolve("child-before-section.json")
+		);
+		service.arm(service.createProposal(
+			"level up child password".toCharArray(),
+			Collections.singleton(SettingsLockCatalog.LEVEL_UP_HAPTICS)
+		));
+		service.arm(service.createProposal(
+			"feedback section password".toCharArray(),
+			Collections.singleton(SettingsLockCatalog.FEEDBACK_BLOCK)
+		));
+	}
+
+	@Test(expected = IllegalStateException.class)
+	public void sectionLockPreventsOverlappingChildLock()
+	{
+		SettingsLockService service = new SettingsLockService(
+			new Gson(),
+			temporaryFolder.getRoot().toPath().resolve("section-before-child.json")
+		);
+		service.arm(service.createProposal(
+			"feedback section password".toCharArray(),
+			Collections.singleton(SettingsLockCatalog.FEEDBACK_BLOCK)
+		));
+		service.arm(service.createProposal(
+			"level up child password".toCharArray(),
+			Collections.singleton(SettingsLockCatalog.LEVEL_UP_HAPTICS)
+		));
+	}
+
+	@Test
 	public void legacySingleProposalFileStillLoadsAsFullLock() throws Exception
 	{
 		Gson gson = new Gson();

@@ -45,4 +45,9 @@ public final class RemoteLockSnapshot
 	{
 		return targets;
 	}
+
+	public boolean targets(SettingsLockTarget target)
+	{
+		return SettingsLockCatalog.isCoveredBy(targets, target);
+	}
 }

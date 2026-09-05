@@ -43,6 +43,7 @@ final class ProfilesPanel extends JPanel
 	private final JSpinner durationSpinner;
 	private final JButton testButton = new JButton("Test selected skill");
 	private final LockableCheckBoxBinding useGlobalLockBinding;
+	private final LockableSectionHeader profileBlockHeader;
 
 	private volatile SkillFeedbackProfiles profiles;
 	private volatile Skill selectedSkill;
@@ -96,6 +97,15 @@ final class ProfilesPanel extends JPanel
 		});
 		PanelUi.setFixedWidth(skillComboBox, PanelUi.SELECTOR_CONTROL_WIDTH);
 		selectedSkill = skills[0];
+		profileBlockHeader = new LockableSectionHeader(
+			"Selected skill settings",
+			() -> SettingsLockCatalog.profileBlock(selectedSkill),
+			lockDraft,
+			lockService,
+			sessionManager::getLockSnapshot,
+			editingRemoteSubject,
+			lockSelectionEnabled
+		);
 
 		XpFeedbackSettings global = globalSettingsSupplier.get();
 		minimumXpSpinner = new JSpinner(new SpinnerNumberModel(
@@ -124,6 +134,7 @@ final class ProfilesPanel extends JPanel
 		skillRow.add(new JLabel("Skill"), BorderLayout.CENTER);
 		skillRow.add(skillComboBox, BorderLayout.EAST);
 		PanelUi.addVerticalComponent(this, skillRow);
+		PanelUi.addVerticalComponent(this, profileBlockHeader);
 		PanelUi.addVerticalComponent(this, useGlobalCheckBox);
 		add(Box.createVerticalStrut(6));
 
@@ -159,6 +170,7 @@ final class ProfilesPanel extends JPanel
 			if (selected != null)
 			{
 				selectedSkill = selected;
+				profileBlockHeader.refresh();
 				loadSelectedProfile();
 			}
 		});
@@ -285,6 +297,7 @@ final class ProfilesPanel extends JPanel
 		if (remoteReadOnly
 			|| updatingControls
 			|| selectedSkill == null
+			|| profileBlockHeader.isEditLocked()
 			|| useGlobalLockBinding.isEditLocked())
 		{
 			return;
@@ -335,6 +348,7 @@ final class ProfilesPanel extends JPanel
 			|| updatingControls
 			|| updatingPatternChoices
 			|| selectedSkill == null
+			|| profileBlockHeader.isEditLocked()
 			|| useGlobalCheckBox.isSelected())
 		{
 			return;
@@ -354,12 +368,14 @@ final class ProfilesPanel extends JPanel
 				pattern
 			)
 		);
-		persist();
+		persist(SettingsLockCatalog.profileBlock(selectedSkill));
 	}
 
 	private void updateControlState()
 	{
 		boolean editable = !remoteReadOnly;
+		profileBlockHeader.refresh();
+		boolean blockEditable = editable && !profileBlockHeader.isEditLocked();
 		boolean overridden = !useGlobalCheckBox.isSelected();
 		HapticPatternSelection pattern =
 			(HapticPatternSelection) patternComboBox.getSelectedItem();
@@ -367,12 +383,12 @@ final class ProfilesPanel extends JPanel
 		// Skill selection is navigation only and remains available in remote mode.
 		skillComboBox.setEnabled(true);
 		useGlobalLockBinding.refresh();
-		useGlobalCheckBox.setEnabled(editable && !useGlobalLockBinding.isEditLocked());
-		minimumXpSpinner.setEnabled(editable && overridden);
-		patternComboBox.setEnabled(editable && overridden);
-		intensitySlider.setEnabled(editable && overridden && externallyScaled);
-		intensityValueLabel.setEnabled(editable && overridden && externallyScaled);
-		durationSpinner.setEnabled(editable && overridden && externallyScaled);
+		useGlobalCheckBox.setEnabled(blockEditable && !useGlobalLockBinding.isEditLocked());
+		minimumXpSpinner.setEnabled(blockEditable && overridden);
+		patternComboBox.setEnabled(blockEditable && overridden);
+		intensitySlider.setEnabled(blockEditable && overridden && externallyScaled);
+		intensityValueLabel.setEnabled(blockEditable && overridden && externallyScaled);
+		durationSpinner.setEnabled(blockEditable && overridden && externallyScaled);
 		testButton.setEnabled(editable && connected && previewAllowed);
 	}
 

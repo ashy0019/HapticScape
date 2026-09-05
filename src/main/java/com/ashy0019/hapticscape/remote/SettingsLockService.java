@@ -169,15 +169,36 @@ public final class SettingsLockService
 	{
 		SettingsLockProposal validated = Objects.requireNonNull(proposal, "proposal");
 		SettingsLockSnapshot current = getSnapshot();
-		Set<SettingsLockTarget> overlap = new HashSet<>(validated.getTargets());
-		overlap.retainAll(current.getTargets());
-		if (current.isLegacyFullLock() || !overlap.isEmpty())
+		SettingsLockTarget overlap = firstConflict(
+			validated.getTargets(),
+			current.getTargets()
+		);
+		if (current.isLegacyFullLock()
+			|| (validated.isLegacyFullLock() && current.isLocked())
+			|| overlap != null)
 		{
-			String conflict = overlap.isEmpty()
+			String conflict = overlap == null
 				? "Settings are already locked"
-				: overlap.iterator().next().getDisplayName() + " is already locked";
+				: overlap.getDisplayName() + " overlaps an existing lock";
 			throw new IllegalStateException(conflict);
 		}
+	}
+
+	private static SettingsLockTarget firstConflict(
+		Collection<SettingsLockTarget> proposed,
+		Collection<SettingsLockTarget> existing)
+	{
+		for (SettingsLockTarget candidate : proposed)
+		{
+			for (SettingsLockTarget locked : existing)
+			{
+				if (SettingsLockCatalog.conflicts(candidate, locked))
+				{
+					return candidate;
+				}
+			}
+		}
+		return null;
 	}
 
 	public synchronized boolean removeLock(String lockId)

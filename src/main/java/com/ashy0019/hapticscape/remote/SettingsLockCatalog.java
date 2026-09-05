@@ -12,12 +12,31 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import net.runelite.api.Skill;
 
 /** Authoritative registry of setting identifiers allowed in lock proposals. */
 public final class SettingsLockCatalog
 {
+	private static final String PHRASE_RULE_PREFIX = "clicker.phrase.";
 	private static final Map<String, SettingsLockTarget> TARGETS = new LinkedHashMap<>();
+	private static final Map<String, String> PARENT_IDS = new LinkedHashMap<>();
+
+	public static final SettingsLockTarget FEEDBACK_BLOCK = register(
+		"block.feedback",
+		"Sections",
+		"Feedback settings"
+	);
+	public static final SettingsLockTarget GENERIC_ALERTS_BLOCK = register(
+		"block.notifications.generic",
+		"Sections",
+		"Generic alert settings"
+	);
+	public static final SettingsLockTarget CLICK_SETTINGS_BLOCK = register(
+		"block.clicker.settings",
+		"Sections",
+		"Click settings"
+	);
 
 	public static final SettingsLockTarget LEVEL_UP_HAPTICS = register(
 		"feature.level-ups.haptics",
@@ -76,7 +95,11 @@ public final class SettingsLockCatalog
 		new LinkedHashMap<>();
 	private static final Map<Skill, SettingsLockTarget> PROFILE_OVERRIDES =
 		new LinkedHashMap<>();
+	private static final Map<Skill, SettingsLockTarget> PROFILE_BLOCKS =
+		new LinkedHashMap<>();
 	private static final Map<AlertCategory, SettingsLockTarget> ALERT_CLICKS =
+		new LinkedHashMap<>();
+	private static final Map<AlertCategory, SettingsLockTarget> ALERT_BLOCKS =
 		new LinkedHashMap<>();
 
 	static
@@ -84,6 +107,12 @@ public final class SettingsLockCatalog
 		for (Skill skill : SkillSelection.getSelectableSkills())
 		{
 			String slug = skill.name().toLowerCase(Locale.ROOT).replace('_', '-');
+			SettingsLockTarget profileBlock = register(
+				"block.profile." + slug,
+				"Skill profiles",
+				skill.getName() + " XP settings"
+			);
+			PROFILE_BLOCKS.put(skill, profileBlock);
 			HAPTIC_SKILLS.put(skill, register(
 				"skill." + slug + ".haptics",
 				"Skill haptics",
@@ -94,21 +123,39 @@ public final class SettingsLockCatalog
 				"Skill clicks",
 				skill.getName() + " clicks"
 			));
-			PROFILE_OVERRIDES.put(skill, register(
+			PROFILE_OVERRIDES.put(skill, registerChild(
 				"profile." + slug + ".use-global",
 				"Skill profiles",
-				skill.getName() + " uses global XP settings"
+				skill.getName() + " uses global XP settings",
+				profileBlock
 			));
 		}
 		for (AlertCategory category : AlertCategory.values())
 		{
 			String slug = category.name().toLowerCase(Locale.ROOT).replace('_', '-');
-			ALERT_CLICKS.put(category, register(
+			SettingsLockTarget alertBlock = register(
+				"block.alert." + slug,
+				"Specific alerts",
+				category.getDisplayName() + " settings"
+			);
+			ALERT_BLOCKS.put(category, alertBlock);
+			ALERT_CLICKS.put(category, registerChild(
 				"alert." + slug + ".clicks",
 				"Alert clicks",
-				category.getDisplayName() + " clicks"
+				category.getDisplayName() + " clicks",
+				alertBlock
 			));
 		}
+		registerParent(LEVEL_UP_HAPTICS, FEEDBACK_BLOCK);
+		registerParent(MILESTONE_HAPTICS, FEEDBACK_BLOCK);
+		registerParent(LEVEL_99_HAPTICS, FEEDBACK_BLOCK);
+		registerParent(GENERIC_NOTIFICATION_HAPTICS, GENERIC_ALERTS_BLOCK);
+		registerParent(GENERIC_NOTIFICATION_CLICKS, GENERIC_ALERTS_BLOCK);
+		registerParent(NOTIFICATION_RESPECT_FOCUS, GENERIC_ALERTS_BLOCK);
+		registerParent(CLICKER_ENABLED, CLICK_SETTINGS_BLOCK);
+		registerParent(CLICKER_LEVEL_UP, CLICK_SETTINGS_BLOCK);
+		registerParent(CLICKER_MILESTONE, CLICK_SETTINGS_BLOCK);
+		registerParent(CLICKER_LEVEL_99, CLICK_SETTINGS_BLOCK);
 	}
 
 	private SettingsLockCatalog()
@@ -130,19 +177,117 @@ public final class SettingsLockCatalog
 		return Objects.requireNonNull(PROFILE_OVERRIDES.get(skill), "Unsupported skill");
 	}
 
+	public static SettingsLockTarget profileBlock(Skill skill)
+	{
+		return Objects.requireNonNull(PROFILE_BLOCKS.get(skill), "Unsupported skill");
+	}
+
 	public static SettingsLockTarget alertClicks(AlertCategory category)
 	{
 		return Objects.requireNonNull(ALERT_CLICKS.get(category), "Unsupported alert");
 	}
 
+	public static SettingsLockTarget alertBlock(AlertCategory category)
+	{
+		return Objects.requireNonNull(ALERT_BLOCKS.get(category), "Unsupported alert");
+	}
+
+	public static SettingsLockTarget phraseRule(String ruleId)
+	{
+		String canonicalId = canonicalUuid(ruleId, "phrase-rule ID");
+		return require(PHRASE_RULE_PREFIX + canonicalId);
+	}
+
+	public static boolean isPhraseRule(SettingsLockTarget target)
+	{
+		return Objects.requireNonNull(target, "target").getId().startsWith(PHRASE_RULE_PREFIX);
+	}
+
+	public static String phraseRuleId(SettingsLockTarget target)
+	{
+		if (!isPhraseRule(target))
+		{
+			throw new IllegalArgumentException("Target is not a phrase rule");
+		}
+		return target.getId().substring(PHRASE_RULE_PREFIX.length());
+	}
+
 	public static SettingsLockTarget require(String id)
 	{
 		SettingsLockTarget target = TARGETS.get(id);
+		if (target == null && id != null && id.startsWith(PHRASE_RULE_PREFIX))
+		{
+			String ruleId = canonicalUuid(
+				id.substring(PHRASE_RULE_PREFIX.length()),
+				"phrase-rule ID"
+			);
+			target = new SettingsLockTarget(
+				PHRASE_RULE_PREFIX + ruleId,
+				"Phrase clicks",
+				"Phrase click " + ruleId.substring(0, 8)
+			);
+		}
 		if (target == null)
 		{
 			throw new IllegalArgumentException("Unknown settings-lock target: " + id);
 		}
 		return target;
+	}
+
+	/** Returns true when {@code scope} directly or transitively governs {@code target}. */
+	public static boolean covers(SettingsLockTarget scope, SettingsLockTarget target)
+	{
+		String scopeId = require(Objects.requireNonNull(scope, "scope").getId()).getId();
+		String targetId = require(Objects.requireNonNull(target, "target").getId()).getId();
+		while (targetId != null)
+		{
+			if (scopeId.equals(targetId))
+			{
+				return true;
+			}
+			targetId = PARENT_IDS.get(targetId);
+		}
+		return false;
+	}
+
+	public static boolean isCoveredBy(
+		Collection<SettingsLockTarget> scopes,
+		SettingsLockTarget target)
+	{
+		for (SettingsLockTarget scope : Objects.requireNonNull(scopes, "scopes"))
+		{
+			if (covers(scope, target))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	public static boolean conflicts(SettingsLockTarget first, SettingsLockTarget second)
+	{
+		return covers(first, second) || covers(second, first);
+	}
+
+	public static void validateNonOverlapping(Collection<SettingsLockTarget> targets)
+	{
+		List<SettingsLockTarget> ordered = new ArrayList<>(
+			Objects.requireNonNull(targets, "targets")
+		);
+		for (int first = 0; first < ordered.size(); first++)
+		{
+			for (int second = first + 1; second < ordered.size(); second++)
+			{
+				if (conflicts(ordered.get(first), ordered.get(second)))
+				{
+					throw new IllegalArgumentException(
+						"Overlapping settings-lock targets: "
+							+ ordered.get(first).getDisplayName() + " and "
+							+ ordered.get(second).getDisplayName()
+					);
+				}
+			}
+		}
 	}
 
 	public static Set<SettingsLockTarget> resolve(Collection<String> ids)
@@ -190,5 +335,41 @@ public final class SettingsLockCatalog
 			throw new IllegalStateException("Duplicate settings-lock target: " + id);
 		}
 		return target;
+	}
+
+	private static SettingsLockTarget registerChild(
+		String id,
+		String group,
+		String displayName,
+		SettingsLockTarget parent)
+	{
+		SettingsLockTarget target = register(id, group, displayName);
+		registerParent(target, parent);
+		return target;
+	}
+
+	private static void registerParent(SettingsLockTarget child, SettingsLockTarget parent)
+	{
+		if (PARENT_IDS.put(child.getId(), parent.getId()) != null)
+		{
+			throw new IllegalStateException("Duplicate settings-lock parent: " + child.getId());
+		}
+	}
+
+	private static String canonicalUuid(String value, String name)
+	{
+		try
+		{
+			String canonical = UUID.fromString(Objects.requireNonNull(value, name)).toString();
+			if (!canonical.equals(value.toLowerCase(Locale.ROOT)))
+			{
+				throw new IllegalArgumentException("Invalid " + name);
+			}
+			return canonical;
+		}
+		catch (IllegalArgumentException | NullPointerException exception)
+		{
+			throw new IllegalArgumentException("Invalid " + name, exception);
+		}
 	}
 }
