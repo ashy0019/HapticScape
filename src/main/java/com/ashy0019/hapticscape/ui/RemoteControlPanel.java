@@ -4,9 +4,9 @@ import com.ashy0019.hapticscape.HapticScapeConfig;
 import com.ashy0019.hapticscape.clicker.ClickerPhraseRule;
 import com.ashy0019.hapticscape.clicker.ClickerPhraseRules;
 import com.ashy0019.hapticscape.remote.RemoteActionAcknowledgement;
-import com.ashy0019.hapticscape.remote.RemoteInvitation;
 import com.ashy0019.hapticscape.remote.RemoteLockSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteLockState;
+import com.ashy0019.hapticscape.remote.RemotePairingService;
 import com.ashy0019.hapticscape.remote.RemotePermissions;
 import com.ashy0019.hapticscape.remote.RemoteRole;
 import com.ashy0019.hapticscape.remote.RemoteSessionListener;
@@ -24,7 +24,6 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Toolkit;
-import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -46,17 +45,9 @@ import net.runelite.client.config.ConfigManager;
 
 final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 {
-	private final ConfigManager configManager;
 	private final HapticScapeConfig config;
 	private final RemoteSessionManager sessionManager;
 	private final SidebarTextLabel statusText = new SidebarTextLabel("Local control");
-	private final JTextField relayUrlField = new JTextField();
-	private final JTextArea invitationOutput = new JTextArea(4, 24);
-	private final JTextArea invitationInput = new JTextArea(4, 24);
-	private final JButton createButton = new JButton("Create invitation");
-	private final JButton copyButton = new JButton("Copy");
-	private final JButton pasteButton = new JButton("Paste");
-	private final JButton joinButton = new JButton("Join invitation");
 	private final JButton emergencyButton = new JButton("EMERGENCY OFF");
 	private final JButton resumeButton = new JButton("Resume");
 	private final JButton endButton = new JButton("End session");
@@ -67,8 +58,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 	private final JLabel settingsLockSelectionText = new JLabel("Selected lock targets: 0");
 	private final JButton armSettingsLockButton = new JButton("Generate unlock key");
 	private final JButton cancelSettingsLockButton = new JButton("Cancel lock");
-	private final JPanel controllerPanel = new JPanel();
-	private final JPanel participantPanel = new JPanel();
+	private final RemotePairingPanel pairingPanel;
 	private final SavedUnlockKeysPanel savedUnlockKeysPanel;
 	private final RemotePermissionsPanel permissionsPanel;
 	private final RemoteActionsPanel actionsPanel;
@@ -82,10 +72,10 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		HapticScapeConfig config,
 		ConfigManager configManager,
 		RemoteSessionManager sessionManager,
+		RemotePairingService pairingService,
 		SettingsLockDraft settingsLockDraft)
 	{
 		this.config = config;
-		this.configManager = configManager;
 		this.sessionManager = sessionManager;
 		this.settingsLockDraft = settingsLockDraft;
 		this.settingsLockDraftListener = this::handleSettingsLockDraftChanged;
@@ -93,6 +83,14 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		this.permissionsPanel = new RemotePermissionsPanel(sessionManager);
 		this.actionsPanel = new RemoteActionsPanel(sessionManager);
 		this.liveForgePanel = new RemoteLiveForgePanel(sessionManager);
+		this.pairingPanel = new RemotePairingPanel(
+			config,
+			configManager,
+			sessionManager,
+			pairingService,
+			statusText::setPlainText,
+			this::showError
+		);
 		setLayout(new GridBagLayout());
 		setBorder(BorderFactory.createEmptyBorder(0, 4, 8, 4));
 
@@ -106,51 +104,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		);
 		addSection(privacy);
 
-		relayUrlField.setText(HapticScapeConfig.resolveRemoteRelayUrl(
-			config.remoteRelayUrl()
-		));
-		relayUrlField.setToolTipText(
-			"Hosted HapticScape relay by default; replace this URL to use a self-hosted relay"
-		);
-		addSection(row("Relay", relayUrlField));
-
-		controllerPanel.setLayout(new BoxLayout(controllerPanel, BoxLayout.Y_AXIS));
-		controllerPanel.setBorder(BorderFactory.createTitledBorder("Control a partner"));
-		JPanel createRow = new JPanel(new GridLayout(1, 2, 4, 0));
-		allowHorizontalShrink(createRow);
-		configureCompactButton(createButton);
-		configureCompactButton(copyButton);
-		createRow.add(createButton);
-		createRow.add(copyButton);
-		PanelUi.addVerticalComponent(controllerPanel, createRow);
-		invitationOutput.setEditable(false);
-		invitationOutput.setLineWrap(true);
-		invitationOutput.setWrapStyleWord(true);
-		invitationOutput.setToolTipText(
-			"Share this invitation privately with the participant. It contains the session encryption key."
-		);
-		JScrollPane invitationOutputScroll = new JScrollPane(invitationOutput);
-		allowHorizontalShrink(invitationOutputScroll);
-		PanelUi.addVerticalComponent(controllerPanel, invitationOutputScroll);
-		allowHorizontalShrink(controllerPanel);
-		addSection(controllerPanel);
-
-		participantPanel.setLayout(new BoxLayout(participantPanel, BoxLayout.Y_AXIS));
-		participantPanel.setBorder(BorderFactory.createTitledBorder("Let a partner control you"));
-		invitationInput.setLineWrap(true);
-		invitationInput.setWrapStyleWord(true);
-		JScrollPane invitationInputScroll = new JScrollPane(invitationInput);
-		allowHorizontalShrink(invitationInputScroll);
-		PanelUi.addVerticalComponent(participantPanel, invitationInputScroll);
-		JPanel joinRow = new JPanel(new GridLayout(1, 2, 4, 0));
-		allowHorizontalShrink(joinRow);
-		configureCompactButton(pasteButton);
-		configureCompactButton(joinButton);
-		joinRow.add(pasteButton);
-		joinRow.add(joinButton);
-		PanelUi.addVerticalComponent(participantPanel, joinRow);
-		allowHorizontalShrink(participantPanel);
-		addSection(participantPanel);
+		addSection(pairingPanel);
 
 		JPanel session = new JPanel(new BorderLayout(8, 0));
 		session.setBorder(BorderFactory.createTitledBorder("Session"));
@@ -198,10 +152,6 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		safetyButtons.add(endButton);
 		addSection(safetyButtons);
 
-		createButton.addActionListener(event -> createInvitation());
-		copyButton.addActionListener(event -> copyInvitation());
-		pasteButton.addActionListener(event -> pasteInvitation());
-		joinButton.addActionListener(event -> joinInvitation());
 		emergencyButton.addActionListener(event -> sessionManager.emergencyPause());
 		resumeButton.addActionListener(event -> sessionManager.resumeParticipant());
 		endButton.addActionListener(event -> sessionManager.endSession());
@@ -216,6 +166,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 
 	void close()
 	{
+		pairingPanel.close();
 		liveForgePanel.close();
 		settingsLockDraft.removeListener(settingsLockDraftListener);
 		sessionManager.removeListener(this);
@@ -268,65 +219,6 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 	public void onRemoteLockProposal(SettingsLockProposal proposal)
 	{
 		SwingUtilities.invokeLater(() -> confirmSettingsLockProposal(proposal));
-	}
-
-	private void createInvitation()
-	{
-		String relayUrl = relayUrlField.getText().trim();
-		if (relayUrl.isEmpty())
-		{
-			showError("Enter the wss:// URL of your HapticScape relay first.");
-			return;
-		}
-		try
-		{
-			configManager.setConfiguration(
-				HapticScapeConfig.GROUP,
-				HapticScapeConfig.REMOTE_RELAY_URL_KEY,
-				relayUrl
-			);
-			RemoteInvitation invitation = sessionManager.startController(relayUrl);
-			invitationOutput.setText(invitation.encode());
-			invitationOutput.setCaretPosition(0);
-		}
-		catch (RuntimeException e)
-		{
-			showError(e.getMessage());
-		}
-	}
-
-	private void joinInvitation()
-	{
-		try
-		{
-			String encoded = invitationInput.getText();
-			RemoteInvitation invitation = RemoteInvitation.parse(encoded);
-			int choice = JOptionPane.showConfirmDialog(
-				this,
-				"<html>Join Remote Control through:<br><b>"
-					+ invitation.getRelayUrl()
-					+ "</b><br><br>The controller will become authoritative for "
-					+ "HapticScape feedback settings during the session.<br>"
-					+ "Your current settings will seed their controls. Accepted changes "
-					+ "are saved here and remain after the session.<br>"
-					+ "Remote actions are limited by the permissions shown on this page.<br>"
-					+ "Emergency Off and End Session always remain local.<br><br>"
-					+ "The relay operator can see your network IP. HapticScape does not "
-					+ "send your IP to the paired client.</html>",
-				"Accept Remote Control",
-				JOptionPane.YES_NO_OPTION,
-				JOptionPane.WARNING_MESSAGE
-			);
-			if (choice != JOptionPane.YES_OPTION)
-			{
-				return;
-			}
-			sessionManager.joinParticipant(encoded);
-		}
-		catch (RuntimeException e)
-		{
-			showError(e.getMessage());
-		}
 	}
 
 	private void armSettingsLock()
@@ -448,22 +340,11 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		boolean emergencyPaused = snapshot.getState() == RemoteSessionState.EMERGENCY_PAUSED;
 		if (local && !wasLocal)
 		{
-			invitationOutput.setText("");
-			invitationInput.setText("");
 			settingsLockDraft.clear();
 		}
 		wasLocal = local;
 
-		createButton.setEnabled(local);
-		joinButton.setEnabled(local);
-		relayUrlField.setEnabled(local);
-		invitationInput.setEnabled(local);
-		copyButton.setEnabled(controller && !invitationOutput.getText().trim().isEmpty());
-		pasteButton.setEnabled(local);
-		controllerPanel.setVisible(local || controller
-			&& (snapshot.getState() == RemoteSessionState.CONNECTING
-				|| snapshot.getState() == RemoteSessionState.WAITING_FOR_PEER));
-		participantPanel.setVisible(local);
+		pairingPanel.apply(snapshot);
 		permissionsPanel.setVisible(local || participant);
 		actionsPanel.apply(
 			snapshot,
@@ -647,45 +528,6 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		return ClickerPhraseRules.fromConfigValue(config.clickerPhraseRules());
 	}
 
-	private void copyInvitation()
-	{
-		String invitation = invitationOutput.getText().trim();
-		if (invitation.isEmpty())
-		{
-			return;
-		}
-		try
-		{
-			Toolkit.getDefaultToolkit().getSystemClipboard().setContents(
-				new StringSelection(invitation),
-				null
-			);
-			statusText.setPlainText("Invitation copied");
-		}
-		catch (RuntimeException e)
-		{
-			showError("Could not copy the invitation to the clipboard.");
-		}
-	}
-
-	private void pasteInvitation()
-	{
-		try
-		{
-			Object value = Toolkit.getDefaultToolkit().getSystemClipboard()
-				.getData(DataFlavor.stringFlavor);
-			if (value instanceof String)
-			{
-				invitationInput.setText(((String) value).trim());
-				invitationInput.setCaretPosition(0);
-			}
-		}
-		catch (Exception e)
-		{
-			showError("Could not paste an invitation from the clipboard.");
-		}
-	}
-
 	private void showError(String message)
 	{
 		JOptionPane.showMessageDialog(
@@ -694,19 +536,6 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 			"Remote Control",
 			JOptionPane.ERROR_MESSAGE
 		);
-	}
-
-	private static JPanel row(String name, java.awt.Component control)
-	{
-		JPanel row = new JPanel(new BorderLayout(8, 0));
-		row.add(new JLabel(name), BorderLayout.WEST);
-		row.add(control, BorderLayout.CENTER);
-		allowHorizontalShrink(row);
-		if (control instanceof JComponent)
-		{
-			allowHorizontalShrink((JComponent) control);
-		}
-		return row;
 	}
 
 	private static void configureCompactButton(JButton button)

@@ -265,18 +265,22 @@ implementation under [`remote-relay`](remote-relay).
 #### Start a session
 
 1. Both people should use the same current HapticScape release.
-2. The controller keeps the default relay or enters a self-hosted relay URL,
-   then selects **Create invitation**.
-3. The controller sends the complete invitation to the participant through a
-   private channel.
-4. The participant pastes the invitation, reviews the confirmation, and
+2. The controller selects **Create & copy code**. Relay configuration is
+   available under **Connection settings** when needed.
+3. The controller sends the temporary connection code to the participant
+   through a private channel.
+4. The participant selects **Paste & join**, reviews the confirmation, and
    accepts the session.
 5. The participant's current HapticScape settings load into the controller's
    panel.
 
-An invitation contains the relay URL, random room identifier, and 256-bit
-session key. Anyone who obtains a valid invitation may be able to join that
-session, so invitations must be treated as secrets.
+A connection code is a 256-bit random bearer secret. It retrieves an
+independently encrypted invitation from a one-use relay mailbox that expires
+after five minutes. Anyone who obtains an unexpired code may be able to join
+that session, so connection codes must be treated as secrets.
+
+Legacy direct invitations remain accepted as a fallback when the temporary
+pairing service is unavailable.
 
 #### Remote settings
 
@@ -463,6 +467,11 @@ relay. The relay still receives network metadata needed to operate, including
 each client's IP address, room identifier, and role. The relay implementation
 included in this repository does not persist relayed messages or settings.
 
+Compact connection codes use a separate AES-256-GCM envelope. The relay stores
+the encrypted invitation, derived proof hashes, and expiration time for up to
+five minutes. It does not receive the connection-code secret. Successful
+redemption or authenticated cancellation deletes the mailbox immediately.
+
 Remote settings synchronization includes HapticScape feedback configuration,
 including saved custom patterns and configured click phrase rules. It does not
 transmit the chat messages tested against those phrase rules, RuneScape account
@@ -531,7 +540,9 @@ at the user's own risk.
 
 - Confirm that both clients use the same current HapticScape release.
 - Confirm that both clients can reach the configured `wss://` relay.
-- Create a new invitation if the room or key may be stale.
+- Create a new connection code if the previous code expired or was already used.
+- Expand **Connection settings** and confirm both clients use the same relay
+  when connecting through a self-hosted service.
 - Update both clients after installing a Remote Control fix.
 - End the incomplete session before attempting to join again.
 

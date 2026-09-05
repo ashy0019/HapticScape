@@ -18,6 +18,21 @@ HapticScape Remote panel with a compatible self-hosted deployment.
 - The Durable Object does not persist messages or settings.
 - There is no direct-connect fallback.
 
+## Temporary connection codes
+
+The optional `/pairing/<locator>` endpoint stores one encrypted invitation for
+up to five minutes. HapticScape derives the locator, redemption proof,
+cancellation proof, and AES-256 envelope key from a random connection-code
+secret using separate domains.
+
+- The connection-code secret is never sent to the relay.
+- The stored invitation is encrypted before upload.
+- A mailbox can be redeemed only once.
+- Incorrect redemption and cancellation proofs are rejected.
+- Redemption and cancellation delete the stored envelope immediately.
+- Durable Object alarms remove abandoned envelopes after five minutes.
+- Existing `HSR1` direct invitations remain supported by the client.
+
 ## Deploy
 
 1. Install Wrangler and authenticate with Cloudflare.
@@ -27,4 +42,4 @@ HapticScape Remote panel with a compatible self-hosted deployment.
 
    `wss://hapticscape-remote-relay.<account>.workers.dev/relay`
 
-Controller invitations include that relay URL plus a random room ID and 256-bit session key. Share invitations privately because possession of the invitation allows joining that session.
+Controller invitations include that relay URL plus a random room ID and 256-bit session key. Compact `HSP1` connection codes retrieve those invitations through an encrypted temporary mailbox. Share either form privately because possession of it allows joining that session.

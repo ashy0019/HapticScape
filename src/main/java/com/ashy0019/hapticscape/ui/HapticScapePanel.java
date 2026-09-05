@@ -24,6 +24,7 @@ import com.ashy0019.hapticscape.rogue.RogueFeedbackEvent;
 import com.ashy0019.hapticscape.remote.RemoteLockSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteLockState;
 import com.ashy0019.hapticscape.remote.RemotePermissions;
+import com.ashy0019.hapticscape.remote.RemotePairingService;
 import com.ashy0019.hapticscape.remote.RemoteRole;
 import com.ashy0019.hapticscape.remote.RemoteSessionListener;
 import com.ashy0019.hapticscape.remote.RemoteSessionManager;
@@ -208,6 +209,7 @@ public final class HapticScapePanel extends PluginPanel
 		UpdatePreferencesStore updatePreferencesStore,
 		UpdateCheckService updateCheckService,
 		RemoteSessionManager remoteSessionManager,
+		RemotePairingService remotePairingService,
 		SettingsLockService settingsLockService,
 		Consumer<RogueFeedbackEvent> rogueFeedbackAction,
 		Runnable rogueUnlockSoundAction,
@@ -412,6 +414,7 @@ public final class HapticScapePanel extends PluginPanel
 			config,
 			configManager,
 			remoteSessionManager,
+			remotePairingService,
 			settingsLockDraft
 		);
 		roguePanel = new RoguePanel(configManager, rogueFeedbackAction);

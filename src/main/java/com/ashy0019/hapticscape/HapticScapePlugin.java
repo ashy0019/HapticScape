@@ -14,6 +14,7 @@ import com.ashy0019.hapticscape.music.WasapiLoopbackCapture;
 import com.ashy0019.hapticscape.remote.ConfigBackedRemoteSettingsStore;
 import com.ashy0019.hapticscape.remote.ConfigBackedRemotePermissionsStore;
 import com.ashy0019.hapticscape.remote.EffectiveSettingsService;
+import com.ashy0019.hapticscape.remote.RemotePairingService;
 import com.ashy0019.hapticscape.remote.RemoteSessionListener;
 import com.ashy0019.hapticscape.remote.RemoteSessionManager;
 import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
@@ -218,6 +219,7 @@ public class HapticScapePlugin extends Plugin
 			updatePreferencesStore,
 			updateCheckService,
 			remoteSessionManager,
+			new RemotePairingService(httpClient),
 			settingsLockService,
 			feedbackCoordinator::dispatchRogueFeedback,
 			this::playRogueUnlockStingAsync,
