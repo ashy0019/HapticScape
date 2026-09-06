@@ -2,8 +2,10 @@ package com.ashy0019.hapticscape.integration.runelite;
 
 import com.ashy0019.hapticscape.XpChange;
 import com.ashy0019.hapticscape.event.XpEvent;
+import com.ashy0019.hapticscape.event.XpEventTracker;
 import java.util.Locale;
 import java.util.Objects;
+import net.runelite.api.Experience;
 import net.runelite.api.Skill;
 
 /**
@@ -12,18 +14,54 @@ import net.runelite.api.Skill;
  */
 public final class RuneLiteXpEventAdapter
 {
+	public XpEvent update(XpEventTracker tracker, Skill skill, int currentXp)
+	{
+		Objects.requireNonNull(tracker, "tracker");
+		Objects.requireNonNull(skill, "skill");
+		return tracker.update(
+			XpEvent.SOURCE_RUNELITE,
+			skillId(skill),
+			currentXp,
+			realLevelForXp(currentXp)
+		);
+	}
+
+	public void seed(XpEventTracker tracker, Skill skill, int currentXp)
+	{
+		Objects.requireNonNull(tracker, "tracker");
+		Objects.requireNonNull(skill, "skill");
+		tracker.seed(
+			XpEvent.SOURCE_RUNELITE,
+			skillId(skill),
+			currentXp,
+			realLevelForXp(currentXp)
+		);
+	}
+
+	/** Temporary compatibility conversion for the legacy XpChange path. */
+	@Deprecated
 	public XpEvent from(XpChange change)
 	{
 		Objects.requireNonNull(change, "change");
 		return new XpEvent(
 			XpEvent.SOURCE_RUNELITE,
-			change.getSkill().name().toLowerCase(Locale.ROOT),
+			skillId(change.getSkill()),
 			change.getPreviousXp(),
 			change.getCurrentXp(),
 			change.getGainedXp(),
 			change.getPreviousLevel(),
 			change.getCurrentLevel()
 		);
+	}
+
+	private static String skillId(Skill skill)
+	{
+		return skill.name().toLowerCase(Locale.ROOT);
+	}
+
+	private static int realLevelForXp(int xp)
+	{
+		return Math.min(99, Experience.getLevelForXp(Math.max(0, xp)));
 	}
 
 	/**

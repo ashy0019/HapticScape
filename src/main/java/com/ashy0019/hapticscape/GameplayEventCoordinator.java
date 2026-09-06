@@ -1,6 +1,7 @@
 package com.ashy0019.hapticscape;
 
 import com.ashy0019.hapticscape.event.XpEvent;
+import com.ashy0019.hapticscape.event.XpEventTracker;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteXpEventAdapter;
 import com.ashy0019.hapticscape.remote.RemoteSettingsSnapshot;
 import java.util.Collection;
@@ -53,7 +54,7 @@ final class GameplayEventCoordinator implements AutoCloseable
 	private final ItemManager itemManager;
 	private final Supplier<RemoteSettingsSnapshot> settingsSupplier;
 	private final FeedbackSink feedback;
-	private final XpTracker xpTracker = new XpTracker();
+	private final XpEventTracker xpTracker = new XpEventTracker();
 	private final RuneLiteXpEventAdapter xpEventAdapter = new RuneLiteXpEventAdapter();
 	private final ThresholdAlertTracker thresholdAlertTracker = new ThresholdAlertTracker();
 	private final AlertDeduplicator alertDeduplicator = new AlertDeduplicator();
@@ -116,18 +117,18 @@ final class GameplayEventCoordinator implements AutoCloseable
 		}
 		handleThresholdAlert(event);
 
-		XpChange change = xpTracker.update(event.getSkill(), event.getXp());
-		XpEvent xpEvent = xpEventAdapter.from(change);
+		Skill skill = event.getSkill();
+		XpEvent xpEvent = xpEventAdapter.update(xpTracker, skill, event.getXp());
 		RemoteSettingsSnapshot settings = settingsSupplier.get();
-		XpFeedbackSettings skillSettings = settings.getXpFeedbackSettings(change.getSkill());
+		XpFeedbackSettings skillSettings = settings.getXpFeedbackSettings(skill);
 		XpOutputDecision decision = XpOutputDecision.classify(
 			xpEvent,
-			settings.isHapticSkillEnabled(change.getSkill()),
+			settings.isHapticSkillEnabled(skill),
 			skillSettings,
 			settings.isLevelUpFeedbackEnabled(),
 			settings.isMilestoneFeedbackEnabled(),
 			settings.isLevel99CelebrationEnabled(),
-			settings.isClickSkillEnabled(change.getSkill()),
+			settings.isClickSkillEnabled(skill),
 			settings.getClickerXpSettings()
 		);
 		if (decision.shouldClick())
@@ -306,7 +307,7 @@ final class GameplayEventCoordinator implements AutoCloseable
 	{
 		for (Skill skill : Skill.values())
 		{
-			xpTracker.seed(skill, client.getSkillExperience(skill));
+			xpEventAdapter.seed(xpTracker, skill, client.getSkillExperience(skill));
 		}
 	}
 
