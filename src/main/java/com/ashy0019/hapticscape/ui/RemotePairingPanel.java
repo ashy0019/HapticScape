@@ -13,11 +13,14 @@ import com.ashy0019.hapticscape.remote.RemoteSessionManager;
 import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteSessionState;
 import java.awt.BorderLayout;
+import java.awt.Desktop;
 import java.awt.Dimension;
 import java.awt.GridLayout;
 import java.awt.Toolkit;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
+import java.io.IOException;
+import java.net.URI;
 import java.util.Objects;
 import java.util.function.Consumer;
 import javax.swing.BorderFactory;
@@ -44,7 +47,7 @@ final class RemotePairingPanel extends JPanel
 	private final Consumer<String> errorSink;
 	private final JTextField relayUrlField = new JTextField();
 	private final JPanel relaySettingsPanel = new JPanel(new BorderLayout(8, 0));
-	private final JButton connectionSettingsButton = new JButton("Connection settings...");
+	private final JButton connectionSettingsButton = new JButton("Advanced...");
 	private final JTextField connectionCodeOutput = new JTextField();
 	private final JTextField connectionCodeInput = new JTextField();
 	private final JButton createButton = new JButton("Create & copy code");
@@ -56,6 +59,7 @@ final class RemotePairingPanel extends JPanel
 	private final JPanel discordPanel = new JPanel();
 	private final JLabel discordStatus = new JLabel("Discord is not linked");
 	private final JTextField discordLinkCode = new JTextField();
+	private final JButton installDiscordButton = new JButton("Install Discord app");
 	private final JButton linkDiscordButton = new JButton("Link Discord");
 	private final JButton unlinkDiscordButton = new JButton("Unlink");
 
@@ -100,8 +104,8 @@ final class RemotePairingPanel extends JPanel
 		PanelUi.addVerticalComponent(this, controllerPanel);
 		PanelUi.addVerticalComponent(this, participantPanel);
 		PanelUi.addVerticalComponent(this, discordPanel);
-		PanelUi.addVerticalComponent(this, connectionSettingsButton);
 		PanelUi.addVerticalComponent(this, relaySettingsPanel);
+		PanelUi.addVerticalComponent(this, connectionSettingsButton);
 		refreshRelaySettingsVisibility(false);
 
 		createButton.addActionListener(event -> createConnectionCode());
@@ -115,6 +119,7 @@ final class RemotePairingPanel extends JPanel
 			refreshRelaySettingsVisibility(true);
 		});
 		linkDiscordButton.addActionListener(event -> linkDiscord());
+		installDiscordButton.addActionListener(event -> installDiscord());
 		unlinkDiscordButton.addActionListener(event -> unlinkDiscord());
 		discordPairingBridge.addListener(discordLinkListener);
 	}
@@ -222,7 +227,7 @@ final class RemotePairingPanel extends JPanel
 		discordPanel.setLayout(new BoxLayout(discordPanel, BoxLayout.Y_AXIS));
 		discordPanel.setBorder(BorderFactory.createTitledBorder("Discord"));
 		PanelUi.addVerticalComponent(discordPanel, new SidebarTextLabel(
-			"Run /hapticscape link in Discord, then paste its one-time code here."
+			"Install the Discord app, run /hapticscape link, then paste its one-time code here."
 		));
 		Dimension statusSize = new Dimension(180, discordStatus.getPreferredSize().height);
 		discordStatus.setPreferredSize(statusSize);
@@ -234,13 +239,34 @@ final class RemotePairingPanel extends JPanel
 		allowHorizontalShrink(discordLinkCode);
 		PanelUi.addVerticalComponent(discordPanel, discordLinkCode);
 		JPanel buttons = new JPanel(new GridLayout(0, 1, 0, 4));
+		configureCompactButton(installDiscordButton);
 		configureCompactButton(linkDiscordButton);
 		configureCompactButton(unlinkDiscordButton);
+		buttons.add(installDiscordButton);
 		buttons.add(linkDiscordButton);
 		buttons.add(unlinkDiscordButton);
 		allowHorizontalShrink(buttons);
 		PanelUi.addVerticalComponent(discordPanel, buttons);
 		allowHorizontalShrink(discordPanel);
+	}
+
+	private void installDiscord()
+	{
+		try
+		{
+			if (!Desktop.isDesktopSupported()
+				|| !Desktop.getDesktop().isSupported(Desktop.Action.BROWSE))
+			{
+				throw new IllegalStateException("This computer cannot open web links");
+			}
+			Desktop.getDesktop().browse(URI.create(
+				RemotePairingService.discordInstallEndpoint(relayUrlField.getText().trim())
+			));
+		}
+		catch (IOException | RuntimeException exception)
+		{
+			errorSink.accept("Could not open the Discord installation page.");
+		}
 	}
 
 	private void linkDiscord()
@@ -301,6 +327,7 @@ final class RemotePairingPanel extends JPanel
 		boolean linking = snapshot.getState() == DiscordLinkState.CONNECTING;
 		boolean linked = snapshot.isLinked();
 		boolean available = snapshot.getState() != DiscordLinkState.UNAVAILABLE;
+		installDiscordButton.setEnabled(currentSessionLocal && available);
 		discordLinkCode.setEnabled(currentSessionLocal && available && !linked && !linking);
 		linkDiscordButton.setEnabled(
 			currentSessionLocal && available && !linked && !linking
@@ -525,12 +552,19 @@ final class RemotePairingPanel extends JPanel
 		boolean local = sessionManager.getSnapshot().getState() == RemoteSessionState.LOCAL;
 		relaySettingsPanel.setVisible(local && connectionSettingsExpanded);
 		connectionSettingsButton.setText(connectionSettingsExpanded
-			? "Hide connection settings"
-			: "Connection settings..."
+			? "Hide advanced"
+			: "Advanced..."
 		);
 		if (layout)
 		{
 			revalidate();
+			Dimension preferred = getPreferredSize();
+			setMinimumSize(new Dimension(0, preferred.height));
+			if (getParent() != null)
+			{
+				getParent().revalidate();
+				getParent().repaint();
+			}
 			repaint();
 		}
 	}

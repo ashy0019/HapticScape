@@ -8,6 +8,29 @@ const REQUEST_ID_PATTERN = /^[A-Za-z0-9_-]{16}$/;
 const EPHEMERAL_FLAG = 64;
 const MAXIMUM_SIGNATURE_AGE_SECONDS = 5 * 60;
 
+export function discordInstallRedirect(request, env) {
+  if (request.method !== "GET") {
+    return new Response("Method not allowed", {
+      status: 405,
+      headers: { Allow: "GET" },
+    });
+  }
+  const applicationId = env.DISCORD_APPLICATION_ID ?? "";
+  if (!DISCORD_USER_ID_PATTERN.test(applicationId)) {
+    return new Response("Discord integration is not configured", { status: 503 });
+  }
+  const installUrl = "https://discord.com/oauth2/authorize?client_id="
+    + encodeURIComponent(applicationId)
+    + "&integration_type=1&scope=applications.commands";
+  return new Response(null, {
+    status: 302,
+    headers: {
+      Location: installUrl,
+      "Cache-Control": "no-store",
+    },
+  });
+}
+
 export class DiscordLinkTicket {
   constructor(ctx, env) {
     this.ctx = ctx;

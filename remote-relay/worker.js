@@ -1,6 +1,7 @@
 import {
   DiscordLinkTicket,
   DiscordUser,
+  discordInstallRedirect,
   handleDiscordDevice,
   handleDiscordInteraction,
   redeemDiscordLink,
@@ -204,6 +205,9 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/discord/interactions") {
       return handleDiscordInteraction(request, env, executionCtx);
+    }
+    if (url.pathname === "/discord/install") {
+      return discordInstallRedirect(request, env);
     }
     const discordLinkMatch = url.pathname.match(
       /^\/discord\/link\/([A-Za-z0-9_-]+)$/,

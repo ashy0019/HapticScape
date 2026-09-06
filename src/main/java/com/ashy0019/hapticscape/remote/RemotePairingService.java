@@ -189,6 +189,11 @@ public final class RemotePairingService
 		);
 	}
 
+	public static String discordInstallEndpoint(String relayUrl)
+	{
+		return serviceEndpoint(relayUrl, "/discord/install");
+	}
+
 	static String serviceEndpoint(String relayUrl, String path)
 	{
 		URI relay;

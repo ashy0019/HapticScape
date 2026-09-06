@@ -53,6 +53,10 @@ The controller links once. A participant does not need to link Discord. They
 copy the `HSP1` code from the DM, select **Paste & join** in HapticScape, and
 accept the normal Remote Play confirmation.
 
+The **Install Discord app** button in HapticScape opens `/discord/install` on
+the configured relay. That endpoint redirects to the User Install page for the
+Discord application identified by the relay's `DISCORD_APPLICATION_ID` value.
+
 The Discord application uses HTTP interactions and a hibernatable Durable
 Object WebSocket. It does not run a Discord Gateway process and does not request
 privileged intents. `/hapticscape connect` is rejected in servers and group
@@ -159,6 +163,10 @@ it is exposed.
    `/hapticscape connect`.
 8. On the participant client, copy the returned `HSP1` code, select
    **Paste & join**, and accept the session.
+
+End users can instead select **Install Discord app** inside HapticScape. The
+manual installation link remains useful for testing the Discord configuration
+before a new client build is distributed.
 
 Global application-command updates can take time to appear in Discord. The
 registration script replaces this application's global commands with the four

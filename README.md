@@ -288,13 +288,15 @@ The relay can also expose a user-installed Discord companion for controllers.
 After linking one HapticScape installation to their Discord account, the
 controller can start the existing pairing flow from a one-to-one DM:
 
-1. The controller runs `/hapticscape link` and pastes the private `HSL1` code
+1. The controller selects **Install Discord app** in Remote Play and adds it to
+   their Discord account.
+2. The controller runs `/hapticscape link` and pastes the private `HSL1` code
    into **Remote Play → Discord** once.
-2. In a one-to-one DM with the participant, the controller runs
+3. In a one-to-one DM with the participant, the controller runs
    `/hapticscape connect`.
-3. The linked HapticScape client creates an ordinary one-use `HSP1` connection
+4. The linked HapticScape client creates an ordinary one-use `HSP1` connection
    code and the companion posts it into that DM.
-4. The participant copies the code, selects **Paste & join**, reviews the
+5. The participant copies the code, selects **Paste & join**, reviews the
    normal confirmation, and accepts the session.
 
 The participant does not need to link Discord. The companion cannot accept a

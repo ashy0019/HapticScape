@@ -12,6 +12,30 @@ test("health endpoint does not allocate a room", async () => {
   assert.equal(await response.text(), "HapticScape remote relay");
 });
 
+test("Discord install endpoint redirects to this relay's user-install application", async () => {
+  const response = await worker.fetch(
+    new Request("https://relay.example/discord/install"),
+    { DISCORD_APPLICATION_ID: "123456789012345678" },
+  );
+
+  assert.equal(response.status, 302);
+  assert.equal(
+    response.headers.get("Location"),
+    "https://discord.com/oauth2/authorize?client_id=123456789012345678"
+      + "&integration_type=1&scope=applications.commands",
+  );
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+});
+
+test("Discord install endpoint fails closed when the application is not configured", async () => {
+  const response = await worker.fetch(
+    new Request("https://relay.example/discord/install"),
+    {},
+  );
+
+  assert.equal(response.status, 503);
+});
+
 test("relay endpoint rejects invalid room names before durable object lookup", async () => {
   const response = await worker.fetch(
     new Request("https://relay.example/relay?room=bad"),

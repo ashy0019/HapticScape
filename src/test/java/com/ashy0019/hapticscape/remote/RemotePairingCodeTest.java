@@ -82,6 +82,12 @@ public class RemotePairingCodeTest
 	public void discordEndpointsUseRelayOriginAndRequiredTransport()
 	{
 		assertEquals(
+			"https://relay.example/discord/install",
+			RemotePairingService.discordInstallEndpoint(
+				"wss://relay.example/relay?ignored=true"
+			)
+		);
+		assertEquals(
 			"https://relay.example/discord/link/code",
 			RemotePairingService.serviceEndpoint(
 				"wss://relay.example/relay?ignored=true",
