@@ -1,7 +1,11 @@
 package com.ashy0019.hapticscape;
 
+import com.ashy0019.hapticscape.event.ChatEvent;
+import com.ashy0019.hapticscape.event.PlayerDeathEvent;
 import com.ashy0019.hapticscape.event.XpEvent;
 import com.ashy0019.hapticscape.event.XpEventTracker;
+import com.ashy0019.hapticscape.integration.runelite.RuneLiteChatEventAdapter;
+import com.ashy0019.hapticscape.integration.runelite.RuneLitePlayerDeathEventAdapter;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteXpEventAdapter;
 import com.ashy0019.hapticscape.remote.RemoteSettingsSnapshot;
 import java.util.Collection;
@@ -11,7 +15,6 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
-import net.runelite.api.Actor;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.ItemContainer;
@@ -27,7 +30,6 @@ import net.runelite.client.events.NotificationFired;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.game.ItemStack;
 import net.runelite.client.ui.ClientUI;
-import net.runelite.client.util.Text;
 
 /** Tracks RuneLite gameplay state and translates raw events into feedback decisions. */
 final class GameplayEventCoordinator implements AutoCloseable
@@ -56,6 +58,9 @@ final class GameplayEventCoordinator implements AutoCloseable
 	private final FeedbackSink feedback;
 	private final XpEventTracker xpTracker = new XpEventTracker();
 	private final RuneLiteXpEventAdapter xpEventAdapter = new RuneLiteXpEventAdapter();
+	private final RuneLiteChatEventAdapter chatEventAdapter = new RuneLiteChatEventAdapter();
+	private final RuneLitePlayerDeathEventAdapter playerDeathEventAdapter =
+		new RuneLitePlayerDeathEventAdapter();
 	private final ThresholdAlertTracker thresholdAlertTracker = new ThresholdAlertTracker();
 	private final AlertDeduplicator alertDeduplicator = new AlertDeduplicator();
 
@@ -141,24 +146,25 @@ final class GameplayEventCoordinator implements AutoCloseable
 
 	void onChatMessage(ChatMessage event)
 	{
-		boolean phraseClick = shouldClickForPhrase(event.getMessage());
-		switch (event.getType())
+		handleChatEvent(chatEventAdapter.adapt(event));
+	}
+
+	void handleChatEvent(ChatEvent event)
+	{
+		Objects.requireNonNull(event, "event");
+		ChatOutputDecision decision = ChatOutputDecision.classify(
+			event,
+			settingsSupplier.get().getClickerPhraseRules()
+		);
+		if (decision.hasSpecificAlert())
 		{
-			case PRIVATECHAT:
-			case MODPRIVATECHAT:
-				feedback.dispatchSpecificAlert(AlertCategory.DIRECT_MESSAGE, !phraseClick);
-				break;
-			case TRADEREQ:
-				if (event.getMessage().contains("wishes to trade with you."))
-				{
-					feedback.dispatchSpecificAlert(AlertCategory.TRADE_REQUEST, !phraseClick);
-				}
-				break;
-			default:
-				break;
+			feedback.dispatchSpecificAlert(
+				decision.getSpecificAlert(),
+				!decision.shouldClick()
+			);
 		}
 
-		if (phraseClick)
+		if (decision.shouldClick())
 		{
 			feedback.playClick();
 		}
@@ -241,11 +247,15 @@ final class GameplayEventCoordinator implements AutoCloseable
 
 	void onActorDeath(ActorDeath event)
 	{
-		Actor localPlayer = client.getLocalPlayer();
-		if (localPlayer != null && event.getActor() == localPlayer)
-		{
-			dispatchSpecificAlert(AlertCategory.PLAYER_DEATH);
-		}
+		playerDeathEventAdapter
+			.adapt(event, client.getLocalPlayer())
+			.ifPresent(this::handlePlayerDeathEvent);
+	}
+
+	void handlePlayerDeathEvent(PlayerDeathEvent event)
+	{
+		Objects.requireNonNull(event, "event");
+		dispatchSpecificAlert(AlertCategory.PLAYER_DEATH);
 	}
 
 	void onNotificationFired(NotificationFired event)
@@ -365,19 +375,6 @@ final class GameplayEventCoordinator implements AutoCloseable
 		{
 			dispatchSpecificAlert(category);
 		}
-	}
-
-	private boolean shouldClickForPhrase(String rawMessage)
-	{
-		if (rawMessage == null)
-		{
-			return false;
-		}
-		String message = Text.unescapeJagex(rawMessage)
-			.replace('\u00A0', ' ')
-			.trim();
-		return !message.isEmpty()
-			&& settingsSupplier.get().getClickerPhraseRules().matches(message);
 	}
 
 	private void dispatchSpecificAlert(AlertCategory category)
