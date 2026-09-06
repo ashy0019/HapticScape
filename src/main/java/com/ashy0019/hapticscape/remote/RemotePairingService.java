@@ -183,6 +183,14 @@ public final class RemotePairingService
 
 	static String pairingEndpoint(String relayUrl, String locator)
 	{
+		return serviceEndpoint(
+			relayUrl,
+			"/pairing/" + Objects.requireNonNull(locator, "locator")
+		);
+	}
+
+	static String serviceEndpoint(String relayUrl, String path)
+	{
 		URI relay;
 		try
 		{
@@ -220,7 +228,7 @@ public final class RemotePairingService
 				relay.getUserInfo(),
 				relay.getHost(),
 				relay.getPort(),
-				"/pairing/" + Objects.requireNonNull(locator, "locator"),
+				Objects.requireNonNull(path, "path"),
 				null,
 				null
 			).toASCIIString();
@@ -228,6 +236,47 @@ public final class RemotePairingService
 		catch (URISyntaxException exception)
 		{
 			throw new IllegalArgumentException("Unable to build pairing-service URL", exception);
+		}
+	}
+
+	static String webSocketEndpoint(String relayUrl, String path, String query)
+	{
+		URI relay;
+		try
+		{
+			relay = new URI(Objects.requireNonNull(relayUrl, "relayUrl").trim());
+		}
+		catch (URISyntaxException | NullPointerException exception)
+		{
+			throw new IllegalArgumentException("Remote relay URL is invalid", exception);
+		}
+		String scheme = relay.getScheme();
+		if (!"wss".equalsIgnoreCase(scheme)
+			&& !("ws".equalsIgnoreCase(scheme) && isLoopback(relay.getHost())))
+		{
+			throw new IllegalArgumentException(
+				"Remote relay URL must use wss:// for Discord linking"
+			);
+		}
+		if (relay.getHost() == null || relay.getHost().trim().isEmpty())
+		{
+			throw new IllegalArgumentException("Remote relay URL must include a host");
+		}
+		try
+		{
+			return new URI(
+				scheme.toLowerCase(),
+				relay.getUserInfo(),
+				relay.getHost(),
+				relay.getPort(),
+				Objects.requireNonNull(path, "path"),
+				query,
+				null
+			).toASCIIString();
+		}
+		catch (URISyntaxException exception)
+		{
+			throw new IllegalArgumentException("Unable to build Discord device URL", exception);
 		}
 	}
 

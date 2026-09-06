@@ -78,9 +78,47 @@ public class RemotePairingCodeTest
 		);
 	}
 
+	@Test
+	public void discordEndpointsUseRelayOriginAndRequiredTransport()
+	{
+		assertEquals(
+			"https://relay.example/discord/link/code",
+			RemotePairingService.serviceEndpoint(
+				"wss://relay.example/relay?ignored=true",
+				"/discord/link/code"
+			)
+		);
+		assertEquals(
+			"wss://relay.example/discord/device?user=123",
+			RemotePairingService.webSocketEndpoint(
+				"wss://relay.example/relay",
+				"/discord/device",
+				"user=123"
+			)
+		);
+		assertEquals(
+			"ws://localhost:8787/discord/device?user=123",
+			RemotePairingService.webSocketEndpoint(
+				"ws://localhost:8787/relay",
+				"/discord/device",
+				"user=123"
+			)
+		);
+	}
+
 	@Test(expected = IllegalArgumentException.class)
 	public void insecureRemotePairingEndpointIsRejected()
 	{
 		RemotePairingService.pairingEndpoint("ws://relay.example/relay", "locator");
+	}
+
+	@Test(expected = IllegalArgumentException.class)
+	public void insecureRemoteDiscordSocketIsRejected()
+	{
+		RemotePairingService.webSocketEndpoint(
+			"ws://relay.example/relay",
+			"/discord/device",
+			"user=123"
+		);
 	}
 }

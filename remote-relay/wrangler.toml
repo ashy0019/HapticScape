@@ -10,6 +10,14 @@ class_name = "SessionRoom"
 name = "PAIRING_MAILBOXES"
 class_name = "PairingMailbox"
 
+[[durable_objects.bindings]]
+name = "DISCORD_LINK_TICKETS"
+class_name = "DiscordLinkTicket"
+
+[[durable_objects.bindings]]
+name = "DISCORD_USERS"
+class_name = "DiscordUser"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["SessionRoom"]
@@ -17,3 +25,7 @@ new_sqlite_classes = ["SessionRoom"]
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = ["PairingMailbox"]
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["DiscordLinkTicket", "DiscordUser"]

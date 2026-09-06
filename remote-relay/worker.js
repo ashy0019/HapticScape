@@ -1,3 +1,13 @@
+import {
+  DiscordLinkTicket,
+  DiscordUser,
+  handleDiscordDevice,
+  handleDiscordInteraction,
+  redeemDiscordLink,
+} from "./discord.js";
+
+export { DiscordLinkTicket, DiscordUser } from "./discord.js";
+
 const MAX_MESSAGE_BYTES = 128 * 1024;
 const MAX_PAIRING_ENVELOPE_BYTES = 4 * 1024;
 const PAIRING_TTL_MILLIS = 5 * 60 * 1000;
@@ -190,8 +200,20 @@ function constantTimeEqual(first, second) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, executionCtx) {
     const url = new URL(request.url);
+    if (url.pathname === "/discord/interactions") {
+      return handleDiscordInteraction(request, env, executionCtx);
+    }
+    const discordLinkMatch = url.pathname.match(
+      /^\/discord\/link\/([A-Za-z0-9_-]+)$/,
+    );
+    if (discordLinkMatch) {
+      return redeemDiscordLink(request, env, discordLinkMatch[1]);
+    }
+    if (url.pathname === "/discord/device") {
+      return handleDiscordDevice(request, env);
+    }
     if (url.pathname.startsWith("/pairing/")) {
       const pairingMatch = url.pathname.match(/^\/pairing\/([A-Za-z0-9_-]+)$/);
       if (!pairingMatch) {

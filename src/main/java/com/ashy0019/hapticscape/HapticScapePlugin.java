@@ -13,6 +13,8 @@ import com.ashy0019.hapticscape.music.MusicSyncSettings;
 import com.ashy0019.hapticscape.music.WasapiLoopbackCapture;
 import com.ashy0019.hapticscape.remote.ConfigBackedRemoteSettingsStore;
 import com.ashy0019.hapticscape.remote.ConfigBackedRemotePermissionsStore;
+import com.ashy0019.hapticscape.remote.DiscordCredentialStore;
+import com.ashy0019.hapticscape.remote.DiscordPairingBridge;
 import com.ashy0019.hapticscape.remote.EffectiveSettingsService;
 import com.ashy0019.hapticscape.remote.RemotePairingService;
 import com.ashy0019.hapticscape.remote.RemoteSessionListener;
@@ -83,6 +85,7 @@ public class HapticScapePlugin extends Plugin
 	private GatedIntifaceService intifaceService;
 	private EffectiveSettingsService effectiveSettingsService;
 	private RemoteSessionManager remoteSessionManager;
+	private DiscordPairingBridge discordPairingBridge;
 	private SettingsLockService settingsLockService;
 	private MusicSyncService musicSyncService;
 	private ClickerService clickerService;
@@ -201,6 +204,15 @@ public class HapticScapePlugin extends Plugin
 		gameplayEvents.start();
 		updatePreferencesStore = new UpdatePreferencesStore(gson);
 		updateCheckService = new UpdateCheckService(httpClient, gson);
+		RemotePairingService remotePairingService = new RemotePairingService(httpClient);
+		discordPairingBridge = new DiscordPairingBridge(
+			httpClient,
+			gson,
+			remoteSessionManager,
+			remotePairingService,
+			new DiscordCredentialStore(gson)
+		);
+		discordPairingBridge.start();
 		panel = new HapticScapePanel(
 			config,
 			configManager,
@@ -219,7 +231,8 @@ public class HapticScapePlugin extends Plugin
 			updatePreferencesStore,
 			updateCheckService,
 			remoteSessionManager,
-			new RemotePairingService(httpClient),
+			remotePairingService,
+			discordPairingBridge,
 			settingsLockService,
 			feedbackCoordinator::dispatchRogueFeedback,
 			this::playRogueUnlockStingAsync,
@@ -260,6 +273,11 @@ public class HapticScapePlugin extends Plugin
 			navigationButton = null;
 		}
 
+		if (discordPairingBridge != null)
+		{
+			discordPairingBridge.close();
+			discordPairingBridge = null;
+		}
 		if (remoteSessionManager != null)
 		{
 			remoteSessionManager.close();

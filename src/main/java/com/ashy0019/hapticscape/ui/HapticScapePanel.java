@@ -23,6 +23,7 @@ import com.ashy0019.hapticscape.rogue.KonamiCodeDetector;
 import com.ashy0019.hapticscape.rogue.RogueFeedbackEvent;
 import com.ashy0019.hapticscape.remote.RemoteLockSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteLockState;
+import com.ashy0019.hapticscape.remote.DiscordPairingBridge;
 import com.ashy0019.hapticscape.remote.RemotePermissions;
 import com.ashy0019.hapticscape.remote.RemotePairingService;
 import com.ashy0019.hapticscape.remote.RemoteRole;
@@ -210,6 +211,7 @@ public final class HapticScapePanel extends PluginPanel
 		UpdateCheckService updateCheckService,
 		RemoteSessionManager remoteSessionManager,
 		RemotePairingService remotePairingService,
+		DiscordPairingBridge discordPairingBridge,
 		SettingsLockService settingsLockService,
 		Consumer<RogueFeedbackEvent> rogueFeedbackAction,
 		Runnable rogueUnlockSoundAction,
@@ -415,6 +417,7 @@ public final class HapticScapePanel extends PluginPanel
 			configManager,
 			remoteSessionManager,
 			remotePairingService,
+			discordPairingBridge,
 			settingsLockDraft
 		);
 		roguePanel = new RoguePanel(configManager, rogueFeedbackAction);

@@ -10,3 +10,6 @@ nbproject/
 
 remote-relay/node_modules/
 remote-relay/.wrangler/
+remote-relay/.dev.vars
+remote-relay/.env
+remote-relay/.env.*

@@ -4,6 +4,7 @@ import com.ashy0019.hapticscape.HapticScapeConfig;
 import com.ashy0019.hapticscape.clicker.ClickerPhraseRule;
 import com.ashy0019.hapticscape.clicker.ClickerPhraseRules;
 import com.ashy0019.hapticscape.remote.RemoteActionAcknowledgement;
+import com.ashy0019.hapticscape.remote.DiscordPairingBridge;
 import com.ashy0019.hapticscape.remote.RemoteLockSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteLockState;
 import com.ashy0019.hapticscape.remote.RemotePairingService;
@@ -73,6 +74,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		ConfigManager configManager,
 		RemoteSessionManager sessionManager,
 		RemotePairingService pairingService,
+		DiscordPairingBridge discordPairingBridge,
 		SettingsLockDraft settingsLockDraft)
 	{
 		this.config = config;
@@ -88,6 +90,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 			configManager,
 			sessionManager,
 			pairingService,
+			discordPairingBridge,
 			statusText::setPlainText,
 			this::showError
 		);

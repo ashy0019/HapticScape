@@ -1,6 +1,10 @@
 package com.ashy0019.hapticscape.ui;
 
 import com.ashy0019.hapticscape.HapticScapeConfig;
+import com.ashy0019.hapticscape.remote.DiscordLinkListener;
+import com.ashy0019.hapticscape.remote.DiscordLinkSnapshot;
+import com.ashy0019.hapticscape.remote.DiscordLinkState;
+import com.ashy0019.hapticscape.remote.DiscordPairingBridge;
 import com.ashy0019.hapticscape.remote.RemoteInvitation;
 import com.ashy0019.hapticscape.remote.RemotePairingCode;
 import com.ashy0019.hapticscape.remote.RemotePairingService;
@@ -34,6 +38,8 @@ final class RemotePairingPanel extends JPanel
 	private final ConfigManager configManager;
 	private final RemoteSessionManager sessionManager;
 	private final RemotePairingService pairingService;
+	private final DiscordPairingBridge discordPairingBridge;
+	private final DiscordLinkListener discordLinkListener;
 	private final Consumer<String> statusSink;
 	private final Consumer<String> errorSink;
 	private final JTextField relayUrlField = new JTextField();
@@ -47,8 +53,14 @@ final class RemotePairingPanel extends JPanel
 	private final JButton joinButton = new JButton("Join entered code");
 	private final JPanel controllerPanel = new JPanel();
 	private final JPanel participantPanel = new JPanel();
+	private final JPanel discordPanel = new JPanel();
+	private final JLabel discordStatus = new JLabel("Discord is not linked");
+	private final JTextField discordLinkCode = new JTextField();
+	private final JButton linkDiscordButton = new JButton("Link Discord");
+	private final JButton unlinkDiscordButton = new JButton("Unlink");
 
 	private boolean wasLocal = true;
+	private boolean currentSessionLocal = true;
 	private boolean pairingBusy;
 	private boolean connectionSettingsExpanded;
 	private long pairingAttempt;
@@ -60,6 +72,7 @@ final class RemotePairingPanel extends JPanel
 		ConfigManager configManager,
 		RemoteSessionManager sessionManager,
 		RemotePairingService pairingService,
+		DiscordPairingBridge discordPairingBridge,
 		Consumer<String> statusSink,
 		Consumer<String> errorSink)
 	{
@@ -67,6 +80,13 @@ final class RemotePairingPanel extends JPanel
 		this.configManager = Objects.requireNonNull(configManager, "configManager");
 		this.sessionManager = Objects.requireNonNull(sessionManager, "sessionManager");
 		this.pairingService = Objects.requireNonNull(pairingService, "pairingService");
+		this.discordPairingBridge = Objects.requireNonNull(
+			discordPairingBridge,
+			"discordPairingBridge"
+		);
+		this.discordLinkListener = snapshot -> SwingUtilities.invokeLater(
+			() -> applyDiscordSnapshot(snapshot)
+		);
 		this.statusSink = Objects.requireNonNull(statusSink, "statusSink");
 		this.errorSink = Objects.requireNonNull(errorSink, "errorSink");
 		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
@@ -75,9 +95,11 @@ final class RemotePairingPanel extends JPanel
 		configureRelaySettings();
 		configureControllerPanel();
 		configureParticipantPanel();
+		configureDiscordPanel();
 
 		PanelUi.addVerticalComponent(this, controllerPanel);
 		PanelUi.addVerticalComponent(this, participantPanel);
+		PanelUi.addVerticalComponent(this, discordPanel);
 		PanelUi.addVerticalComponent(this, connectionSettingsButton);
 		PanelUi.addVerticalComponent(this, relaySettingsPanel);
 		refreshRelaySettingsVisibility(false);
@@ -92,11 +114,15 @@ final class RemotePairingPanel extends JPanel
 			connectionSettingsExpanded = !connectionSettingsExpanded;
 			refreshRelaySettingsVisibility(true);
 		});
+		linkDiscordButton.addActionListener(event -> linkDiscord());
+		unlinkDiscordButton.addActionListener(event -> unlinkDiscord());
+		discordPairingBridge.addListener(discordLinkListener);
 	}
 
 	void apply(RemoteSessionSnapshot snapshot)
 	{
 		boolean local = snapshot.getState() == RemoteSessionState.LOCAL;
+		currentSessionLocal = local;
 		boolean controller = snapshot.getRole() == RemoteRole.CONTROLLER && !local;
 		if (local && !wasLocal)
 		{
@@ -113,6 +139,8 @@ final class RemotePairingPanel extends JPanel
 			&& (snapshot.getState() == RemoteSessionState.CONNECTING
 				|| snapshot.getState() == RemoteSessionState.WAITING_FOR_PEER));
 		participantPanel.setVisible(local);
+		discordPanel.setVisible(local);
+		applyDiscordSnapshot(discordPairingBridge.getSnapshot());
 		connectionSettingsButton.setVisible(local);
 		refreshRelaySettingsVisibility(false);
 		revalidate();
@@ -123,6 +151,7 @@ final class RemotePairingPanel extends JPanel
 	{
 		pairingAttempt++;
 		cancelActivePairing();
+		discordPairingBridge.removeListener(discordLinkListener);
 	}
 
 	private void configureRelaySettings()
@@ -186,6 +215,99 @@ final class RemotePairingPanel extends JPanel
 		joinRow.add(joinButton);
 		PanelUi.addVerticalComponent(participantPanel, joinRow);
 		allowHorizontalShrink(participantPanel);
+	}
+
+	private void configureDiscordPanel()
+	{
+		discordPanel.setLayout(new BoxLayout(discordPanel, BoxLayout.Y_AXIS));
+		discordPanel.setBorder(BorderFactory.createTitledBorder("Discord"));
+		PanelUi.addVerticalComponent(discordPanel, new SidebarTextLabel(
+			"Run /hapticscape link in Discord, then paste its one-time code here."
+		));
+		Dimension statusSize = new Dimension(180, discordStatus.getPreferredSize().height);
+		discordStatus.setPreferredSize(statusSize);
+		discordStatus.setMinimumSize(new Dimension(0, statusSize.height));
+		PanelUi.addVerticalComponent(discordPanel, discordStatus);
+		discordLinkCode.setToolTipText(
+			"Paste the private HSL1 link code generated by /hapticscape link"
+		);
+		allowHorizontalShrink(discordLinkCode);
+		PanelUi.addVerticalComponent(discordPanel, discordLinkCode);
+		JPanel buttons = new JPanel(new GridLayout(0, 1, 0, 4));
+		configureCompactButton(linkDiscordButton);
+		configureCompactButton(unlinkDiscordButton);
+		buttons.add(linkDiscordButton);
+		buttons.add(unlinkDiscordButton);
+		allowHorizontalShrink(buttons);
+		PanelUi.addVerticalComponent(discordPanel, buttons);
+		allowHorizontalShrink(discordPanel);
+	}
+
+	private void linkDiscord()
+	{
+		String code = discordLinkCode.getText().trim();
+		if (code.isEmpty())
+		{
+			errorSink.accept("Run /hapticscape link in Discord and paste its code first.");
+			return;
+		}
+		String relayUrl = relayUrlField.getText().trim();
+		try
+		{
+			discordPairingBridge.link(relayUrl, code).whenComplete((snapshot, error) ->
+				SwingUtilities.invokeLater(() ->
+				{
+					if (error != null)
+					{
+						errorSink.accept(rootMessage(error));
+					}
+					else
+					{
+						discordLinkCode.setText("");
+					}
+				})
+			);
+		}
+		catch (RuntimeException exception)
+		{
+			errorSink.accept(exception.getMessage());
+		}
+	}
+
+	private void unlinkDiscord()
+	{
+		try
+		{
+			discordPairingBridge.unlink().whenComplete((ignored, error) ->
+			{
+				if (error != null)
+				{
+					SwingUtilities.invokeLater(() -> errorSink.accept(
+						"The local Discord link was removed, but the relay could not be notified. "
+							+ "You can also run /hapticscape unlink in Discord."
+					));
+				}
+			});
+		}
+		catch (RuntimeException exception)
+		{
+			errorSink.accept(exception.getMessage());
+		}
+	}
+
+	private void applyDiscordSnapshot(DiscordLinkSnapshot snapshot)
+	{
+		discordStatus.setText(snapshot.getMessage());
+		boolean linking = snapshot.getState() == DiscordLinkState.CONNECTING;
+		boolean linked = snapshot.isLinked();
+		boolean available = snapshot.getState() != DiscordLinkState.UNAVAILABLE;
+		discordLinkCode.setEnabled(currentSessionLocal && available && !linked && !linking);
+		linkDiscordButton.setEnabled(
+			currentSessionLocal && available && !linked && !linking
+		);
+		unlinkDiscordButton.setEnabled(currentSessionLocal && linked);
+		discordStatus.setToolTipText(snapshot.getMessage());
+		discordPanel.repaint();
 	}
 
 	private void createConnectionCode()
