@@ -36,6 +36,110 @@ test("Discord install endpoint fails closed when the application is not configur
   assert.equal(response.status, 503);
 });
 
+test("Discord Accept validates the opaque request before redirecting to HapticScape", async () => {
+  let validation = null;
+  const userObject = {
+    async fetch(request) {
+      validation = await request.json();
+      return new Response(null, { status: 204 });
+    },
+  };
+  const controllerId = "123456789012345678";
+  const requestId = "abcdefghijklmnop";
+  const acceptToken = "t".repeat(43);
+  const response = await worker.fetch(new Request(
+    `https://relay.example/discord/accept/${controllerId}/${requestId}/${acceptToken}`,
+  ), {
+    DISCORD_USERS: {
+      idFromName(value) {
+        return value;
+      },
+      get(value) {
+        assert.equal(value, controllerId);
+        return userObject;
+      },
+    },
+  });
+
+  assert.equal(response.status, 302);
+  assert.deepEqual(validation, { requestId, acceptToken });
+  assert.equal(
+    response.headers.get("Location"),
+    `hapticscape://discord/accept?controller=${controllerId}`
+      + `&request=${requestId}&token=${acceptToken}`,
+  );
+  assert.equal(response.headers.get("Referrer-Policy"), "no-referrer");
+});
+
+test("Discord device acceptance is bound to the authenticated user's object", async () => {
+  const userId = "223456789012345678";
+  const body = JSON.stringify({
+    controllerId: "123456789012345678",
+    requestId: "abcdefghijklmnop",
+    acceptToken: "t".repeat(43),
+    participantPublicKey: "p".repeat(392),
+  });
+  let forwarded = null;
+  const response = await worker.fetch(new Request(
+    `https://relay.example/discord/device/accept?user=${userId}`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${"s".repeat(43)}`,
+        "Content-Type": "application/json",
+      },
+      body,
+    },
+  ), {
+    DISCORD_USERS: {
+      idFromName(value) {
+        return value;
+      },
+      get(value) {
+        assert.equal(value, userId);
+        return {
+          async fetch(request) {
+            forwarded = request;
+            return new Response(null, { status: 202 });
+          },
+        };
+      },
+    },
+  });
+
+  assert.equal(response.status, 202);
+  assert.equal(forwarded.headers.get("X-HapticScape-User"), userId);
+  assert.equal(forwarded.headers.get("Authorization"), `Bearer ${"s".repeat(43)}`);
+  assert.equal(await forwarded.text(), body);
+});
+
+test("Discord device WebSocket routing forwards GET without adding a body", async () => {
+  const userId = "223456789012345678";
+  let forwarded = null;
+  const response = await worker.fetch(new Request(
+    `https://relay.example/discord/device?user=${userId}`,
+  ), {
+    DISCORD_USERS: {
+      idFromName(value) {
+        return value;
+      },
+      get() {
+        return {
+          async fetch(request) {
+            forwarded = request;
+            return new Response("forwarded", { status: 426 });
+          },
+        };
+      },
+    },
+  });
+
+  assert.equal(response.status, 426);
+  assert.equal(forwarded.method, "GET");
+  assert.equal(forwarded.body, null);
+  assert.equal(forwarded.headers.get("X-HapticScape-User"), userId);
+});
+
 test("relay endpoint rejects invalid room names before durable object lookup", async () => {
   const response = await worker.fetch(
     new Request("https://relay.example/relay?room=bad"),

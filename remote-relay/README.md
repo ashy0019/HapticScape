@@ -35,23 +35,34 @@ secret using separate domains.
 
 ## Optional Discord companion
 
-The same Worker can host a user-installed Discord application that asks a
-linked HapticScape client to create an ordinary one-use `HSP1` connection code.
-Discord is only the request and delivery surface. It does not replace the
-HapticScape session protocol, consent screen, encryption, or relay.
+The same Worker can host a user-installed Discord application that presents an
+Accept or Deny Remote Play request in a one-to-one DM. Discord is only the
+request surface. It does not replace the HapticScape session protocol, local
+consent screen, encryption, or relay.
 
 The available commands are:
 
 | Command | Result |
 | --- | --- |
 | `/hapticscape link` | Creates a private, five-minute `HSL1` code used to link the caller's Discord account to one HapticScape installation. |
-| `/hapticscape connect` | In a one-to-one Discord DM, asks the linked client to create a one-use `HSP1` code and posts it into that DM. |
+| `/hapticscape connect` | In a one-to-one Discord DM, sends the linked participant an Accept or Deny Remote Play request. |
 | `/hapticscape status` | Privately reports whether the linked client is online. |
 | `/hapticscape unlink` | Removes the server-side device link and disconnects the linked client. |
 
-The controller links once. A participant does not need to link Discord. They
-copy the `HSP1` code from the DM, select **Paste & join** in HapticScape, and
-accept the normal Remote Play confirmation.
+Both people link one HapticScape installation to their own Discord account.
+When the intended participant selects **Accept**, the Worker redirects the
+browser to a strict `hapticscape://` wake request. The packaged Windows launcher
+opens or focuses HapticScape, and the participant must separately approve the
+local Remote Play consent dialog. **Deny** closes the request without contacting
+either session endpoint.
+
+The wake request contains a short-lived opaque token, not an `HSP1` code or
+session key. The participant client authenticates to its linked Durable Object
+and generates an ephemeral RSA-2048 key pair before the controller is asked to
+create an invitation. The controller encrypts the resulting `HSP1` code with
+RSA-OAEP-SHA-256. The Worker relays only the participant public key and encrypted
+code. The private key stays in participant memory, and the plaintext code is
+never displayed in Discord or sent to the Worker.
 
 The **Install Discord app** button in HapticScape opens `/discord/install` on
 the configured relay. That endpoint redirects to the User Install page for the
@@ -60,7 +71,8 @@ Discord application identified by the relay's `DISCORD_APPLICATION_ID` value.
 The Discord application uses HTTP interactions and a hibernatable Durable
 Object WebSocket. It does not run a Discord Gateway process and does not request
 privileged intents. `/hapticscape connect` is rejected in servers and group
-DMs so a connection code is not posted into a larger channel by mistake.
+DMs. Manual `HSP1` connection codes remain available in HapticScape as a
+fallback.
 
 ### Discord data and credentials
 
@@ -72,11 +84,19 @@ DMs so a connection code is not posted into a larger channel by mistake.
   SHA-256 hash of the random device credential until unlinked.
 - The raw device credential is stored only on the linked Windows installation,
   protected for the current Windows account with DPAPI.
-- A pending `/connect` request temporarily retains the Discord interaction
-  token required to edit its response. It expires after two minutes.
+- A pending `/connect` request temporarily retains the controller and
+  participant Discord IDs, their display names, the interaction token required
+  to edit the response, request state, expiry, and a hash of the Accept token.
+  It expires after two minutes.
 - Discord and Cloudflare necessarily receive their ordinary network and
-  account metadata. The `HSP1` bearer code is visible in the one-to-one DM and
-  briefly passes through the Discord delivery path.
+  account metadata. The opaque Accept token passes through Discord and the
+  participant's browser, but it cannot authorize a join without the linked
+  participant device credential.
+- The `HSP1` bearer code is created only after linked-device authentication and
+  encrypted to the participant's ephemeral RSA-2048 public key. The Worker sees
+  the public key and RSA-OAEP-SHA-256 ciphertext, but not the participant's
+  private key or plaintext code. The code is not posted to Discord or included
+  in the browser deep link.
 - Remote session payloads continue to use HapticScape's end-to-end encrypted
   WebSocket protocol. They are not sent through Discord.
 
@@ -152,17 +172,24 @@ it is exposed.
 
 ### 5. Install and test the application
 
-1. Copy the Discord-provided installation link from **Installation**.
-2. Open the link and install the application for your user account.
-3. Start HapticScape and open **Remote Play**.
-4. Run `/hapticscape link` in Discord.
-5. Paste the private `HSL1` code into the Discord section in HapticScape and
-   select **Link Discord**.
-6. Run `/hapticscape status` and confirm the client is online.
-7. Open a one-to-one DM with a test partner and run
-   `/hapticscape connect`.
-8. On the participant client, copy the returned `HSP1` code, select
-   **Paste & join**, and accept the session.
+1. Install the Discord application for two test accounts.
+2. Start the packaged Windows HapticScape client for each account and open
+   **Remote Play**. Launching `HapticScape.exe` registers the per-user
+   `hapticscape://` protocol handler.
+3. On each account, run `/hapticscape link` in Discord.
+4. Paste each private `HSL1` code into that account's HapticScape Discord
+   section and select **Link Discord**.
+5. Run `/hapticscape status` for both accounts and confirm both clients are
+   online.
+6. Open a one-to-one DM between the accounts and run
+   `/hapticscape connect` from the controller account.
+7. Select **Deny** once and confirm the request closes without starting a
+   session.
+8. Create another request and select **Accept** as the participant. Confirm the
+   packaged client starts or focuses, opens Remote Play, and shows the local
+   consent dialog.
+9. Decline once and confirm no session begins. Repeat, approve locally, and
+   confirm the encrypted session connects.
 
 End users can instead select **Install Discord app** inside HapticScape. The
 manual installation link remains useful for testing the Discord configuration

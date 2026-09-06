@@ -24,6 +24,7 @@ import com.ashy0019.hapticscape.rogue.RogueFeedbackEvent;
 import com.ashy0019.hapticscape.remote.RemoteLockSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteLockState;
 import com.ashy0019.hapticscape.remote.DiscordPairingBridge;
+import com.ashy0019.hapticscape.remote.DiscordJoinRequest;
 import com.ashy0019.hapticscape.remote.RemotePermissions;
 import com.ashy0019.hapticscape.remote.RemotePairingService;
 import com.ashy0019.hapticscape.remote.RemoteRole;
@@ -591,6 +592,28 @@ public final class HapticScapePanel extends PluginPanel
 	public int getIntensityPercent()
 	{
 		return intensityPercent;
+	}
+
+	public void showDiscordRemoteView()
+	{
+		showRemoteView();
+	}
+
+	public boolean confirmDiscordRemoteControl(DiscordJoinRequest request)
+	{
+		showRemoteView();
+		return remoteControlPanel.confirmDiscordRemoteControl(request);
+	}
+
+	public void showDiscordPairingError(String message)
+	{
+		showRemoteView();
+		JOptionPane.showMessageDialog(
+			this,
+			message,
+			"Discord Remote Play",
+			JOptionPane.ERROR_MESSAGE
+		);
 	}
 
 	public int getMinimumXpGain()

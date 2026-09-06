@@ -13,6 +13,7 @@ internal static class UpdateCoreTests
 		try
 		{
 			TestVersions();
+			TestDeepLinks();
 			TestPolicy();
 			TestReleaseParsing();
 			TestPreferences(root);
@@ -31,6 +32,26 @@ internal static class UpdateCoreTests
 		{
 			UpdatePackagePreparer.TryDeleteDirectory(root);
 		}
+	}
+
+	private static void TestDeepLinks()
+	{
+		string valid = "hapticscape://discord/accept"
+			+ "?controller=123456789012345678"
+			+ "&request=abcdefghijklmnop"
+			+ "&token=abcdefghijklmnopqrstuvwxyzABCDEFGH123456789";
+		Assert(HapticScapeDeepLink.Read(new string[0]) == null,
+			"ordinary launches should not create a deep link");
+		Assert(HapticScapeDeepLink.Read(new[] { valid }) == valid,
+			"strict Discord accept links should parse");
+		AssertThrows<InvalidOperationException>(delegate
+		{
+			HapticScapeDeepLink.Read(new[] { valid + "&invitation=HSP1.secret" });
+		}, "authority-bearing deep-link fields should be rejected");
+		AssertThrows<InvalidOperationException>(delegate
+		{
+			HapticScapeDeepLink.Read(new[] { valid.Replace("discord/", "discord:1234/") });
+		}, "explicit deep-link ports should be rejected");
 	}
 
 	private static void TestVersions()

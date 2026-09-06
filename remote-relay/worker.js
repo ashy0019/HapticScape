@@ -2,8 +2,10 @@ import {
   DiscordLinkTicket,
   DiscordUser,
   discordInstallRedirect,
+  handleDiscordDeviceAccept,
   handleDiscordDevice,
   handleDiscordInteraction,
+  openDiscordAccept,
   redeemDiscordLink,
 } from "./discord.js";
 
@@ -217,6 +219,21 @@ export default {
     }
     if (url.pathname === "/discord/device") {
       return handleDiscordDevice(request, env);
+    }
+    if (url.pathname === "/discord/device/accept") {
+      return handleDiscordDeviceAccept(request, env);
+    }
+    const discordAcceptMatch = url.pathname.match(
+      /^\/discord\/accept\/(\d{15,22})\/([A-Za-z0-9_-]{16})\/([A-Za-z0-9_-]{43})$/,
+    );
+    if (discordAcceptMatch) {
+      return openDiscordAccept(
+        request,
+        env,
+        discordAcceptMatch[1],
+        discordAcceptMatch[2],
+        discordAcceptMatch[3],
+      );
     }
     if (url.pathname.startsWith("/pairing/")) {
       const pairingMatch = url.pathname.match(/^\/pairing\/([A-Za-z0-9_-]+)$/);

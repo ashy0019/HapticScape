@@ -4,10 +4,14 @@ import com.google.gson.Gson;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyPair;
+import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -39,6 +43,9 @@ public final class DiscordPairingBridge implements AutoCloseable, RemoteSessionL
 		new CopyOnWriteArrayList<>();
 	private final SecureRandom random = new SecureRandom();
 	private final AtomicBoolean pairingInProgress = new AtomicBoolean();
+	private final AtomicBoolean joinInProgress = new AtomicBoolean();
+	private final ConcurrentHashMap<String, PrivateKey> pendingJoinKeys =
+		new ConcurrentHashMap<>();
 
 	private volatile DiscordLinkSnapshot snapshot;
 	private volatile DiscordDeviceCredential credential;
@@ -46,6 +53,8 @@ public final class DiscordPairingBridge implements AutoCloseable, RemoteSessionL
 	private volatile boolean closed;
 	private volatile boolean manualSocketClose;
 	private volatile int reconnectAttempt;
+	private volatile DiscordJoinConsentHandler joinConsentHandler;
+	private volatile DiscordDeepLinkRequest pendingDeepLink;
 	private RemotePairingCode activePairingCode;
 	private String activePairingRelayUrl;
 	private String activePairingRequestId;
@@ -102,6 +111,121 @@ public final class DiscordPairingBridge implements AutoCloseable, RemoteSessionL
 	public void removeListener(DiscordLinkListener listener)
 	{
 		listeners.remove(listener);
+	}
+
+	public void setJoinConsentHandler(DiscordJoinConsentHandler handler)
+	{
+		joinConsentHandler = handler;
+	}
+
+	public synchronized void acceptDeepLink(DiscordDeepLinkRequest deepLink)
+	{
+		ensureOpen();
+		Objects.requireNonNull(deepLink, "deepLink");
+		DiscordJoinConsentHandler handler = joinConsentHandler;
+		if (handler != null)
+		{
+			handler.onDeepLinkOpened();
+		}
+		DiscordDeviceCredential current = credential;
+		if (current == null)
+		{
+			showJoinError("Link this Discord account in HapticScape, then select Accept again.");
+			return;
+		}
+		if (snapshot.getState() != DiscordLinkState.LINKED)
+		{
+			pendingDeepLink = deepLink;
+			return;
+		}
+		submitDeepLink(deepLink, current);
+	}
+
+	private void submitDeepLink(
+		DiscordDeepLinkRequest deepLink,
+		DiscordDeviceCredential current)
+	{
+		try
+		{
+			sessionManager.validateParticipantJoin();
+		}
+		catch (RuntimeException exception)
+		{
+			showJoinError(exception.getMessage());
+			return;
+		}
+		KeyPair participantKeyPair;
+		try
+		{
+			participantKeyPair = DiscordPairingCipher.generateKeyPair(random);
+		}
+		catch (RuntimeException exception)
+		{
+			showJoinError(rootMessage(exception));
+			return;
+		}
+		String joinKeyId = joinKeyId(deepLink.getControllerId(), deepLink.getRequestId());
+		PrivateKey privateKey = participantKeyPair.getPrivate();
+		if (pendingJoinKeys.putIfAbsent(joinKeyId, privateKey) != null)
+		{
+			showJoinError("This Discord connection request is already being opened.");
+			return;
+		}
+		scheduler.schedule(
+			() -> pendingJoinKeys.remove(joinKeyId, privateKey),
+			3,
+			TimeUnit.MINUTES
+		);
+
+		String url = RemotePairingService.serviceEndpoint(
+			current.getRelayUrl(),
+			"/discord/device/accept"
+		) + "?user=" + encode(current.getUserId());
+		DeepLinkAcceptance acceptance = new DeepLinkAcceptance(
+			deepLink.getControllerId(),
+			deepLink.getRequestId(),
+			deepLink.getAcceptToken(),
+			DiscordPairingCipher.encodePublicKey(participantKeyPair.getPublic())
+		);
+		Request request = new Request.Builder()
+			.url(url)
+			.header("User-Agent", USER_AGENT)
+			.header("Authorization", "Bearer " + current.getSecret())
+			.post(okhttp3.RequestBody.create(
+				null,
+				gson.toJson(acceptance).getBytes(StandardCharsets.UTF_8)
+			))
+			.build();
+		httpClient.newCall(request).enqueue(new Callback()
+		{
+			@Override
+			public void onFailure(Call call, IOException exception)
+			{
+				pendingJoinKeys.remove(joinKeyId, privateKey);
+				showJoinError("The Discord connection request could not be reached.");
+			}
+
+			@Override
+			public void onResponse(Call call, Response response)
+			{
+				try (Response closeable = response)
+				{
+					if (!closeable.isSuccessful())
+					{
+						pendingJoinKeys.remove(joinKeyId, privateKey);
+						showJoinError(readError(
+							closeable,
+							"This Discord connection request expired or belongs to another linked account"
+						));
+					}
+				}
+				catch (IOException exception)
+				{
+					pendingJoinKeys.remove(joinKeyId, privateKey);
+					showJoinError("The Discord connection response could not be read.");
+				}
+			}
+		});
 	}
 
 	public CompletableFuture<DiscordLinkSnapshot> link(
@@ -195,6 +319,8 @@ public final class DiscordPairingBridge implements AutoCloseable, RemoteSessionL
 		credentialStore.clear();
 		closeSocket();
 		credential = null;
+		pendingDeepLink = null;
+		pendingJoinKeys.clear();
 		reconnectAttempt = 0;
 		cancelActivePairing();
 		publish(unlinkedSnapshot());
@@ -260,6 +386,8 @@ public final class DiscordPairingBridge implements AutoCloseable, RemoteSessionL
 			return;
 		}
 		closed = true;
+		pendingDeepLink = null;
+		pendingJoinKeys.clear();
 		sessionManager.removeListener(this);
 		closeSocket();
 		cancelActivePairing();
@@ -328,8 +456,42 @@ public final class DiscordPairingBridge implements AutoCloseable, RemoteSessionL
 			}
 			return;
 		}
+		if ("PAIR_CANCELLED".equals(request.type))
+		{
+			boolean matches;
+			synchronized (this)
+			{
+				matches = request.requestId.equals(activePairingRequestId);
+			}
+			if (matches)
+			{
+				cancelActivePairing();
+				if (sessionManager.isControllerSession())
+				{
+					sessionManager.endSession();
+				}
+			}
+			return;
+		}
+		if ("JOIN_REQUEST".equals(request.type))
+		{
+			handleJoinRequest(request);
+			return;
+		}
 		if (!"PAIR_REQUEST".equals(request.type))
 		{
+			return;
+		}
+		PublicKey participantPublicKey;
+		try
+		{
+			participantPublicKey = DiscordPairingCipher.decodePublicKey(
+				request.participantPublicKey
+			);
+		}
+		catch (RuntimeException exception)
+		{
+			sendError(request.requestId, "The participant supplied an invalid pairing key");
 			return;
 		}
 		if (!pairingInProgress.compareAndSet(false, true))
@@ -357,7 +519,13 @@ public final class DiscordPairingBridge implements AutoCloseable, RemoteSessionL
 		{
 			RemoteInvitation invitation = sessionManager.startController(current.getRelayUrl());
 			pairingService.publish(invitation).whenComplete((code, error) ->
-				finishPairingRequest(request.requestId, current.getRelayUrl(), code, error)
+				finishPairingRequest(
+					request.requestId,
+					current.getRelayUrl(),
+					participantPublicKey,
+					code,
+					error
+				)
 			);
 		}
 		catch (RuntimeException exception)
@@ -370,6 +538,7 @@ public final class DiscordPairingBridge implements AutoCloseable, RemoteSessionL
 	private void finishPairingRequest(
 		String requestId,
 		String relayUrl,
+		PublicKey participantPublicKey,
 		RemotePairingCode code,
 		Throwable error)
 	{
@@ -389,6 +558,22 @@ public final class DiscordPairingBridge implements AutoCloseable, RemoteSessionL
 			sendError(requestId, "The Remote Play session ended before delivery");
 			return;
 		}
+		String encryptedCode;
+		try
+		{
+			encryptedCode = DiscordPairingCipher.encrypt(
+				code.encode(),
+				participantPublicKey,
+				random
+			);
+		}
+		catch (RuntimeException exception)
+		{
+			pairingService.cancel(relayUrl, code);
+			sessionManager.endSession();
+			sendError(requestId, rootMessage(exception));
+			return;
+		}
 
 		synchronized (this)
 		{
@@ -396,7 +581,13 @@ public final class DiscordPairingBridge implements AutoCloseable, RemoteSessionL
 			activePairingRelayUrl = relayUrl;
 			activePairingRequestId = requestId;
 		}
-		if (!send(new PairResponse("PAIR_RESPONSE", requestId, code.encode(), null)))
+		if (!send(new PairResponse(
+			"PAIR_RESPONSE",
+			requestId,
+			encryptedCode,
+			null,
+			relayUrl
+		)))
 		{
 			cancelActivePairing();
 			sessionManager.endSession();
@@ -405,7 +596,131 @@ public final class DiscordPairingBridge implements AutoCloseable, RemoteSessionL
 
 	private void sendError(String requestId, String message)
 	{
-		send(new PairResponse("PAIR_ERROR", requestId, null, message));
+		send(new PairResponse("PAIR_ERROR", requestId, null, message, null));
+	}
+
+	private void handleJoinRequest(PairRequest request)
+	{
+		DiscordDeviceCredential current = credential;
+		DiscordJoinConsentHandler handler = joinConsentHandler;
+		if (current == null || handler == null)
+		{
+			sendJoinResult(request.requestId, "FAILED", "The participant client is not ready");
+			return;
+		}
+		if (request.controllerId == null
+			|| !request.controllerId.matches("[0-9]{15,22}")
+			|| request.encryptedCode == null
+			|| request.controllerName == null)
+		{
+			sendJoinResult(request.requestId, "FAILED", "The Discord connection request was invalid");
+			return;
+		}
+		PrivateKey privateKey = pendingJoinKeys.remove(
+			joinKeyId(request.controllerId, request.requestId)
+		);
+		if (privateKey == null)
+		{
+			sendJoinResult(request.requestId, "FAILED", "The local Discord request expired");
+			return;
+		}
+		String pairingCode;
+		try
+		{
+			pairingCode = DiscordPairingCipher.decrypt(request.encryptedCode, privateKey);
+			sessionManager.validateParticipantJoin();
+		}
+		catch (RuntimeException exception)
+		{
+			sendJoinResult(request.requestId, "FAILED", exception.getMessage());
+			showJoinError(exception.getMessage());
+			return;
+		}
+		if (!joinInProgress.compareAndSet(false, true))
+		{
+			sendJoinResult(request.requestId, "FAILED", "Another incoming connection is already being reviewed");
+			return;
+		}
+
+		DiscordJoinRequest prompt = new DiscordJoinRequest(
+			sanitizeDisplayName(request.controllerName),
+			current.getRelayUrl()
+		);
+		handler.requestConsent(prompt).whenComplete((accepted, consentError) ->
+		{
+			if (consentError != null)
+			{
+				joinInProgress.set(false);
+				sendJoinResult(request.requestId, "FAILED", rootMessage(consentError));
+				return;
+			}
+			if (!Boolean.TRUE.equals(accepted))
+			{
+				joinInProgress.set(false);
+				sendJoinResult(request.requestId, "DENIED", null);
+				return;
+			}
+			pairingService.redeem(current.getRelayUrl(), pairingCode)
+				.whenComplete((invitation, redeemError) -> finishDiscordJoin(
+					request.requestId,
+					invitation,
+					redeemError
+				));
+		});
+	}
+
+	private void finishDiscordJoin(
+		String requestId,
+		RemoteInvitation invitation,
+		Throwable error)
+	{
+		joinInProgress.set(false);
+		if (error != null || invitation == null)
+		{
+			String message = error == null
+				? "The encrypted invitation could not be retrieved"
+				: rootMessage(error);
+			sendJoinResult(requestId, "FAILED", message);
+			showJoinError(message);
+			return;
+		}
+		try
+		{
+			sessionManager.joinParticipant(invitation.encode());
+			sendJoinResult(requestId, "JOINING", null);
+		}
+		catch (RuntimeException exception)
+		{
+			sendJoinResult(requestId, "FAILED", exception.getMessage());
+			showJoinError(exception.getMessage());
+		}
+	}
+
+	private void sendJoinResult(String requestId, String result, String message)
+	{
+		send(new JoinResult("JOIN_RESULT", requestId, result, message));
+	}
+
+	private void showJoinError(String message)
+	{
+		DiscordJoinConsentHandler handler = joinConsentHandler;
+		if (handler != null)
+		{
+			handler.showError(message == null ? "Discord pairing failed" : message);
+		}
+	}
+
+	private static String sanitizeDisplayName(String value)
+	{
+		String cleaned = value.replaceAll("[\\p{Cntrl}]", "").trim();
+		return cleaned.isEmpty()
+			? "Discord partner"
+			: cleaned.substring(0, Math.min(cleaned.length(), 80));
+	}
+
+	private static String joinKeyId(String controllerId, String requestId)
+	{
+		return controllerId + ":" + requestId;
 	}
 
 	private boolean send(Object message)
@@ -614,6 +929,16 @@ public final class DiscordPairingBridge implements AutoCloseable, RemoteSessionL
 					current.getDisplayName(),
 					"Discord linked as " + current.getDisplayName()
 				));
+				DiscordDeepLinkRequest waiting;
+				synchronized (DiscordPairingBridge.this)
+				{
+					waiting = pendingDeepLink;
+					pendingDeepLink = null;
+				}
+				if (waiting != null)
+				{
+					submitDeepLink(waiting, current);
+				}
 			}
 		}
 
@@ -640,21 +965,68 @@ public final class DiscordPairingBridge implements AutoCloseable, RemoteSessionL
 	{
 		private String type;
 		private String requestId;
+		private String controllerId;
+		private String controllerName;
+		private String participantPublicKey;
+		private String encryptedCode;
 	}
 
 	private static final class PairResponse
 	{
 		private final String type;
 		private final String requestId;
-		private final String code;
+		private final String encryptedCode;
 		private final String message;
+		private final String relayUrl;
 
-		private PairResponse(String type, String requestId, String code, String message)
+		private PairResponse(
+			String type,
+			String requestId,
+			String encryptedCode,
+			String message,
+			String relayUrl)
 		{
 			this.type = type;
 			this.requestId = requestId;
-			this.code = code;
+			this.encryptedCode = encryptedCode;
 			this.message = message;
+			this.relayUrl = relayUrl;
+		}
+	}
+
+	private static final class JoinResult
+	{
+		private final String type;
+		private final String requestId;
+		private final String result;
+		private final String message;
+
+		private JoinResult(String type, String requestId, String result, String message)
+		{
+			this.type = type;
+			this.requestId = requestId;
+			this.result = result;
+			this.message = message;
+		}
+	}
+
+	private static final class DeepLinkAcceptance
+	{
+		private final String controllerId;
+		private final String requestId;
+		private final String acceptToken;
+		private final String participantPublicKey;
+
+		private DeepLinkAcceptance(
+			String controllerId,
+			String requestId,
+			String acceptToken,
+			String participantPublicKey)
+		{
+			this.controllerId = controllerId;
+			this.requestId = requestId;
+			this.acceptToken = acceptToken;
+			this.participantPublicKey = participantPublicKey;
 		}
 	}
 

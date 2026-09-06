@@ -5,6 +5,7 @@ import com.ashy0019.hapticscape.clicker.ClickerPhraseRule;
 import com.ashy0019.hapticscape.clicker.ClickerPhraseRules;
 import com.ashy0019.hapticscape.remote.RemoteActionAcknowledgement;
 import com.ashy0019.hapticscape.remote.DiscordPairingBridge;
+import com.ashy0019.hapticscape.remote.DiscordJoinRequest;
 import com.ashy0019.hapticscape.remote.RemoteLockSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteLockState;
 import com.ashy0019.hapticscape.remote.RemotePairingService;
@@ -173,6 +174,11 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		liveForgePanel.close();
 		settingsLockDraft.removeListener(settingsLockDraftListener);
 		sessionManager.removeListener(this);
+	}
+
+	boolean confirmDiscordRemoteControl(DiscordJoinRequest request)
+	{
+		return pairingPanel.confirmDiscordRemoteControl(request);
 	}
 
 	@Override

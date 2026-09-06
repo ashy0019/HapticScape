@@ -5,6 +5,7 @@ import com.ashy0019.hapticscape.remote.DiscordLinkListener;
 import com.ashy0019.hapticscape.remote.DiscordLinkSnapshot;
 import com.ashy0019.hapticscape.remote.DiscordLinkState;
 import com.ashy0019.hapticscape.remote.DiscordPairingBridge;
+import com.ashy0019.hapticscape.remote.DiscordJoinRequest;
 import com.ashy0019.hapticscape.remote.RemoteInvitation;
 import com.ashy0019.hapticscape.remote.RemotePairingCode;
 import com.ashy0019.hapticscape.remote.RemotePairingService;
@@ -159,6 +160,20 @@ final class RemotePairingPanel extends JPanel
 		discordPairingBridge.removeListener(discordLinkListener);
 	}
 
+	boolean confirmDiscordRemoteControl(DiscordJoinRequest request)
+	{
+		if (sessionManager.getSnapshot().getState() != RemoteSessionState.LOCAL)
+		{
+			errorSink.accept("End the current Remote Play session before accepting another one.");
+			return false;
+		}
+		return confirmRemoteControl(
+			request.getRelayUrl(),
+			"<html><b>" + escapeHtml(request.getControllerName())
+				+ "</b> requested a Remote Play session through Discord.<br><br>"
+		);
+	}
+
 	private void configureRelaySettings()
 	{
 		String configuredRelay = HapticScapeConfig.resolveRemoteRelayUrl(
@@ -227,7 +242,7 @@ final class RemotePairingPanel extends JPanel
 		discordPanel.setLayout(new BoxLayout(discordPanel, BoxLayout.Y_AXIS));
 		discordPanel.setBorder(BorderFactory.createTitledBorder("Discord"));
 		PanelUi.addVerticalComponent(discordPanel, new SidebarTextLabel(
-			"Install the Discord app, run /hapticscape link, then paste its one-time code here."
+			"Install the Discord app and link this client once. Accepted DM requests open here for local approval."
 		));
 		Dimension statusSize = new Dimension(180, discordStatus.getPreferredSize().height);
 		discordStatus.setPreferredSize(statusSize);
@@ -511,10 +526,15 @@ final class RemotePairingPanel extends JPanel
 
 	private boolean confirmRemoteControl(String relayUrl)
 	{
+		return confirmRemoteControl(relayUrl, "<html>");
+	}
+
+	private boolean confirmRemoteControl(String relayUrl, String introduction)
+	{
 		int choice = JOptionPane.showConfirmDialog(
 			this,
-			"<html>Join Remote Control through:<br><b>"
-				+ relayUrl
+			introduction + "Join Remote Control through:<br><b>"
+				+ escapeHtml(relayUrl)
 				+ "</b><br><br>The controller will become authoritative for "
 				+ "HapticScape feedback settings during the session.<br>"
 				+ "Your current settings will seed their controls. Accepted changes "
@@ -528,6 +548,16 @@ final class RemotePairingPanel extends JPanel
 			JOptionPane.WARNING_MESSAGE
 		);
 		return choice == JOptionPane.YES_OPTION;
+	}
+
+	private static String escapeHtml(String value)
+	{
+		return value
+			.replace("&", "&amp;")
+			.replace("<", "&lt;")
+			.replace(">", "&gt;")
+			.replace("\"", "&quot;")
+			.replace("'", "&#39;");
 	}
 
 	private void refreshConnectionControls()

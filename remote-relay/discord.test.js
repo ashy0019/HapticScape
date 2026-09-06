@@ -94,60 +94,146 @@ test("Discord link tickets bind one device credential and expire after use", asy
   });
 });
 
-test("linked Discord client receives a request and completes the deferred response", async () => {
-  const socket = fakeSocket();
-  const context = fakeDurableContext([socket]);
-  const user = new DiscordUser(context, {
+test("linked clients complete Discord acceptance without exposing the pairing code", async () => {
+  const controllerSocket = fakeSocket();
+  const participantSocket = fakeSocket();
+  const controllerContext = fakeDurableContext([controllerSocket]);
+  const participantContext = fakeDurableContext([participantSocket]);
+  const objects = new Map();
+  const env = {
     DISCORD_APPLICATION_ID: "987654321098765432",
     DISCORD_API_ORIGIN: "https://discord.test",
-  });
-  const secret = "d".repeat(43);
-  const credentialHash = await sha256Base64Url(secret);
-  await user.fetch(jsonRequest("PUT", "/link", {
-    credentialHash,
-    displayName: "Controller",
-  }));
+    DISCORD_USERS: fakeNamespace(id => objects.get(id)),
+  };
+  const controller = new DiscordUser(controllerContext, env);
+  const participant = new DiscordUser(participantContext, env);
+  objects.set("123456789012345678", controller);
+  objects.set("223456789012345678", participant);
+  const controllerSecret = "d".repeat(43);
+  const participantSecret = "p".repeat(43);
+  await linkUser(controller, "123456789012345678", "Controller", controllerSecret);
+  await linkUser(participant, "223456789012345678", "Participant", participantSecret);
+  const acceptToken = "a".repeat(43);
 
-  const status = await user.fetch(new Request("https://internal/status"));
-  assert.deepEqual(await status.json(), {
-    linked: true,
-    online: true,
-    displayName: "Controller",
-  });
-
-  const requested = await user.fetch(jsonRequest("POST", "/request", {
+  const requested = await controller.fetch(jsonRequest("POST", "/request", {
     requestId: "abcdefghijklmnop",
+    controllerId: "123456789012345678",
+    participantId: "223456789012345678",
+    participantName: "Participant",
+    acceptTokenHash: await sha256Base64Url(acceptToken),
     interactionToken: "interaction-token-long-enough",
   }));
   assert.equal(requested.status, 202);
-  assert.deepEqual(JSON.parse(socket.sent[0]), {
-    type: "PAIR_REQUEST",
-    requestId: "abcdefghijklmnop",
-  });
+  assert.equal(controllerSocket.sent.length, 0);
 
   const originalFetch = globalThis.fetch;
-  let delivery = null;
+  const discordUpdates = [];
   globalThis.fetch = async (url, options) => {
-    delivery = { url, options };
+    discordUpdates.push({ url, body: JSON.parse(options.body) });
     return new Response(null, { status: 200 });
   };
   try {
-    await user.webSocketMessage(socket, JSON.stringify({
+    const accepted = await participant.fetch(new Request("https://internal/accept", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${participantSecret}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        controllerId: "123456789012345678",
+        requestId: "abcdefghijklmnop",
+        acceptToken,
+        participantPublicKey: "p".repeat(392),
+      }),
+    }));
+    assert.equal(accepted.status, 202);
+    assert.deepEqual(JSON.parse(controllerSocket.sent[0]), {
+      type: "PAIR_REQUEST",
+      requestId: "abcdefghijklmnop",
+      participantPublicKey: "p".repeat(392),
+    });
+
+    await controller.webSocketMessage(controllerSocket, JSON.stringify({
       type: "PAIR_RESPONSE",
       requestId: "abcdefghijklmnop",
-      code: "HSP1." + "c".repeat(43),
+      encryptedCode: "e".repeat(342),
+      relayUrl: "wss://relay.example/relay",
+    }));
+    const join = JSON.parse(participantSocket.sent[0]);
+    assert.equal(join.type, "JOIN_REQUEST");
+    assert.equal(join.encryptedCode, "e".repeat(342));
+    assert.equal(join.controllerName, "Controller");
+
+    await participant.webSocketMessage(participantSocket, JSON.stringify({
+      type: "JOIN_RESULT",
+      requestId: "abcdefghijklmnop",
+      result: "JOINING",
     }));
   } finally {
     globalThis.fetch = originalFetch;
   }
 
-  assert.equal(
-    delivery.url,
-    "https://discord.test/api/v10/webhooks/987654321098765432/"
-      + "interaction-token-long-enough/messages/@original",
+  assert.equal(await controllerContext.storage.get("pending"), undefined);
+  assert.equal(await participantContext.storage.get("incoming"), undefined);
+  assert.match(discordUpdates.at(-1).body.content, /approved the local consent prompt/);
+  assert.doesNotMatch(
+    [
+      ...discordUpdates.map(update => JSON.stringify(update.body)),
+      ...controllerSocket.sent,
+      ...participantSocket.sent,
+    ].join("\n"),
+    /HSP1\./,
   );
-  assert.match(JSON.parse(delivery.options.body).content, /HSP1\.c{43}/);
-  assert.equal(await context.storage.get("pending"), undefined);
+});
+
+test("an immediate participant result cannot recreate a completed request", async () => {
+  const controllerSocket = fakeSocket();
+  const controllerContext = fakeDurableContext([controllerSocket]);
+  let controller;
+  const participant = {
+    async fetch(request) {
+      const delivered = await request.json();
+      await controller.fetch(jsonRequest("POST", "/participant-result", {
+        participantId: "223456789012345678",
+        requestId: delivered.requestId,
+        result: "JOINING",
+      }));
+      return new Response(null, { status: 202 });
+    },
+  };
+  const env = {
+    DISCORD_APPLICATION_ID: "987654321098765432",
+    DISCORD_API_ORIGIN: "https://discord.test",
+    DISCORD_USERS: fakeNamespace(id => id === "123456789012345678"
+      ? controller
+      : participant),
+  };
+  controller = new DiscordUser(controllerContext, env);
+  await linkUser(controller, "123456789012345678", "Controller", "c".repeat(43));
+  await controllerContext.storage.put("pending", {
+    requestId: "abcdefghijklmnop",
+    controllerId: "123456789012345678",
+    participantId: "223456789012345678",
+    participantName: "Participant",
+    interactionToken: "interaction-token-long-enough",
+    state: "accepted",
+    expiresAt: Date.now() + 60_000,
+  });
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(null, { status: 200 });
+  try {
+    await controller.webSocketMessage(controllerSocket, JSON.stringify({
+      type: "PAIR_RESPONSE",
+      requestId: "abcdefghijklmnop",
+      encryptedCode: "e".repeat(342),
+      relayUrl: "wss://relay.example/relay",
+    }));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(await controllerContext.storage.get("pending"), undefined);
 });
 
 test("device unlink requires the locally held bearer credential", async () => {
@@ -155,6 +241,7 @@ test("device unlink requires the locally held bearer credential", async () => {
   const user = new DiscordUser(context, {});
   const secret = "z".repeat(43);
   await user.fetch(jsonRequest("PUT", "/link", {
+    userId: "123456789012345678",
     credentialHash: await sha256Base64Url(secret),
     displayName: "Controller",
   }));
@@ -173,40 +260,42 @@ test("device unlink requires the locally held bearer credential", async () => {
   assert.equal((await (await user.fetch(new Request("https://internal/status"))).json()).linked, false);
 });
 
-test("a failed Discord response delivery tells the client to cancel its session", async () => {
-  const socket = fakeSocket();
-  const context = fakeDurableContext([socket]);
-  const user = new DiscordUser(context, {
-    DISCORD_APPLICATION_ID: "987654321098765432",
-    DISCORD_API_ORIGIN: "https://discord.test",
-  });
-  const secret = "q".repeat(43);
-  await user.fetch(jsonRequest("PUT", "/link", {
-    credentialHash: await sha256Base64Url(secret),
-    displayName: "Controller",
-  }));
-  await user.fetch(jsonRequest("POST", "/request", {
+test("an intercepted accept token cannot be used by a different linked account", async () => {
+  const controllerContext = fakeDurableContext([fakeSocket()]);
+  const attackerContext = fakeDurableContext([fakeSocket()]);
+  const objects = new Map();
+  const env = { DISCORD_USERS: fakeNamespace(id => objects.get(id)) };
+  const controller = new DiscordUser(controllerContext, env);
+  const attacker = new DiscordUser(attackerContext, env);
+  objects.set("123456789012345678", controller);
+  objects.set("323456789012345678", attacker);
+  await linkUser(controller, "123456789012345678", "Controller", "c".repeat(43));
+  await linkUser(attacker, "323456789012345678", "Attacker", "x".repeat(43));
+  const token = "t".repeat(43);
+  await controller.fetch(jsonRequest("POST", "/request", {
     requestId: "ponmlkjihgfedcba",
+    controllerId: "123456789012345678",
+    participantId: "223456789012345678",
+    participantName: "Participant",
+    acceptTokenHash: await sha256Base64Url(token),
     interactionToken: "interaction-token-long-enough",
   }));
 
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response(null, { status: 500 });
-  try {
-    await user.webSocketMessage(socket, JSON.stringify({
-      type: "PAIR_RESPONSE",
+  const response = await attacker.fetch(new Request("https://internal/accept", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${"x".repeat(43)}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      controllerId: "123456789012345678",
       requestId: "ponmlkjihgfedcba",
-      code: "HSP1." + "r".repeat(43),
-    }));
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-
-  assert.deepEqual(JSON.parse(socket.sent[1]), {
-    type: "PAIR_DELIVERY_FAILED",
-    requestId: "ponmlkjihgfedcba",
-  });
-  assert.equal(await context.storage.get("pending"), undefined);
+      acceptToken: token,
+      participantPublicKey: "p".repeat(392),
+    }),
+  }));
+  assert.equal(response.status, 404);
+  assert.equal(controllerContext.getWebSockets()[0].sent.length, 0);
 });
 
 test("an expired Discord request edits the deferred response", async () => {
@@ -237,19 +326,31 @@ test("an expired Discord request edits the deferred response", async () => {
   assert.equal(await context.storage.get("pending"), undefined);
 });
 
-test("Discord connect accepts only a one-to-one DM and defers code delivery", async () => {
+test("Discord connect creates partner-bound Accept and Deny controls", async () => {
   let dispatched = null;
-  const userObject = {
+  const controllerObject = {
     async fetch(request) {
+      const url = typeof request === "string" ? request : request.url;
+      if (new URL(url).pathname === "/status") {
+        return jsonResponseForTest({ linked: true, online: true, displayName: "Controller" });
+      }
       dispatched = await request.json();
       return new Response(null, { status: 202 });
+    },
+  };
+  const participantObject = {
+    async fetch() {
+      return jsonResponseForTest({ linked: true, online: false, displayName: "Participant" });
     },
   };
   const command = {
     type: 2,
     token: "interaction-token-long-enough",
     context: 2,
-    channel: { type: 1 },
+    channel: {
+      type: 1,
+      recipients: [{ id: "223456789012345678", username: "Participant" }],
+    },
     user: { id: "123456789012345678", username: "Controller" },
     data: {
       name: "hapticscape",
@@ -257,24 +358,25 @@ test("Discord connect accepts only a one-to-one DM and defers code delivery", as
     },
   };
   const signed = await signedInteraction(command);
-  let backgroundWork = null;
   const response = await handleDiscordInteraction(
     signed.request,
     {
       DISCORD_PUBLIC_KEY: signed.publicKey,
-      DISCORD_USERS: fakeNamespace(() => userObject),
-    },
-    {
-      waitUntil(work) {
-        backgroundWork = work;
-      },
+      DISCORD_USERS: fakeNamespace(id => id === "123456789012345678"
+        ? controllerObject
+        : participantObject),
     },
   );
-  await backgroundWork;
-
-  assert.deepEqual(await response.json(), { type: 5, data: {} });
+  const responseBody = await response.json();
+  assert.equal(responseBody.type, 4);
+  assert.match(responseBody.data.content, /local consent prompt/);
+  assert.equal(responseBody.data.components[0].components[0].label, "Accept");
+  assert.match(responseBody.data.components[0].components[0].url, /\/discord\/accept\//);
+  assert.equal(responseBody.data.components[0].components[1].label, "Deny");
   assert.equal(dispatched.interactionToken, "interaction-token-long-enough");
+  assert.equal(dispatched.participantId, "223456789012345678");
   assert.match(dispatched.requestId, /^[A-Za-z0-9_-]{16}$/);
+  assert.match(dispatched.acceptTokenHash, /^[A-Za-z0-9_-]{43}$/);
 
   command.context = 0;
   command.channel.type = 0;
@@ -284,7 +386,7 @@ test("Discord connect accepts only a one-to-one DM and defers code delivery", as
     rejected.request,
     {
       DISCORD_PUBLIC_KEY: rejected.publicKey,
-      DISCORD_USERS: fakeNamespace(() => userObject),
+      DISCORD_USERS: fakeNamespace(() => controllerObject),
     },
     {},
   );
@@ -292,6 +394,38 @@ test("Discord connect accepts only a one-to-one DM and defers code delivery", as
   assert.equal(rejectedBody.type, 4);
   assert.match(rejectedBody.data.content, /one-to-one Discord DM/);
   assert.equal(dispatched, null);
+});
+
+test("only the intended participant can deny a Discord request", async () => {
+  const controllerId = "123456789012345678";
+  const participantId = "223456789012345678";
+  let denied = null;
+  const controller = {
+    async fetch(request) {
+      denied = await request.json();
+      return denied.participantId === participantId
+        ? new Response(null, { status: 204 })
+        : jsonResponseForTest({ error: "Only the invited partner can deny this request" }, 403);
+    },
+  };
+  const interaction = {
+    type: 3,
+    user: { id: participantId, username: "Participant" },
+    data: { custom_id: `hsc_deny:${controllerId}:abcdefghijklmnop` },
+  };
+  const signed = await signedInteraction(interaction);
+  const response = await handleDiscordInteraction(signed.request, {
+    DISCORD_PUBLIC_KEY: signed.publicKey,
+    DISCORD_USERS: fakeNamespace(() => controller),
+  });
+  const body = await response.json();
+
+  assert.equal(body.type, 7);
+  assert.deepEqual(body.data.components, []);
+  assert.deepEqual(denied, {
+    participantId,
+    requestId: "abcdefghijklmnop",
+  });
 });
 
 function fakeDurableContext(sockets = []) {
@@ -344,6 +478,21 @@ function jsonRequest(method, path, body) {
     method,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+  });
+}
+
+async function linkUser(user, userId, displayName, secret) {
+  await user.fetch(jsonRequest("PUT", "/link", {
+    userId,
+    credentialHash: await sha256Base64Url(secret),
+    displayName,
+  }));
+}
+
+function jsonResponseForTest(body, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
   });
 }
 

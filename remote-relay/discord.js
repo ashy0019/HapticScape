@@ -3,8 +3,10 @@ const REQUEST_TTL_MILLIS = 2 * 60 * 1000;
 const LINK_LOCATOR_PATTERN = /^[A-Za-z0-9_-]{16}$/;
 const DISCORD_USER_ID_PATTERN = /^\d{15,22}$/;
 const DEVICE_SECRET_PATTERN = /^[A-Za-z0-9_-]{43}$/;
-const PAIRING_CODE_PATTERN = /^HSP1\.[A-Za-z0-9_-]{43}$/;
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9_-]{16}$/;
+const ACCEPT_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+const PARTICIPANT_PUBLIC_KEY_PATTERN = /^[A-Za-z0-9_-]{300,600}$/;
+const ENCRYPTED_PAIRING_CODE_PATTERN = /^[A-Za-z0-9_-]{342}$/;
 const EPHEMERAL_FLAG = 64;
 const MAXIMUM_SIGNATURE_AGE_SECONDS = 5 * 60;
 
@@ -84,6 +86,7 @@ export class DiscordLinkTicket {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          userId: ticket.userId,
           credentialHash,
           displayName: ticket.displayName,
         }),
@@ -143,22 +146,46 @@ export class DiscordUser {
     if (path === "/request" && request.method === "POST") {
       return this.requestPairing(request);
     }
+    if (path === "/accept-link" && request.method === "POST") {
+      return this.validateAcceptLink(request);
+    }
+    if (path === "/accept" && request.method === "POST") {
+      return this.acceptFromDevice(request);
+    }
+    if (path === "/accept-from-participant" && request.method === "POST") {
+      return this.acceptFromParticipant(request);
+    }
+    if (path === "/deliver" && request.method === "POST") {
+      return this.deliverPairing(request);
+    }
+    if (path === "/participant-result" && request.method === "POST") {
+      return this.participantResult(request);
+    }
+    if (path === "/deny" && request.method === "POST") {
+      return this.denyPairing(request);
+    }
+    if (path === "/cancel-incoming" && request.method === "POST") {
+      return this.cancelIncoming(request);
+    }
     return new Response("Not found", { status: 404 });
   }
 
   async link(request) {
     const body = await readJson(request);
     if (!body
+      || !DISCORD_USER_ID_PATTERN.test(body.userId ?? "")
       || !DEVICE_SECRET_PATTERN.test(body.credentialHash ?? "")
       || typeof body.displayName !== "string") {
       return new Response("Invalid device link", { status: 400 });
     }
     await this.closeDeviceSockets(4003, "Discord link replaced");
     await this.ctx.storage.put("credential", {
+      userId: body.userId,
       hash: body.credentialHash,
       displayName: safeDisplayName(body.displayName),
     });
     await this.clearPending(true);
+    await this.clearIncoming(true);
     return new Response(null, { status: 204 });
   }
 
@@ -182,6 +209,7 @@ export class DiscordUser {
     await this.closeDeviceSockets(4003, "Discord link removed");
     await this.ctx.storage.delete("credential");
     await this.clearPending(true);
+    await this.clearIncoming(true);
     return new Response(null, { status: 204 });
   }
 
@@ -220,6 +248,10 @@ export class DiscordUser {
     const body = await readJson(request);
     if (!body
       || !REQUEST_ID_PATTERN.test(body.requestId ?? "")
+      || !DISCORD_USER_ID_PATTERN.test(body.controllerId ?? "")
+      || !DISCORD_USER_ID_PATTERN.test(body.participantId ?? "")
+      || typeof body.participantName !== "string"
+      || !ACCEPT_TOKEN_PATTERN.test(body.acceptTokenHash ?? "")
       || typeof body.interactionToken !== "string"
       || body.interactionToken.length < 20
       || body.interactionToken.length > 256) {
@@ -227,21 +259,222 @@ export class DiscordUser {
     }
     const pending = {
       requestId: body.requestId,
+      controllerId: body.controllerId,
+      participantId: body.participantId,
+      participantName: safeDisplayName(body.participantName),
+      acceptTokenHash: body.acceptTokenHash,
       interactionToken: body.interactionToken,
+      state: "pending",
       expiresAt: Date.now() + REQUEST_TTL_MILLIS,
     };
     await this.ctx.storage.put("pending", pending);
     await this.ctx.storage.setAlarm(pending.expiresAt);
+    return new Response(null, { status: 202 });
+  }
+
+  async validateAcceptLink(request) {
+    const body = await readJson(request);
+    const pending = await this.readPending();
+    if (!pending
+      || pending.state !== "pending"
+      || body?.requestId !== pending.requestId
+      || !ACCEPT_TOKEN_PATTERN.test(body?.acceptToken ?? "")
+      || !constantTimeEqual(
+        await sha256Base64Url(body.acceptToken),
+        pending.acceptTokenHash,
+      )) {
+      return new Response("This connection request expired or was already handled", { status: 404 });
+    }
+    return new Response(null, { status: 204 });
+  }
+
+  async acceptFromDevice(request) {
+    if (!await this.authorized(request)) {
+      return jsonResponse({ error: "Invalid HapticScape device credential" }, 401);
+    }
+    const body = await readJson(request);
+    const credential = await this.ctx.storage.get("credential");
+    const participantId = request.headers.get("X-HapticScape-User")
+      || credential?.userId
+      || "";
+    if (!body
+      || !credential
+      || !DISCORD_USER_ID_PATTERN.test(participantId)
+      || !DISCORD_USER_ID_PATTERN.test(body.controllerId ?? "")
+      || !REQUEST_ID_PATTERN.test(body.requestId ?? "")
+      || !ACCEPT_TOKEN_PATTERN.test(body.acceptToken ?? "")
+      || !PARTICIPANT_PUBLIC_KEY_PATTERN.test(body.participantPublicKey ?? "")) {
+      return jsonResponse({ error: "Invalid Discord connection request" }, 400);
+    }
+    if (body.controllerId === participantId) {
+      return jsonResponse({ error: "You cannot accept your own connection request" }, 403);
+    }
+    const existing = await this.readIncoming();
+    if (existing) {
+      return jsonResponse({ error: "Another incoming connection is already pending" }, 409);
+    }
+
+    const incoming = {
+      controllerId: body.controllerId,
+      participantId,
+      requestId: body.requestId,
+      participantPublicKey: body.participantPublicKey,
+      expiresAt: Date.now() + REQUEST_TTL_MILLIS,
+    };
+    await this.ctx.storage.put("incoming", incoming);
+    await this.updateAlarm();
+    const controller = this.env.DISCORD_USERS.get(
+      this.env.DISCORD_USERS.idFromName(body.controllerId),
+    );
+    const response = await controller.fetch(jsonRequest(
+      "https://discord-user.internal/accept-from-participant",
+      {
+        participantId,
+        requestId: body.requestId,
+        acceptToken: body.acceptToken,
+        participantPublicKey: body.participantPublicKey,
+      },
+    ));
+    if (response.status !== 202) {
+      await this.ctx.storage.delete("incoming");
+      await this.updateAlarm();
+      let message = "This connection request expired or was already handled";
+      try {
+        message = (await response.json()).error ?? message;
+      } catch (_) {
+        // Use the safe generic message.
+      }
+      return jsonResponse({ error: message }, response.status);
+    }
+    return new Response(null, { status: 202 });
+  }
+
+  async acceptFromParticipant(request) {
+    const body = await readJson(request);
+    const pending = await this.readPending();
+    if (!pending
+      || pending.state !== "pending"
+      || body?.participantId !== pending.participantId
+      || body?.requestId !== pending.requestId
+      || !ACCEPT_TOKEN_PATTERN.test(body?.acceptToken ?? "")
+      || !PARTICIPANT_PUBLIC_KEY_PATTERN.test(body?.participantPublicKey ?? "")
+      || !constantTimeEqual(
+        await sha256Base64Url(body.acceptToken),
+        pending.acceptTokenHash,
+      )) {
+      return jsonResponse({ error: "This connection request expired or was already handled" }, 404);
+    }
+    const sockets = this.ctx.getWebSockets("device");
+    if (sockets.length === 0) {
+      return jsonResponse({ error: "The controller's HapticScape client is offline" }, 409);
+    }
+    pending.state = "accepted";
+    await this.ctx.storage.put("pending", pending);
     try {
       sockets[0].send(JSON.stringify({
         type: "PAIR_REQUEST",
         requestId: pending.requestId,
+        participantPublicKey: body.participantPublicKey,
       }));
     } catch (_) {
-      await this.ctx.storage.delete("pending");
-      return jsonResponse({ error: "Your linked HapticScape client disconnected" }, 409);
+      pending.state = "pending";
+      await this.ctx.storage.put("pending", pending);
+      return jsonResponse({ error: "The controller's HapticScape client disconnected" }, 409);
+    }
+    await patchInteractionResponse(
+      this.env,
+      pending.interactionToken,
+      "**Connection accepted in Discord**\n\n"
+        + "Opening HapticScape for **" + pending.participantName + "**. "
+        + "The session will begin only if they also approve the local consent prompt.",
+      [],
+    );
+    return new Response(null, { status: 202 });
+  }
+
+  async deliverPairing(request) {
+    const body = await readJson(request);
+    const incoming = await this.readIncoming();
+    if (!incoming
+      || body?.controllerId !== incoming.controllerId
+      || body?.requestId !== incoming.requestId
+      || !ENCRYPTED_PAIRING_CODE_PATTERN.test(body?.encryptedCode ?? "")
+      || typeof body.controllerName !== "string"
+      || typeof body.relayUrl !== "string") {
+      return jsonResponse({ error: "The incoming connection request is no longer valid" }, 404);
+    }
+    const sockets = this.ctx.getWebSockets("device");
+    if (sockets.length === 0) {
+      return jsonResponse({ error: "The participant's HapticScape client is offline" }, 409);
+    }
+    try {
+      sockets[0].send(JSON.stringify({
+        type: "JOIN_REQUEST",
+        requestId: incoming.requestId,
+        controllerId: incoming.controllerId,
+        controllerName: safeDisplayName(body.controllerName),
+        relayUrl: body.relayUrl,
+        encryptedCode: body.encryptedCode,
+      }));
+    } catch (_) {
+      return jsonResponse({ error: "The participant's HapticScape client disconnected" }, 409);
     }
     return new Response(null, { status: 202 });
+  }
+
+  async participantResult(request) {
+    const body = await readJson(request);
+    const pending = await this.readPending();
+    if (!pending
+      || body?.requestId !== pending.requestId
+      || body?.participantId !== pending.participantId
+      || !["JOINING", "DENIED", "FAILED"].includes(body?.result)) {
+      return new Response("Connection request not found", { status: 404 });
+    }
+    await this.ctx.storage.delete("pending");
+    await this.updateAlarm();
+    let content;
+    if (body.result === "JOINING") {
+      content = "**HapticScape connection approved**\n\n"
+        + pending.participantName + " approved the local consent prompt. The encrypted session is connecting.";
+    } else if (body.result === "DENIED") {
+      content = "**HapticScape connection declined**\n\n"
+        + pending.participantName + " declined the local consent prompt.";
+      this.cancelControllerPairing(pending.requestId);
+    } else {
+      content = "**HapticScape connection failed**\n\n"
+        + safeError(body.message);
+      this.cancelControllerPairing(pending.requestId);
+    }
+    await patchInteractionResponse(this.env, pending.interactionToken, content, []);
+    return new Response(null, { status: 204 });
+  }
+
+  async denyPairing(request) {
+    const body = await readJson(request);
+    const pending = await this.readPending();
+    if (!pending
+      || pending.state !== "pending"
+      || body?.participantId !== pending.participantId
+      || body?.requestId !== pending.requestId) {
+      return jsonResponse({ error: "Only the invited partner can deny this request" }, 403);
+    }
+    await this.ctx.storage.delete("pending");
+    await this.updateAlarm();
+    return new Response(null, { status: 204 });
+  }
+
+  async cancelIncoming(request) {
+    const body = await readJson(request);
+    const incoming = await this.readIncoming();
+    if (!incoming
+      || body?.controllerId !== incoming.controllerId
+      || body?.requestId !== incoming.requestId) {
+      return new Response(null, { status: 404 });
+    }
+    await this.ctx.storage.delete("incoming");
+    await this.updateAlarm();
+    return new Response(null, { status: 204 });
   }
 
   async webSocketMessage(webSocket, message) {
@@ -256,46 +489,76 @@ export class DiscordUser {
       return;
     }
     const pending = await this.readPending();
-    if (!pending || body.requestId !== pending.requestId) {
-      return;
+    if (pending && body.requestId === pending.requestId) {
+      if (body.type === "PAIR_RESPONSE"
+        && pending.state === "accepted"
+        && ENCRYPTED_PAIRING_CODE_PATTERN.test(body.encryptedCode ?? "")
+        && typeof body.relayUrl === "string") {
+        pending.state = "waiting-local-consent";
+        await this.ctx.storage.put("pending", pending);
+        const participant = this.env.DISCORD_USERS.get(
+          this.env.DISCORD_USERS.idFromName(pending.participantId),
+        );
+        const delivered = await participant.fetch(jsonRequest(
+          "https://discord-user.internal/deliver",
+          {
+            controllerId: pending.controllerId,
+            controllerName: (await this.ctx.storage.get("credential"))?.displayName,
+            requestId: pending.requestId,
+            encryptedCode: body.encryptedCode,
+            relayUrl: body.relayUrl,
+          },
+        ));
+        if (delivered.status !== 202) {
+          await this.ctx.storage.delete("pending");
+          this.cancelControllerPairing(pending.requestId);
+          await patchInteractionResponse(
+            this.env,
+            pending.interactionToken,
+            "HapticScape could not deliver the request to the participant's client.",
+            [],
+          );
+        }
+        return;
+      }
+      if (body.type === "PAIR_ERROR") {
+        await this.ctx.storage.delete("pending");
+        await patchInteractionResponse(
+          this.env,
+          pending.interactionToken,
+          "HapticScape could not create the connection: " + safeError(body.message),
+          [],
+        );
+        return;
+      }
     }
 
-    if (body.type === "PAIR_RESPONSE" && PAIRING_CODE_PATTERN.test(body.code ?? "")) {
-      await this.ctx.storage.delete("pending");
-      const delivered = await patchInteractionResponse(
-        this.env,
-        pending.interactionToken,
-        "**HapticScape session ready**\n\n"
-          + "The controller is waiting. Copy this temporary code into "
-          + "**HapticScape → Remote Play → Paste & join**.\n\n"
-          + "```text\n" + body.code + "\n```\n"
-          + "This code expires after five minutes and can be used once.",
-      );
-      if (!delivered) {
-        try {
-          webSocket.send(JSON.stringify({
-            type: "PAIR_DELIVERY_FAILED",
-            requestId: pending.requestId,
-          }));
-        } catch (_) {
-          // The client will clean up when its device channel disconnects.
-        }
+    const incoming = await this.readIncoming();
+    if (incoming && body.requestId === incoming.requestId && body.type === "JOIN_RESULT") {
+      if (!["JOINING", "DENIED", "FAILED"].includes(body.result)) {
+        return;
       }
-      return;
-    }
-    if (body.type === "PAIR_ERROR") {
-      await this.ctx.storage.delete("pending");
-      await patchInteractionResponse(
-        this.env,
-        pending.interactionToken,
-        "HapticScape could not create the connection: " + safeError(body.message),
+      await this.ctx.storage.delete("incoming");
+      await this.updateAlarm();
+      const controller = this.env.DISCORD_USERS.get(
+        this.env.DISCORD_USERS.idFromName(incoming.controllerId),
       );
+      await controller.fetch(jsonRequest(
+        "https://discord-user.internal/participant-result",
+        {
+          participantId: incoming.participantId,
+          requestId: incoming.requestId,
+          result: body.result,
+          message: safeError(body.message),
+        },
+      ));
     }
   }
 
   async webSocketClose() {
     if (this.ctx.getWebSockets("device").length === 0) {
       await this.clearPending(true);
+      await this.clearIncoming(true);
     }
   }
 
@@ -304,6 +567,7 @@ export class DiscordUser {
     if (activeSockets.length === 0
       || (activeSockets.length === 1 && activeSockets[0] === webSocket)) {
       await this.clearPending(true);
+      await this.clearIncoming(true);
     }
     try {
       webSocket.close(1011, "Discord device channel error");
@@ -317,6 +581,11 @@ export class DiscordUser {
     if (pending && pending.expiresAt <= Date.now()) {
       await this.clearPending(true);
     }
+    const incoming = await this.ctx.storage.get("incoming");
+    if (incoming && incoming.expiresAt <= Date.now()) {
+      await this.clearIncoming(true);
+    }
+    await this.updateAlarm();
   }
 
   async authorized(request) {
@@ -340,15 +609,79 @@ export class DiscordUser {
     return pending;
   }
 
+  async readIncoming() {
+    const incoming = await this.ctx.storage.get("incoming");
+    if (!incoming) {
+      return null;
+    }
+    if (incoming.expiresAt <= Date.now()) {
+      await this.ctx.storage.delete("incoming");
+      return null;
+    }
+    return incoming;
+  }
+
   async clearPending(notify) {
     const pending = await this.ctx.storage.get("pending");
     await this.ctx.storage.delete("pending");
     if (notify && pending) {
+      this.cancelControllerPairing(pending.requestId);
+      if (pending.state !== "pending" && pending.participantId) {
+        const participant = this.env.DISCORD_USERS.get(
+          this.env.DISCORD_USERS.idFromName(pending.participantId),
+        );
+        await participant.fetch(jsonRequest(
+          "https://discord-user.internal/cancel-incoming",
+          { controllerId: pending.controllerId, requestId: pending.requestId },
+        ));
+      }
       await patchInteractionResponse(
         this.env,
         pending.interactionToken,
         "The HapticScape connection request was cancelled or timed out.",
+        [],
       );
+    }
+    await this.updateAlarm();
+  }
+
+  async clearIncoming(notify) {
+    const incoming = await this.ctx.storage.get("incoming");
+    await this.ctx.storage.delete("incoming");
+    if (notify && incoming) {
+      const controller = this.env.DISCORD_USERS.get(
+        this.env.DISCORD_USERS.idFromName(incoming.controllerId),
+      );
+      await controller.fetch(jsonRequest(
+        "https://discord-user.internal/participant-result",
+        {
+          participantId: incoming.participantId,
+          requestId: incoming.requestId,
+          result: "FAILED",
+          message: "The participant's HapticScape client disconnected or timed out",
+        },
+      ));
+    }
+    await this.updateAlarm();
+  }
+
+  cancelControllerPairing(requestId) {
+    for (const socket of this.ctx.getWebSockets("device")) {
+      try {
+        socket.send(JSON.stringify({ type: "PAIR_CANCELLED", requestId }));
+      } catch (_) {
+        // Socket cleanup will end the controller session.
+      }
+    }
+  }
+
+  async updateAlarm() {
+    const pending = await this.ctx.storage.get("pending");
+    const incoming = await this.ctx.storage.get("incoming");
+    const expirations = [pending?.expiresAt, incoming?.expiresAt]
+      .filter(value => Number.isFinite(value));
+    if (expirations.length > 0) {
+      await this.ctx.storage.setAlarm(Math.min(...expirations));
     }
   }
 
@@ -386,6 +719,9 @@ export async function handleDiscordInteraction(request, env, executionCtx) {
   }
   if (interaction.type === 1) {
     return jsonResponse({ type: 1 });
+  }
+  if (interaction.type === 3) {
+    return handleDiscordComponent(interaction, env);
   }
   if (interaction.type !== 2 || interaction.data?.name !== "hapticscape") {
     return interactionMessage("Unknown HapticScape command", true);
@@ -433,19 +769,112 @@ export async function handleDiscordInteraction(request, env, executionCtx) {
         true,
       );
     }
+    const recipients = Array.isArray(interaction.channel.recipients)
+      ? interaction.channel.recipients.filter(
+        recipient => DISCORD_USER_ID_PATTERN.test(recipient?.id ?? "")
+          && recipient.id !== user.id,
+      )
+      : [];
+    if (recipients.length !== 1) {
+      return interactionMessage(
+        "Discord did not identify exactly one partner in this DM. Close and reopen the one-to-one DM, then try again.",
+        true,
+      );
+    }
+    const participant = recipients[0];
+    const participantObject = env.DISCORD_USERS.get(
+      env.DISCORD_USERS.idFromName(participant.id),
+    );
+    const [controllerStatusResponse, participantStatusResponse] = await Promise.all([
+      userObject.fetch("https://discord-user.internal/status"),
+      participantObject.fetch("https://discord-user.internal/status"),
+    ]);
+    const controllerStatus = await controllerStatusResponse.json();
+    const participantStatus = await participantStatusResponse.json();
+    if (!controllerStatus.linked || !controllerStatus.online) {
+      return interactionMessage(
+        "Your linked HapticScape client must be running before you create a request.",
+        true,
+      );
+    }
+    if (!participantStatus.linked) {
+      return interactionMessage(
+        "Your partner must link HapticScape with `/hapticscape link` before you can invite them.",
+        true,
+      );
+    }
+
     const requestId = randomBase64Url(12);
-    const work = dispatchPairingRequest(userObject, env, {
+    const acceptToken = randomBase64Url(32);
+    const dispatched = await dispatchPairingRequest(userObject, {
       requestId,
       interactionToken: interaction.token,
+      participantId: participant.id,
+      participantName: discordDisplayName(participant),
+      acceptTokenHash: await sha256Base64Url(acceptToken),
+      controllerId: user.id,
     });
-    if (executionCtx?.waitUntil) {
-      executionCtx.waitUntil(work);
-    } else {
-      await work;
+    if (!dispatched.ok) {
+      return interactionMessage(dispatched.error, true);
     }
-    return jsonResponse({ type: 5, data: {} });
+    const acceptUrl = new URL(request.url).origin
+      + "/discord/accept/" + encodeURIComponent(user.id)
+      + "/" + encodeURIComponent(requestId)
+      + "/" + encodeURIComponent(acceptToken);
+    return interactionMessageWithComponents(
+      "**HapticScape Remote Play request**\n\n"
+        + "**" + discordDisplayName(user) + "** wants to start an encrypted Remote Play session with "
+        + "**" + discordDisplayName(participant) + "**.\n\n"
+        + "Accept opens HapticScape. Control is granted only after the participant also approves the local consent prompt.",
+      [
+        {
+          type: 1,
+          components: [
+            { type: 2, style: 5, label: "Accept", url: acceptUrl },
+            {
+              type: 2,
+              style: 4,
+              label: "Deny",
+              custom_id: "hsc_deny:" + user.id + ":" + requestId,
+            },
+          ],
+        },
+      ],
+    );
   }
   return interactionMessage("Unknown HapticScape command", true);
+}
+
+async function handleDiscordComponent(interaction, env) {
+  const user = interaction.member?.user ?? interaction.user;
+  const match = String(interaction.data?.custom_id ?? "").match(
+    /^hsc_deny:(\d{15,22}):([A-Za-z0-9_-]{16})$/,
+  );
+  if (!user || !DISCORD_USER_ID_PATTERN.test(user.id ?? "") || !match) {
+    return interactionMessage("This HapticScape action is invalid or expired.", true);
+  }
+  const controller = env.DISCORD_USERS.get(env.DISCORD_USERS.idFromName(match[1]));
+  const response = await controller.fetch(jsonRequest(
+    "https://discord-user.internal/deny",
+    { participantId: user.id, requestId: match[2] },
+  ));
+  if (!response.ok) {
+    let message = "This request expired or belongs to the other person in the DM.";
+    try {
+      message = (await response.json()).error ?? message;
+    } catch (_) {
+      // Use the safe generic message.
+    }
+    return interactionMessage(message, true);
+  }
+  return jsonResponse({
+    type: 7,
+    data: {
+      content: "**HapticScape connection declined**\n\nThe participant denied the Remote Play request.",
+      components: [],
+      allowed_mentions: { parse: [] },
+    },
+  });
 }
 
 export async function redeemDiscordLink(request, env, locator) {
@@ -468,7 +897,71 @@ export async function handleDiscordDevice(request, env) {
   target.hostname = "discord-user.internal";
   target.port = "";
   target.pathname = "/device";
-  return env.DISCORD_USERS.get(id).fetch(new Request(target, request));
+  const headers = new Headers(request.headers);
+  headers.set("X-HapticScape-User", userId);
+  return env.DISCORD_USERS.get(id).fetch(new Request(target, {
+    method: request.method,
+    headers,
+  }));
+}
+
+export async function handleDiscordDeviceAccept(request, env) {
+  if (request.method !== "POST") {
+    return new Response("Method not allowed", {
+      status: 405,
+      headers: { Allow: "POST" },
+    });
+  }
+  const url = new URL(request.url);
+  const userId = url.searchParams.get("user") ?? "";
+  if (!DISCORD_USER_ID_PATTERN.test(userId)) {
+    return jsonResponse({ error: "Invalid Discord user" }, 400);
+  }
+  const id = env.DISCORD_USERS.idFromName(userId);
+  const target = new URL(request.url);
+  target.protocol = "https:";
+  target.hostname = "discord-user.internal";
+  target.port = "";
+  target.pathname = "/accept";
+  const headers = new Headers(request.headers);
+  headers.set("X-HapticScape-User", userId);
+  return env.DISCORD_USERS.get(id).fetch(new Request(target, {
+    method: request.method,
+    headers,
+    body: await request.arrayBuffer(),
+  }));
+}
+
+export async function openDiscordAccept(request, env, controllerId, requestId, acceptToken) {
+  if (request.method !== "GET"
+    || !DISCORD_USER_ID_PATTERN.test(controllerId)
+    || !REQUEST_ID_PATTERN.test(requestId)
+    || !ACCEPT_TOKEN_PATTERN.test(acceptToken)) {
+    return new Response("Invalid HapticScape connection request", { status: 400 });
+  }
+  const controller = env.DISCORD_USERS.get(env.DISCORD_USERS.idFromName(controllerId));
+  const valid = await controller.fetch(jsonRequest(
+    "https://discord-user.internal/accept-link",
+    { requestId, acceptToken },
+  ));
+  if (!valid.ok) {
+    return new Response("This HapticScape connection request expired or was already handled", {
+      status: 410,
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
+  const deepLink = "hapticscape://discord/accept?controller="
+    + encodeURIComponent(controllerId)
+    + "&request=" + encodeURIComponent(requestId)
+    + "&token=" + encodeURIComponent(acceptToken);
+  return new Response(null, {
+    status: 302,
+    headers: {
+      Location: deepLink,
+      "Cache-Control": "no-store",
+      "Referrer-Policy": "no-referrer",
+    },
+  });
 }
 
 export async function verifyDiscordSignature(body, signature, timestamp, publicKey) {
@@ -525,7 +1018,7 @@ async function createLinkTicket(env, user) {
   throw new Error("Unable to allocate a Discord link code");
 }
 
-async function dispatchPairingRequest(userObject, env, payload) {
+async function dispatchPairingRequest(userObject, payload) {
   const response = await userObject.fetch(new Request(
     "https://discord-user.internal/request",
     {
@@ -541,11 +1034,12 @@ async function dispatchPairingRequest(userObject, env, payload) {
     } catch (_) {
       // Use the generic failure.
     }
-    await patchInteractionResponse(env, payload.interactionToken, message);
+    return { ok: false, error: message };
   }
+  return { ok: true };
 }
 
-async function patchInteractionResponse(env, interactionToken, content) {
+async function patchInteractionResponse(env, interactionToken, content, components) {
   if (!env.DISCORD_APPLICATION_ID || !interactionToken) {
     return false;
   }
@@ -560,6 +1054,7 @@ async function patchInteractionResponse(env, interactionToken, content) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           content,
+          ...(components === undefined ? {} : { components }),
           allowed_mentions: { parse: [] },
         }),
       },
@@ -568,6 +1063,17 @@ async function patchInteractionResponse(env, interactionToken, content) {
   } catch (_) {
     return false;
   }
+}
+
+function interactionMessageWithComponents(content, components) {
+  return jsonResponse({
+    type: 4,
+    data: {
+      content,
+      components,
+      allowed_mentions: { parse: [] },
+    },
+  });
 }
 
 function interactionMessage(content, ephemeral) {
@@ -615,6 +1121,14 @@ async function readJson(request) {
   } catch (_) {
     return null;
   }
+}
+
+function jsonRequest(url, body) {
+  return new Request(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 }
 
 async function sha256Base64Url(value) {
