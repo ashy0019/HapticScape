@@ -2,10 +2,12 @@ package com.ashy0019.hapticscape;
 
 import com.ashy0019.hapticscape.event.ChatEvent;
 import com.ashy0019.hapticscape.event.PlayerDeathEvent;
+import com.ashy0019.hapticscape.event.VitalsChangedEvent;
 import com.ashy0019.hapticscape.event.XpEvent;
 import com.ashy0019.hapticscape.event.XpEventTracker;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteChatEventAdapter;
 import com.ashy0019.hapticscape.integration.runelite.RuneLitePlayerDeathEventAdapter;
+import com.ashy0019.hapticscape.integration.runelite.RuneLiteVitalsEventAdapter;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteXpEventAdapter;
 import com.ashy0019.hapticscape.remote.RemoteSettingsSnapshot;
 import java.util.Collection;
@@ -61,7 +63,9 @@ final class GameplayEventCoordinator implements AutoCloseable
 	private final RuneLiteChatEventAdapter chatEventAdapter = new RuneLiteChatEventAdapter();
 	private final RuneLitePlayerDeathEventAdapter playerDeathEventAdapter =
 		new RuneLitePlayerDeathEventAdapter();
-	private final ThresholdAlertTracker thresholdAlertTracker = new ThresholdAlertTracker();
+	private final RuneLiteVitalsEventAdapter vitalsEventAdapter =
+		new RuneLiteVitalsEventAdapter();
+	private final VitalsAlertTracker vitalsAlertTracker = new VitalsAlertTracker();
 	private final AlertDeduplicator alertDeduplicator = new AlertDeduplicator();
 
 	private ScheduledExecutorService alertScheduler;
@@ -120,7 +124,7 @@ final class GameplayEventCoordinator implements AutoCloseable
 		{
 			return;
 		}
-		handleThresholdAlert(event);
+		vitalsEventAdapter.adapt(event).ifPresent(this::handleVitalsChangedEvent);
 
 		Skill skill = event.getSkill();
 		XpEvent xpEvent = xpEventAdapter.update(xpTracker, skill, event.getXp());
@@ -195,6 +199,8 @@ final class GameplayEventCoordinator implements AutoCloseable
 			return;
 		}
 
+		vitalsEventAdapter.adapt(event).ifPresent(this::handleVitalsChangedEvent);
+
 		if (event.getVarpId() == VarPlayerID.POISON)
 		{
 			int currentPoisonState = classifyPoisonState(event.getValue());
@@ -205,20 +211,6 @@ final class GameplayEventCoordinator implements AutoCloseable
 				dispatchSpecificAlert(AlertCategory.POISONED_OR_VENOMED);
 			}
 			poisonState = currentPoisonState;
-		}
-		else if (event.getVarpId() == VarPlayerID.SA_ENERGY)
-		{
-			int energyPercent = clamp(event.getValue() / 10, 0, 100);
-			int readyAt = settingsSupplier.get().getAlertTriggerSettings()
-				.get(AlertCategory.SPECIAL_ATTACK_READY);
-			if (thresholdAlertTracker.update(
-				AlertCategory.SPECIAL_ATTACK_READY,
-				energyPercent,
-				readyAt
-			))
-			{
-				dispatchSpecificAlert(AlertCategory.SPECIAL_ATTACK_READY);
-			}
 		}
 	}
 
@@ -323,18 +315,17 @@ final class GameplayEventCoordinator implements AutoCloseable
 
 	private void seedAlertDetectors()
 	{
-		thresholdAlertTracker.seed(
-			AlertCategory.LOW_HITPOINTS,
-			client.getBoostedSkillLevel(Skill.HITPOINTS)
-		);
-		thresholdAlertTracker.seed(
-			AlertCategory.LOW_PRAYER,
-			client.getBoostedSkillLevel(Skill.PRAYER)
-		);
-		thresholdAlertTracker.seed(
-			AlertCategory.SPECIAL_ATTACK_READY,
-			clamp(client.getVarpValue(VarPlayerID.SA_ENERGY) / 10, 0, 100)
-		);
+		vitalsAlertTracker.seed(vitalsEventAdapter.hitpoints(
+			client.getBoostedSkillLevel(Skill.HITPOINTS),
+			client.getRealSkillLevel(Skill.HITPOINTS)
+		));
+		vitalsAlertTracker.seed(vitalsEventAdapter.prayer(
+			client.getBoostedSkillLevel(Skill.PRAYER),
+			client.getRealSkillLevel(Skill.PRAYER)
+		));
+		vitalsAlertTracker.seed(vitalsEventAdapter.specialAttackFromVarp(
+			client.getVarpValue(VarPlayerID.SA_ENERGY)
+		));
 
 		poisonState = classifyPoisonState(client.getVarpValue(VarPlayerID.POISON));
 		ItemContainer inventory = client.getItemContainer(InventoryID.INV);
@@ -347,34 +338,20 @@ final class GameplayEventCoordinator implements AutoCloseable
 	private void resetTrackers()
 	{
 		xpTracker.reset();
-		thresholdAlertTracker.reset();
+		vitalsAlertTracker.reset();
 		alertDeduplicator.reset();
 		inventoryFullKnown = false;
 		inventoryFull = false;
 		poisonState = -1;
 	}
 
-	private void handleThresholdAlert(StatChanged event)
+	void handleVitalsChangedEvent(VitalsChangedEvent event)
 	{
-		AlertCategory category;
-		if (event.getSkill() == Skill.HITPOINTS)
-		{
-			category = AlertCategory.LOW_HITPOINTS;
-		}
-		else if (event.getSkill() == Skill.PRAYER)
-		{
-			category = AlertCategory.LOW_PRAYER;
-		}
-		else
-		{
-			return;
-		}
-
-		int threshold = settingsSupplier.get().getAlertTriggerSettings().get(category);
-		if (thresholdAlertTracker.update(category, event.getBoostedLevel(), threshold))
-		{
-			dispatchSpecificAlert(category);
-		}
+		Objects.requireNonNull(event, "event");
+		vitalsAlertTracker.update(
+			event,
+			settingsSupplier.get().getAlertTriggerSettings()
+		).ifPresent(this::dispatchSpecificAlert);
 	}
 
 	private void dispatchSpecificAlert(AlertCategory category)
@@ -395,10 +372,5 @@ final class GameplayEventCoordinator implements AutoCloseable
 			return 0;
 		}
 		return poisonValue >= VENOM_THRESHOLD ? 2 : 1;
-	}
-
-	private static int clamp(int value, int minimum, int maximum)
-	{
-		return Math.max(minimum, Math.min(maximum, value));
 	}
 }
