@@ -1,6 +1,8 @@
 package com.ashy0019.hapticscape;
 
 import com.ashy0019.hapticscape.clicker.ClickerService;
+import com.ashy0019.hapticscape.event.XpEvent;
+import com.ashy0019.hapticscape.integration.runelite.RuneLiteXpEventAdapter;
 import com.ashy0019.hapticscape.device.GatedIntifaceService;
 import com.ashy0019.hapticscape.device.HapticEventType;
 import com.ashy0019.hapticscape.device.HapticPattern;
@@ -38,6 +40,7 @@ final class FeedbackCoordinator implements GameplayEventCoordinator.FeedbackSink
 	private final MusicSyncService music;
 	private final Supplier<RemoteSettingsSnapshot> settingsSupplier;
 	private final BiConsumer<Skill, Boolean> level99Starter;
+	private final RuneLiteXpEventAdapter xpEventAdapter = new RuneLiteXpEventAdapter();
 	private final Notifier notifier;
 	private final RuneLiteConfig runeLiteConfig;
 	private final ChatMessageManager chatMessageManager;
@@ -68,7 +71,7 @@ final class FeedbackCoordinator implements GameplayEventCoordinator.FeedbackSink
 
 	@Override
 	public void handleXp(
-		XpChange change,
+		XpEvent event,
 		XpOutputDecision decision,
 		RemoteSettingsSnapshot settings,
 		XpFeedbackSettings skillSettings)
@@ -82,11 +85,11 @@ final class FeedbackCoordinator implements GameplayEventCoordinator.FeedbackSink
 			}
 			log.debug(
 				"Level 99 ceremony for {}: level {} -> {}",
-				change.getSkill(),
-				change.getPreviousLevel(),
-				change.getCurrentLevel()
+				event.getSkillId(),
+				event.getPreviousLevel(),
+				event.getCurrentLevel()
 			);
-			level99Starter.accept(change.getSkill(), true);
+			level99Starter.accept(xpEventAdapter.toSkill(event), true);
 			return;
 		}
 
@@ -111,10 +114,10 @@ final class FeedbackCoordinator implements GameplayEventCoordinator.FeedbackSink
 		log.debug(
 			"{} feedback for {}: {} XP, level {} -> {}",
 			trigger,
-			change.getSkill(),
-			change.getGainedXp(),
-			change.getPreviousLevel(),
-			change.getCurrentLevel()
+			event.getSkillId(),
+			event.getGainedXp(),
+			event.getPreviousLevel(),
+			event.getCurrentLevel()
 		);
 		if (trigger == XpFeedbackTrigger.XP_GAIN)
 		{

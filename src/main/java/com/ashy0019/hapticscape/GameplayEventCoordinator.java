@@ -1,5 +1,7 @@
 package com.ashy0019.hapticscape;
 
+import com.ashy0019.hapticscape.event.XpEvent;
+import com.ashy0019.hapticscape.integration.runelite.RuneLiteXpEventAdapter;
 import com.ashy0019.hapticscape.remote.RemoteSettingsSnapshot;
 import java.util.Collection;
 import java.util.Objects;
@@ -34,7 +36,7 @@ final class GameplayEventCoordinator implements AutoCloseable
 	interface FeedbackSink
 	{
 		void handleXp(
-			XpChange change,
+			XpEvent event,
 			XpOutputDecision decision,
 			RemoteSettingsSnapshot settings,
 			XpFeedbackSettings skillSettings);
@@ -52,6 +54,7 @@ final class GameplayEventCoordinator implements AutoCloseable
 	private final Supplier<RemoteSettingsSnapshot> settingsSupplier;
 	private final FeedbackSink feedback;
 	private final XpTracker xpTracker = new XpTracker();
+	private final RuneLiteXpEventAdapter xpEventAdapter = new RuneLiteXpEventAdapter();
 	private final ThresholdAlertTracker thresholdAlertTracker = new ThresholdAlertTracker();
 	private final AlertDeduplicator alertDeduplicator = new AlertDeduplicator();
 
@@ -130,7 +133,9 @@ final class GameplayEventCoordinator implements AutoCloseable
 		{
 			feedback.playClick();
 		}
-		feedback.handleXp(change, decision, settings, skillSettings);
+
+		XpEvent xpEvent = xpEventAdapter.from(change);
+		feedback.handleXp(xpEvent, decision, settings, skillSettings);
 	}
 
 	void onChatMessage(ChatMessage event)
