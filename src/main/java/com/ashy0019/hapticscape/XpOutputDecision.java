@@ -1,6 +1,7 @@
 package com.ashy0019.hapticscape;
 
 import com.ashy0019.hapticscape.clicker.ClickerXpSettings;
+import com.ashy0019.hapticscape.event.XpEvent;
 import java.util.Objects;
 
 /**
@@ -19,6 +20,38 @@ public final class XpOutputDecision
 		this.clickTrigger = Objects.requireNonNull(clickTrigger);
 	}
 
+	public static XpOutputDecision classify(
+		XpEvent event,
+		boolean hapticSkillEnabled,
+		XpFeedbackSettings hapticSettings,
+		boolean hapticLevelUpEnabled,
+		boolean hapticMilestoneEnabled,
+		boolean hapticLevel99Enabled,
+		boolean clickSkillEnabled,
+		ClickerXpSettings clickSettings)
+	{
+		Objects.requireNonNull(event, "event");
+		Objects.requireNonNull(hapticSettings, "hapticSettings");
+		Objects.requireNonNull(clickSettings, "clickSettings");
+
+		XpFeedbackTrigger haptic = hapticSkillEnabled
+			? XpFeedbackTrigger.classify(
+				event,
+				hapticSettings.getMinimumXpGain(),
+				hapticLevelUpEnabled,
+				hapticMilestoneEnabled,
+				hapticLevel99Enabled
+			)
+			: XpFeedbackTrigger.NONE;
+		XpFeedbackTrigger click = clickSkillEnabled
+			? clickSettings.classify(event)
+			: XpFeedbackTrigger.NONE;
+
+		return new XpOutputDecision(haptic, click);
+	}
+
+	/** Temporary compatibility overload for pre-event-boundary callers and tests. */
+	@Deprecated
 	public static XpOutputDecision classify(
 		XpChange change,
 		boolean hapticSkillEnabled,

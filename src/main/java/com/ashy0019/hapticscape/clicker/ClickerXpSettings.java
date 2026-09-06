@@ -2,6 +2,7 @@ package com.ashy0019.hapticscape.clicker;
 
 import com.ashy0019.hapticscape.XpChange;
 import com.ashy0019.hapticscape.XpFeedbackTrigger;
+import com.ashy0019.hapticscape.event.XpEvent;
 import java.util.Objects;
 
 /**
@@ -53,20 +54,47 @@ public final class ClickerXpSettings
 		return level99Enabled;
 	}
 
+	public XpFeedbackTrigger classify(XpEvent event)
+	{
+		Objects.requireNonNull(event, "event");
+		return classifyValues(
+			event.getGainedXp(),
+			event.isLevelUp(),
+			event.crossedLevel(99),
+			event.crossedDecadeMilestone()
+		);
+	}
+
+	/** Temporary compatibility overload for pre-event-boundary callers and tests. */
+	@Deprecated
 	public XpFeedbackTrigger classify(XpChange change)
 	{
 		Objects.requireNonNull(change, "change");
-		if (change.getGainedXp() <= 0)
+		return classifyValues(
+			change.getGainedXp(),
+			change.isLevelUp(),
+			change.crossedLevel(99),
+			change.crossedDecadeMilestone()
+		);
+	}
+
+	private XpFeedbackTrigger classifyValues(
+		int gainedXp,
+		boolean levelUp,
+		boolean crossedLevel99,
+		boolean crossedDecadeMilestone)
+	{
+		if (gainedXp <= 0)
 		{
 			return XpFeedbackTrigger.NONE;
 		}
-		if (change.isLevelUp())
+		if (levelUp)
 		{
-			if (level99Enabled && change.crossedLevel(99))
+			if (level99Enabled && crossedLevel99)
 			{
 				return XpFeedbackTrigger.LEVEL_99;
 			}
-			if (milestoneEnabled && change.crossedDecadeMilestone())
+			if (milestoneEnabled && crossedDecadeMilestone)
 			{
 				return XpFeedbackTrigger.MILESTONE;
 			}
@@ -75,7 +103,7 @@ public final class ClickerXpSettings
 				return XpFeedbackTrigger.LEVEL_UP;
 			}
 		}
-		return change.getGainedXp() >= minimumXpGain
+		return gainedXp >= minimumXpGain
 			? XpFeedbackTrigger.XP_GAIN
 			: XpFeedbackTrigger.NONE;
 	}

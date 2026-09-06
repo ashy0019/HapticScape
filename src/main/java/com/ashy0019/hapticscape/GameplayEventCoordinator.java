@@ -117,10 +117,11 @@ final class GameplayEventCoordinator implements AutoCloseable
 		handleThresholdAlert(event);
 
 		XpChange change = xpTracker.update(event.getSkill(), event.getXp());
+		XpEvent xpEvent = xpEventAdapter.from(change);
 		RemoteSettingsSnapshot settings = settingsSupplier.get();
 		XpFeedbackSettings skillSettings = settings.getXpFeedbackSettings(change.getSkill());
 		XpOutputDecision decision = XpOutputDecision.classify(
-			change,
+			xpEvent,
 			settings.isHapticSkillEnabled(change.getSkill()),
 			skillSettings,
 			settings.isLevelUpFeedbackEnabled(),
@@ -134,7 +135,6 @@ final class GameplayEventCoordinator implements AutoCloseable
 			feedback.playClick();
 		}
 
-		XpEvent xpEvent = xpEventAdapter.from(change);
 		feedback.handleXp(xpEvent, decision, settings, skillSettings);
 	}
 
