@@ -50,38 +50,6 @@ public final class XpOutputDecision
 		return new XpOutputDecision(haptic, click);
 	}
 
-	/** Temporary compatibility overload for pre-event-boundary callers and tests. */
-	@Deprecated
-	public static XpOutputDecision classify(
-		XpChange change,
-		boolean hapticSkillEnabled,
-		XpFeedbackSettings hapticSettings,
-		boolean hapticLevelUpEnabled,
-		boolean hapticMilestoneEnabled,
-		boolean hapticLevel99Enabled,
-		boolean clickSkillEnabled,
-		ClickerXpSettings clickSettings)
-	{
-		Objects.requireNonNull(change, "change");
-		Objects.requireNonNull(hapticSettings, "hapticSettings");
-		Objects.requireNonNull(clickSettings, "clickSettings");
-
-		XpFeedbackTrigger haptic = hapticSkillEnabled
-			? XpFeedbackTrigger.classify(
-				change,
-				hapticSettings.getMinimumXpGain(),
-				hapticLevelUpEnabled,
-				hapticMilestoneEnabled,
-				hapticLevel99Enabled
-			)
-			: XpFeedbackTrigger.NONE;
-		XpFeedbackTrigger click = clickSkillEnabled
-			? clickSettings.classify(change)
-			: XpFeedbackTrigger.NONE;
-
-		return new XpOutputDecision(haptic, click);
-	}
-
 	public XpFeedbackTrigger getHapticTrigger()
 	{
 		return hapticTrigger;

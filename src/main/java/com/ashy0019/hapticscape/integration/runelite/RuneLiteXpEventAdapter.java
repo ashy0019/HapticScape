@@ -1,6 +1,5 @@
 package com.ashy0019.hapticscape.integration.runelite;
 
-import com.ashy0019.hapticscape.XpChange;
 import com.ashy0019.hapticscape.event.XpEvent;
 import com.ashy0019.hapticscape.event.XpEventTracker;
 import java.util.Locale;
@@ -35,22 +34,6 @@ public final class RuneLiteXpEventAdapter
 			skillId(skill),
 			currentXp,
 			realLevelForXp(currentXp)
-		);
-	}
-
-	/** Temporary compatibility conversion for the legacy XpChange path. */
-	@Deprecated
-	public XpEvent from(XpChange change)
-	{
-		Objects.requireNonNull(change, "change");
-		return new XpEvent(
-			XpEvent.SOURCE_RUNELITE,
-			skillId(change.getSkill()),
-			change.getPreviousXp(),
-			change.getCurrentXp(),
-			change.getGainedXp(),
-			change.getPreviousLevel(),
-			change.getCurrentLevel()
 		);
 	}
 

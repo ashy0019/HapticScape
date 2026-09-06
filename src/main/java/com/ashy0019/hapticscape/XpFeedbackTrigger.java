@@ -31,28 +31,6 @@ public enum XpFeedbackTrigger
 		);
 	}
 
-	/** Temporary compatibility overload for pre-event-boundary callers and tests. */
-	@Deprecated
-	public static XpFeedbackTrigger classify(
-		XpChange change,
-		int minimumXpGain,
-		boolean levelUpFeedbackEnabled,
-		boolean milestoneFeedbackEnabled,
-		boolean level99CelebrationEnabled)
-	{
-		Objects.requireNonNull(change, "change");
-		return classifyValues(
-			change.getGainedXp(),
-			change.isLevelUp(),
-			change.crossedLevel(99),
-			change.crossedDecadeMilestone(),
-			minimumXpGain,
-			levelUpFeedbackEnabled,
-			milestoneFeedbackEnabled,
-			level99CelebrationEnabled
-		);
-	}
-
 	private static XpFeedbackTrigger classifyValues(
 		int gainedXp,
 		boolean levelUp,

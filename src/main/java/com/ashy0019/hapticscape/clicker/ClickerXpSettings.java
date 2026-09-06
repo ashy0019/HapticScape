@@ -1,6 +1,5 @@
 package com.ashy0019.hapticscape.clicker;
 
-import com.ashy0019.hapticscape.XpChange;
 import com.ashy0019.hapticscape.XpFeedbackTrigger;
 import com.ashy0019.hapticscape.event.XpEvent;
 import java.util.Objects;
@@ -62,19 +61,6 @@ public final class ClickerXpSettings
 			event.isLevelUp(),
 			event.crossedLevel(99),
 			event.crossedDecadeMilestone()
-		);
-	}
-
-	/** Temporary compatibility overload for pre-event-boundary callers and tests. */
-	@Deprecated
-	public XpFeedbackTrigger classify(XpChange change)
-	{
-		Objects.requireNonNull(change, "change");
-		return classifyValues(
-			change.getGainedXp(),
-			change.isLevelUp(),
-			change.crossedLevel(99),
-			change.crossedDecadeMilestone()
 		);
 	}
 
