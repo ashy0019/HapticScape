@@ -82,6 +82,7 @@ try
 	)
 
 	$updateCoreSource = Join-Path $projectRoot 'launcher\UpdateCore.cs'
+	$deepLinkCoreSource = Join-Path $projectRoot 'launcher\DeepLinkCore.cs'
 	$nativeTestSource = Join-Path $projectRoot 'launcher-tests\UpdateCoreTests.cs'
 	$nativeTestPath = Join-Path $nativeTestDirectory 'HapticScapeUpdateCoreTests.exe'
 	$nativeReferences = @(
@@ -96,7 +97,7 @@ try
 		'/optimize+',
 		'/platform:anycpu',
 		"/out:$nativeTestPath"
-	) + $nativeReferences + @($updateCoreSource, $nativeTestSource)
+	) + $nativeReferences + @($updateCoreSource, $deepLinkCoreSource, $nativeTestSource)
 
 	Write-Host 'Compiling and running native updater tests...'
 	& $cscPath @nativeTestArguments
@@ -146,7 +147,7 @@ try
 		'/reference:System.Drawing.dll',
 		'/reference:System.Windows.Forms.dll',
 		"/out:$launcherPath"
-	) + $nativeReferences + @($updateCoreSource, $launcherSource)
+	) + $nativeReferences + @($updateCoreSource, $deepLinkCoreSource, $launcherSource)
 
 	if (Test-Path $iconPath -PathType Leaf)
 	{

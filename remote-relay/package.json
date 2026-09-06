@@ -4,7 +4,8 @@
   "description": "This Cloudflare Worker/Durable Object is a deliberately dumb relay for HapticScape Remote Control.",
   "main": "worker.js",
   "scripts": {
-    "test": "node --test worker.test.js"
+    "test": "node --test worker.test.js discord.test.js",
+    "register-discord": "node register-discord-commands.js"
   },
   "keywords": [],
   "author": "",

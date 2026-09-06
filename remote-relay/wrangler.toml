@@ -6,6 +6,26 @@ compatibility_date = "2026-09-03"
 name = "SESSION_ROOMS"
 class_name = "SessionRoom"
 
+[[durable_objects.bindings]]
+name = "PAIRING_MAILBOXES"
+class_name = "PairingMailbox"
+
+[[durable_objects.bindings]]
+name = "DISCORD_LINK_TICKETS"
+class_name = "DiscordLinkTicket"
+
+[[durable_objects.bindings]]
+name = "DISCORD_USERS"
+class_name = "DiscordUser"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["SessionRoom"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["PairingMailbox"]
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["DiscordLinkTicket", "DiscordUser"]

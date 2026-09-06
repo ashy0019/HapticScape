@@ -5,6 +5,7 @@ using System.IO;
 using System.Net;
 using System.Threading;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 internal static class HapticScapeLauncher
 {
@@ -18,6 +19,8 @@ internal static class HapticScapeLauncher
 		try
 		{
 			string applicationDirectory = AppDomain.CurrentDomain.BaseDirectory;
+			TryRegisterProtocolHandler(applicationDirectory);
+			string deepLink = HapticScapeDeepLink.Read(args);
 			ReleaseManifest manifest = ReleaseManifest.Load(
 				Path.Combine(applicationDirectory, "app", "release.json"));
 			string preferencesPath = UpdatePreferencesStore.GetDefaultPath();
@@ -28,12 +31,28 @@ internal static class HapticScapeLauncher
 				ShowUpdateSettings(preferencesPath, manifest.Version);
 				return 0;
 			}
-
-			if (TryBeginUpdate(applicationDirectory, manifest, preferencesPath))
+			bool ownsInstance;
+			using (Mutex instance = new Mutex(
+				true,
+				@"Local\HapticScape.Client",
+				out ownsInstance))
 			{
-				return 0;
+				if (deepLink != null)
+				{
+					QueueDeepLink(deepLink);
+				}
+				if (!ownsInstance)
+				{
+					return 0;
+				}
+
+				if (deepLink == null
+					&& TryBeginUpdate(applicationDirectory, manifest, preferencesPath))
+				{
+					return 0;
+				}
+				return LaunchClient(applicationDirectory);
 			}
-			return LaunchClient(applicationDirectory);
 		}
 		catch (Exception exception)
 		{
@@ -176,8 +195,63 @@ internal static class HapticScapeLauncher
 		startInfo.Arguments = "-ea -jar \"" + clientJar + "\"";
 		startInfo.WorkingDirectory = applicationDirectory;
 		startInfo.UseShellExecute = false;
-		Process.Start(startInfo);
-		return 0;
+		using (Process client = Process.Start(startInfo))
+		{
+			if (client == null)
+			{
+				throw new InvalidOperationException("The HapticScape client process did not start.");
+			}
+			client.WaitForExit();
+			return client.ExitCode;
+		}
+	}
+
+	private static void TryRegisterProtocolHandler(string applicationDirectory)
+	{
+		try
+		{
+			string executable = Path.Combine(applicationDirectory, "HapticScape.exe");
+			using (RegistryKey protocol = Registry.CurrentUser.CreateSubKey(
+				@"Software\Classes\hapticscape"))
+			{
+				protocol.SetValue(null, "URL:HapticScape Protocol");
+				protocol.SetValue("URL Protocol", "");
+				using (RegistryKey icon = protocol.CreateSubKey("DefaultIcon"))
+				{
+					icon.SetValue(null, Quote(executable));
+				}
+				using (RegistryKey command = protocol.CreateSubKey(@"shell\open\command"))
+				{
+					command.SetValue(null, Quote(executable) + " \"%1\"");
+				}
+			}
+		}
+		catch (UnauthorizedAccessException)
+		{
+			// Protocol registration is a convenience; ordinary launches must still work.
+		}
+		catch (System.Security.SecurityException)
+		{
+			// Managed Windows environments may forbid per-user protocol registration.
+		}
+		catch (IOException)
+		{
+			// A registry failure must not prevent an ordinary client launch.
+		}
+	}
+
+	private static void QueueDeepLink(string deepLink)
+	{
+		string inbox = Path.Combine(
+			Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+			"HapticScape",
+			"deep-links");
+		Directory.CreateDirectory(inbox);
+		string name = Guid.NewGuid().ToString("N");
+		string temporary = Path.Combine(inbox, name + ".tmp");
+		string request = Path.Combine(inbox, name + ".request");
+		File.WriteAllText(temporary, deepLink, new System.Text.UTF8Encoding(false));
+		File.Move(temporary, request);
 	}
 
 	private static void ShowUpdateSettings(string preferencesPath, string installedVersion)

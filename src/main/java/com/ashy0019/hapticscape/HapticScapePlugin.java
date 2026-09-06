@@ -13,7 +13,13 @@ import com.ashy0019.hapticscape.music.MusicSyncSettings;
 import com.ashy0019.hapticscape.music.WasapiLoopbackCapture;
 import com.ashy0019.hapticscape.remote.ConfigBackedRemoteSettingsStore;
 import com.ashy0019.hapticscape.remote.ConfigBackedRemotePermissionsStore;
+import com.ashy0019.hapticscape.remote.DiscordCredentialStore;
+import com.ashy0019.hapticscape.remote.DiscordDeepLinkInbox;
+import com.ashy0019.hapticscape.remote.DiscordJoinConsentHandler;
+import com.ashy0019.hapticscape.remote.DiscordJoinRequest;
+import com.ashy0019.hapticscape.remote.DiscordPairingBridge;
 import com.ashy0019.hapticscape.remote.EffectiveSettingsService;
+import com.ashy0019.hapticscape.remote.RemotePairingService;
 import com.ashy0019.hapticscape.remote.RemoteSessionListener;
 import com.ashy0019.hapticscape.remote.RemoteSessionManager;
 import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
@@ -31,6 +37,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.concurrent.CompletableFuture;
 import javax.inject.Inject;
+import javax.swing.SwingUtilities;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.ChatMessageType;
@@ -82,6 +89,7 @@ public class HapticScapePlugin extends Plugin
 	private GatedIntifaceService intifaceService;
 	private EffectiveSettingsService effectiveSettingsService;
 	private RemoteSessionManager remoteSessionManager;
+	private DiscordPairingBridge discordPairingBridge;
 	private SettingsLockService settingsLockService;
 	private MusicSyncService musicSyncService;
 	private ClickerService clickerService;
@@ -200,6 +208,15 @@ public class HapticScapePlugin extends Plugin
 		gameplayEvents.start();
 		updatePreferencesStore = new UpdatePreferencesStore(gson);
 		updateCheckService = new UpdateCheckService(httpClient, gson);
+		RemotePairingService remotePairingService = new RemotePairingService(httpClient);
+		discordPairingBridge = new DiscordPairingBridge(
+			httpClient,
+			gson,
+			remoteSessionManager,
+			remotePairingService,
+			new DiscordCredentialStore(gson)
+		);
+		discordPairingBridge.start();
 		panel = new HapticScapePanel(
 			config,
 			configManager,
@@ -218,6 +235,8 @@ public class HapticScapePlugin extends Plugin
 			updatePreferencesStore,
 			updateCheckService,
 			remoteSessionManager,
+			remotePairingService,
+			discordPairingBridge,
 			settingsLockService,
 			feedbackCoordinator::dispatchRogueFeedback,
 			this::playRogueUnlockStingAsync,
@@ -233,6 +252,44 @@ public class HapticScapePlugin extends Plugin
 			.priority(5)
 			.build();
 		clientToolbar.addNavigation(navigationButton);
+		discordPairingBridge.setJoinConsentHandler(new DiscordJoinConsentHandler()
+		{
+			@Override
+			public void onDeepLinkOpened()
+			{
+				SwingUtilities.invokeLater(HapticScapePlugin.this::focusRemotePlay);
+			}
+
+			@Override
+			public CompletableFuture<Boolean> requestConsent(DiscordJoinRequest request)
+			{
+				CompletableFuture<Boolean> result = new CompletableFuture<>();
+				SwingUtilities.invokeLater(() ->
+				{
+					try
+					{
+						focusRemotePlay();
+						result.complete(panel.confirmDiscordRemoteControl(request));
+					}
+					catch (RuntimeException exception)
+					{
+						result.completeExceptionally(exception);
+					}
+				});
+				return result;
+			}
+
+			@Override
+			public void showError(String message)
+			{
+				SwingUtilities.invokeLater(() ->
+				{
+					focusRemotePlay();
+					panel.showDiscordPairingError(message);
+				});
+			}
+		});
+		DiscordDeepLinkInbox.getInstance().setHandler(discordPairingBridge::acceptDeepLink);
 
 		log.info("HapticScape started");
 	}
@@ -240,6 +297,7 @@ public class HapticScapePlugin extends Plugin
 	@Override
 	protected void shutDown()
 	{
+		DiscordDeepLinkInbox.getInstance().setHandler(null);
 		if (gameplayEvents != null)
 		{
 			gameplayEvents.close();
@@ -258,6 +316,12 @@ public class HapticScapePlugin extends Plugin
 			navigationButton = null;
 		}
 
+		if (discordPairingBridge != null)
+		{
+			discordPairingBridge.setJoinConsentHandler(null);
+			discordPairingBridge.close();
+			discordPairingBridge = null;
+		}
 		if (remoteSessionManager != null)
 		{
 			remoteSessionManager.close();
@@ -299,6 +363,19 @@ public class HapticScapePlugin extends Plugin
 			updatePreferencesStore = null;
 		}
 		log.info("HapticScape stopped");
+	}
+
+	private void focusRemotePlay()
+	{
+		clientUI.forceFocus();
+		if (navigationButton != null)
+		{
+			clientToolbar.openPanel(navigationButton);
+		}
+		if (panel != null)
+		{
+			panel.showDiscordRemoteView();
+		}
 	}
 
 	@Subscribe

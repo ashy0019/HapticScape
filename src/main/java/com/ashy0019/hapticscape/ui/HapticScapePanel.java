@@ -23,7 +23,10 @@ import com.ashy0019.hapticscape.rogue.KonamiCodeDetector;
 import com.ashy0019.hapticscape.rogue.RogueFeedbackEvent;
 import com.ashy0019.hapticscape.remote.RemoteLockSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteLockState;
+import com.ashy0019.hapticscape.remote.DiscordPairingBridge;
+import com.ashy0019.hapticscape.remote.DiscordJoinRequest;
 import com.ashy0019.hapticscape.remote.RemotePermissions;
+import com.ashy0019.hapticscape.remote.RemotePairingService;
 import com.ashy0019.hapticscape.remote.RemoteRole;
 import com.ashy0019.hapticscape.remote.RemoteSessionListener;
 import com.ashy0019.hapticscape.remote.RemoteSessionManager;
@@ -208,6 +211,8 @@ public final class HapticScapePanel extends PluginPanel
 		UpdatePreferencesStore updatePreferencesStore,
 		UpdateCheckService updateCheckService,
 		RemoteSessionManager remoteSessionManager,
+		RemotePairingService remotePairingService,
+		DiscordPairingBridge discordPairingBridge,
 		SettingsLockService settingsLockService,
 		Consumer<RogueFeedbackEvent> rogueFeedbackAction,
 		Runnable rogueUnlockSoundAction,
@@ -412,6 +417,8 @@ public final class HapticScapePanel extends PluginPanel
 			config,
 			configManager,
 			remoteSessionManager,
+			remotePairingService,
+			discordPairingBridge,
 			settingsLockDraft
 		);
 		roguePanel = new RoguePanel(configManager, rogueFeedbackAction);
@@ -585,6 +592,28 @@ public final class HapticScapePanel extends PluginPanel
 	public int getIntensityPercent()
 	{
 		return intensityPercent;
+	}
+
+	public void showDiscordRemoteView()
+	{
+		showRemoteView();
+	}
+
+	public boolean confirmDiscordRemoteControl(DiscordJoinRequest request)
+	{
+		showRemoteView();
+		return remoteControlPanel.confirmDiscordRemoteControl(request);
+	}
+
+	public void showDiscordPairingError(String message)
+	{
+		showRemoteView();
+		JOptionPane.showMessageDialog(
+			this,
+			message,
+			"Discord Remote Play",
+			JOptionPane.ERROR_MESSAGE
+		);
 	}
 
 	public int getMinimumXpGain()

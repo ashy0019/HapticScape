@@ -1,5 +1,6 @@
 package com.ashy0019.hapticscape;
 
+import com.ashy0019.hapticscape.remote.DiscordDeepLinkInbox;
 import net.runelite.client.RuneLite;
 import net.runelite.client.externalplugins.ExternalPluginManager;
 
@@ -18,6 +19,7 @@ public final class HapticScapeClient
 
 	public static void main(String[] args) throws Exception
 	{
+		DiscordDeepLinkInbox.getInstance().start();
 		ExternalPluginManager.loadBuiltin(HapticScapePlugin.class);
 		RuneLite.main(args);
 	}

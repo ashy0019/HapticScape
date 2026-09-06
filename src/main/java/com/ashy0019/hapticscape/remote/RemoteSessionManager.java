@@ -462,6 +462,14 @@ public final class RemoteSessionManager implements AutoCloseable
 
 	public synchronized void joinParticipant(String encodedInvitation)
 	{
+		validateParticipantJoin();
+		endSessionInternal(false, "Joining a new remote session");
+		beginSession(RemoteRole.PARTICIPANT, RemoteInvitation.parse(encodedInvitation));
+	}
+
+	/** Validates local preconditions before a one-use connection code is redeemed. */
+	public synchronized void validateParticipantJoin()
+	{
 		requireOpen();
 		if (settingsLockService.isLocked())
 		{
@@ -469,8 +477,6 @@ public final class RemoteSessionManager implements AutoCloseable
 				"Unlock local feedback settings before joining another Remote Control session"
 			);
 		}
-		endSessionInternal(false, "Joining a new remote session");
-		beginSession(RemoteRole.PARTICIPANT, RemoteInvitation.parse(encodedInvitation));
 	}
 
 	public synchronized void emergencyPause()

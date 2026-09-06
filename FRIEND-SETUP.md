@@ -17,6 +17,11 @@ It is not endorsed by RuneLite or Jagex.
 5. Run `HapticScape.exe`, open the HapticScape side panel, and connect to
    Intiface.
 
+Running `HapticScape.exe` also registers the `hapticscape://` link handler for
+your Windows account. Discord Remote Play uses it to start or focus HapticScape
+after you select **Accept**. You must still approve the separate local consent
+dialog before a session can begin.
+
 Windows may display a SmartScreen warning because this private build is not
 code-signed. Only run software obtained directly from a person you trust.
 
