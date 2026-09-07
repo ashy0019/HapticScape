@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build:
-    name: Test and verify client
+    name: Test and verify split artifacts
     runs-on: ubuntu-latest
 
     steps:
@@ -39,13 +39,19 @@ jobs:
             --no-daemon \
             clean \
             test \
-            shadowJar \
-            verifyClientJar \
+            verifySplitArtifacts \
             collectRuntimeLicenses
 
-      - name: Upload client JAR
+      - name: Upload standalone desktop JAR
         uses: actions/upload-artifact@v4
         with:
-          name: hapticscape-client-${{ github.sha }}
-          path: build/libs/hapticscape-client.jar
+          name: hapticscape-desktop-${{ github.sha }}
+          path: build/libs/hapticscape-desktop.jar
+          retention-days: 14
+
+      - name: Upload RuneLite bridge JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: hapticscape-runelite-bridge-${{ github.sha }}
+          path: build/libs/hapticscape-runelite-bridge.jar
           retention-days: 14
