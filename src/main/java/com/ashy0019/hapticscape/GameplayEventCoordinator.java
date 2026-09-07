@@ -3,6 +3,7 @@ package com.ashy0019.hapticscape;
 import com.ashy0019.hapticscape.event.ChatEvent;
 import com.ashy0019.hapticscape.event.InventoryChangedEvent;
 import com.ashy0019.hapticscape.event.LootReceivedEvent;
+import com.ashy0019.hapticscape.event.NotificationEvent;
 import com.ashy0019.hapticscape.event.PlayerDeathEvent;
 import com.ashy0019.hapticscape.event.ToxicStatusChangedEvent;
 import com.ashy0019.hapticscape.event.VitalsChangedEvent;
@@ -34,10 +35,8 @@ import net.runelite.api.events.StatChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.gameval.InventoryID;
 import net.runelite.api.gameval.VarPlayerID;
-import net.runelite.client.events.NotificationFired;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.game.ItemStack;
-import net.runelite.client.ui.ClientUI;
 
 /** Tracks RuneLite gameplay state and translates raw events into feedback decisions. */
 final class GameplayEventCoordinator implements AutoCloseable
@@ -58,7 +57,6 @@ final class GameplayEventCoordinator implements AutoCloseable
 	}
 
 	private final Client client;
-	private final ClientUI clientUi;
 	private final Supplier<RemoteSettingsSnapshot> settingsSupplier;
 	private final FeedbackSink feedback;
 	private final XpEventTracker xpTracker = new XpEventTracker();
@@ -82,13 +80,11 @@ final class GameplayEventCoordinator implements AutoCloseable
 
 	GameplayEventCoordinator(
 		Client client,
-		ClientUI clientUi,
 		ItemManager itemManager,
 		Supplier<RemoteSettingsSnapshot> settingsSupplier,
 		FeedbackSink feedback)
 	{
 		this.client = Objects.requireNonNull(client, "client");
-		this.clientUi = Objects.requireNonNull(clientUi, "clientUi");
 		this.lootEventAdapter = new RuneLiteLootEventAdapter(
 			Objects.requireNonNull(itemManager, "itemManager")
 		);
@@ -238,15 +234,15 @@ final class GameplayEventCoordinator implements AutoCloseable
 		dispatchSpecificAlert(AlertCategory.PLAYER_DEATH);
 	}
 
-	void onNotificationFired(NotificationFired event)
+	void onNotificationEvent(NotificationEvent event)
 	{
+		Objects.requireNonNull(event, "event");
 		RemoteSettingsSnapshot effective = settingsSupplier.get();
 		NotificationFeedbackSettings settings = effective.getNotificationFeedbackSettings();
 		if (!GenericNotificationDecision.shouldDispatch(
+			event,
 			settings,
-			effective.isGenericNotificationClickEnabled(),
-			clientUi.isFocused(),
-			event.getNotification().isSendWhenFocused()
+			effective.isGenericNotificationClickEnabled()
 		))
 		{
 			return;

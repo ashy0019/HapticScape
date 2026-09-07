@@ -179,7 +179,7 @@ public final class RemoteSettingsSnapshot
 		);
 		values.put(
 			HapticScapeConfig.NOTIFICATION_RESPECT_FOCUS_KEY,
-			notifications.isRespectRuneLiteFocus()
+			notifications.isRespectSourceFocus()
 		);
 		values.put(HapticScapeConfig.ALERT_PROFILES_KEY, getAlertProfiles().toConfigValue());
 		values.put(

@@ -23,6 +23,7 @@ import com.ashy0019.hapticscape.remote.RemotePairingService;
 import com.ashy0019.hapticscape.remote.RemoteSessionListener;
 import com.ashy0019.hapticscape.remote.RemoteSessionManager;
 import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
+import com.ashy0019.hapticscape.integration.runelite.RuneLiteNotificationEventAdapter;
 import com.ashy0019.hapticscape.remote.RemoteSettingsSnapshot;
 import com.ashy0019.hapticscape.remote.SettingsLockService;
 import com.ashy0019.hapticscape.ui.HapticScapePanel;
@@ -84,6 +85,8 @@ public class HapticScapePlugin extends Plugin
 	private static final float ROGUE_UNLOCK_STING_GAIN_DB = -4.0f;
 	private final Level99CelebrationController level99CelebrationController =
 		new Level99CelebrationController();
+	private final RuneLiteNotificationEventAdapter notificationEventAdapter =
+		new RuneLiteNotificationEventAdapter();
 	private GameplayEventCoordinator gameplayEvents;
 	private FeedbackCoordinator feedbackCoordinator;
 	private GatedIntifaceService intifaceService;
@@ -200,7 +203,6 @@ public class HapticScapePlugin extends Plugin
 		});
 		gameplayEvents = new GameplayEventCoordinator(
 			client,
-			clientUI,
 			itemManager,
 			this::effectiveSettings,
 			feedbackCoordinator
@@ -470,7 +472,9 @@ public class HapticScapePlugin extends Plugin
 		GameplayEventCoordinator events = gameplayEvents;
 		if (events != null)
 		{
-			events.onNotificationFired(event);
+			events.onNotificationEvent(
+				notificationEventAdapter.adapt(event, clientUI.isFocused())
+			);
 		}
 	}
 

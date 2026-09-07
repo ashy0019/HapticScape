@@ -10,20 +10,20 @@ public final class NotificationFeedbackSettings
 	public static final int MAXIMUM_DURATION_MILLIS = 10_000;
 
 	private final boolean enabled;
-	private final boolean respectRuneLiteFocus;
+	private final boolean respectSourceFocus;
 	private final int intensityPercent;
 	private final int durationMillis;
 	private final HapticPatternSelection patternSelection;
 
 	public NotificationFeedbackSettings(
 		boolean enabled,
-		boolean respectRuneLiteFocus,
+		boolean respectSourceFocus,
 		int intensityPercent,
 		int durationMillis,
 		HapticPatternSelection patternSelection)
 	{
 		this.enabled = enabled;
-		this.respectRuneLiteFocus = respectRuneLiteFocus;
+		this.respectSourceFocus = respectSourceFocus;
 		this.intensityPercent = requireRange(
 			intensityPercent,
 			MINIMUM_INTENSITY_PERCENT,
@@ -44,9 +44,9 @@ public final class NotificationFeedbackSettings
 		return enabled;
 	}
 
-	public boolean isRespectRuneLiteFocus()
+	public boolean isRespectSourceFocus()
 	{
-		return respectRuneLiteFocus;
+		return respectSourceFocus;
 	}
 
 	public int getIntensityPercent()
@@ -64,14 +64,14 @@ public final class NotificationFeedbackSettings
 		return patternSelection;
 	}
 
-	public boolean shouldPlay(boolean runeLiteFocused, boolean notificationSendsWhenFocused)
+	public boolean shouldPlay(boolean sourceFocused, boolean sendWhenFocused)
 	{
-		return enabled && allowsFocus(runeLiteFocused, notificationSendsWhenFocused);
+		return enabled && allowsFocus(sourceFocused, sendWhenFocused);
 	}
 
-	public boolean allowsFocus(boolean runeLiteFocused, boolean notificationSendsWhenFocused)
+	public boolean allowsFocus(boolean sourceFocused, boolean sendWhenFocused)
 	{
-		return !respectRuneLiteFocus || !runeLiteFocused || notificationSendsWhenFocused;
+		return !respectSourceFocus || !sourceFocused || sendWhenFocused;
 	}
 
 	private static int requireRange(int value, int minimum, int maximum, String name)

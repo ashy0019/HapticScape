@@ -275,7 +275,7 @@ final class AlertsPanel extends JPanel
 	{
 		genericEnabled = genericSettings.isEnabled();
 		genericClickEnabled = displayedGenericClickEnabled;
-		respectFocus = genericSettings.isRespectRuneLiteFocus();
+		respectFocus = genericSettings.isRespectSourceFocus();
 		genericIntensityPercent = genericSettings.getIntensityPercent();
 		genericDurationMillis = genericSettings.getDurationMillis();
 		genericPattern = genericSettings.getPatternSelection().resolveAgainst(library);
