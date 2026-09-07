@@ -2,6 +2,7 @@ package com.ashy0019.hapticscape;
 
 import com.ashy0019.hapticscape.event.ChatEvent;
 import com.ashy0019.hapticscape.event.InventoryChangedEvent;
+import com.ashy0019.hapticscape.event.LootReceivedEvent;
 import com.ashy0019.hapticscape.event.PlayerDeathEvent;
 import com.ashy0019.hapticscape.event.ToxicStatusChangedEvent;
 import com.ashy0019.hapticscape.event.VitalsChangedEvent;
@@ -9,6 +10,7 @@ import com.ashy0019.hapticscape.event.XpEvent;
 import com.ashy0019.hapticscape.event.XpEventTracker;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteChatEventAdapter;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteInventoryEventAdapter;
+import com.ashy0019.hapticscape.integration.runelite.RuneLiteLootEventAdapter;
 import com.ashy0019.hapticscape.integration.runelite.RuneLitePlayerDeathEventAdapter;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteToxicStatusEventAdapter;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteVitalsEventAdapter;
@@ -57,7 +59,6 @@ final class GameplayEventCoordinator implements AutoCloseable
 
 	private final Client client;
 	private final ClientUI clientUi;
-	private final ItemManager itemManager;
 	private final Supplier<RemoteSettingsSnapshot> settingsSupplier;
 	private final FeedbackSink feedback;
 	private final XpEventTracker xpTracker = new XpEventTracker();
@@ -65,6 +66,7 @@ final class GameplayEventCoordinator implements AutoCloseable
 	private final RuneLiteChatEventAdapter chatEventAdapter = new RuneLiteChatEventAdapter();
 	private final RuneLiteInventoryEventAdapter inventoryEventAdapter =
 		new RuneLiteInventoryEventAdapter();
+	private final RuneLiteLootEventAdapter lootEventAdapter;
 	private final RuneLitePlayerDeathEventAdapter playerDeathEventAdapter =
 		new RuneLitePlayerDeathEventAdapter();
 	private final RuneLiteToxicStatusEventAdapter toxicStatusEventAdapter =
@@ -87,7 +89,9 @@ final class GameplayEventCoordinator implements AutoCloseable
 	{
 		this.client = Objects.requireNonNull(client, "client");
 		this.clientUi = Objects.requireNonNull(clientUi, "clientUi");
-		this.itemManager = Objects.requireNonNull(itemManager, "itemManager");
+		this.lootEventAdapter = new RuneLiteLootEventAdapter(
+			Objects.requireNonNull(itemManager, "itemManager")
+		);
 		this.settingsSupplier = Objects.requireNonNull(settingsSupplier, "settingsSupplier");
 		this.feedback = Objects.requireNonNull(feedback, "feedback");
 	}
@@ -207,19 +211,17 @@ final class GameplayEventCoordinator implements AutoCloseable
 			return;
 		}
 
+		handleLootReceivedEvent(lootEventAdapter.adapt(items));
+	}
+
+	void handleLootReceivedEvent(LootReceivedEvent event)
+	{
+		Objects.requireNonNull(event, "event");
 		long minimumValue = settingsSupplier.get().getAlertTriggerSettings()
 			.get(AlertCategory.VALUABLE_DROP);
-		long totalValue = 0;
-		for (ItemStack item : items)
+		if (LootAlertDecision.shouldAlert(event, minimumValue))
 		{
-			int unitPrice = Math.max(0, itemManager.getItemPrice(item.getId()));
-			int quantity = Math.max(0, item.getQuantity());
-			totalValue += (long) unitPrice * quantity;
-			if (totalValue >= minimumValue)
-			{
-				dispatchSpecificAlert(AlertCategory.VALUABLE_DROP);
-				return;
-			}
+			dispatchSpecificAlert(AlertCategory.VALUABLE_DROP);
 		}
 	}
 
