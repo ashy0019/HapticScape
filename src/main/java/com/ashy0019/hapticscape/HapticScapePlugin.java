@@ -15,6 +15,7 @@ import com.ashy0019.hapticscape.remote.DiscordJoinRequest;
 import com.ashy0019.hapticscape.remote.DiscordPairingBridge;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteDesktopNotificationService;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteGameplayBridge;
+import com.ashy0019.hapticscape.integration.runelite.RuneLiteRuntimeMode;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteHapticScapePluginPanel;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteLevel99CelebrationOverlay;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteSkillCatalog;
@@ -118,6 +119,13 @@ public class HapticScapePlugin extends Plugin
 	@Override
 	protected void startUp()
 	{
+		if (RuneLiteRuntimeMode.usesExternalRuntime())
+		{
+			startGameplayBridge(LocalhostTransportEndpoint.DEFAULT_PORT);
+			log.info("HapticScape RuneLite bridge connected to standalone runtime");
+			return;
+		}
+
 		SkillCatalog skillCatalog = RuneLiteSkillCatalog.getNeutralCatalog();
 		HapticScapeStoragePaths storagePaths = RuneLiteStoragePaths.create();
 		SettingsStore settingsStore =
@@ -145,14 +153,7 @@ public class HapticScapePlugin extends Plugin
 		);
 		overlayManager.add(level99CelebrationOverlay);
 
-		TransportWireCodec gameplayTransportCodec = new TransportWireCodec(gson);
-		gameplayTransport = new LocalhostGameplayEventTransport(
-			"runelite",
-			gameplayTransportCodec,
-			runtime.getGameplayTransportPort()
-		);
-		gameplayBridge = new RuneLiteGameplayBridge(client, itemManager, gameplayTransport);
-		gameplayBridge.start();
+		startGameplayBridge(runtime.getGameplayTransportPort());
 
 		panelHost = new RuneLiteHapticScapePluginPanel();
 		panel = new HapticScapePanel(
@@ -238,6 +239,28 @@ public class HapticScapePlugin extends Plugin
 		DesktopDiscordDeepLinkInbox.getInstance().setHandler(discordPairingBridge::acceptDeepLink);
 
 		log.info("HapticScape started");
+	}
+
+	private void startGameplayBridge(int port)
+	{
+		TransportWireCodec codec = new TransportWireCodec(gson);
+		LocalhostGameplayEventTransport transport = new LocalhostGameplayEventTransport(
+			"runelite",
+			codec,
+			port
+		);
+		RuneLiteGameplayBridge bridge = new RuneLiteGameplayBridge(client, itemManager, transport);
+		try
+		{
+			bridge.start();
+		}
+		catch (RuntimeException failure)
+		{
+			transport.close();
+			throw failure;
+		}
+		gameplayTransport = transport;
+		gameplayBridge = bridge;
 	}
 
 	@Override

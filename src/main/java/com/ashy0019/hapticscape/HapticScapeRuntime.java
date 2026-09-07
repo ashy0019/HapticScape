@@ -161,7 +161,10 @@ public final class HapticScapeRuntime implements AutoCloseable
             gameplayEvents.start();
             gameplayTransportServer = new LocalhostGameplayEventServer(
                 new TransportWireCodec(dependencies.getGson()),
-                gameplayEvents,
+                new ResetAwareGameplayEventSink(
+                    gameplayEvents,
+                    level99CelebrationController::reset
+                ),
                 dependencies.getGameplayPort()
             );
 
