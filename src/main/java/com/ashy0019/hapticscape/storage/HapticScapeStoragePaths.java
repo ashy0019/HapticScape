@@ -24,6 +24,11 @@ public final class HapticScapeStoragePaths
 		return dataDirectory;
 	}
 
+	public Path getSettingsPath()
+	{
+		return dataDirectory.resolve("settings.properties");
+	}
+
 	public Path getSavedUnlockKeysPath()
 	{
 		return dataDirectory.resolve("saved-unlock-keys.json");

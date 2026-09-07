@@ -14,6 +14,7 @@ public class HapticScapeStoragePathsTest
 		HapticScapeStoragePaths paths = new HapticScapeStoragePaths(root);
 
 		assertEquals(root, paths.getDataDirectory());
+		assertEquals(root.resolve("settings.properties"), paths.getSettingsPath());
 		assertEquals(root.resolve("saved-unlock-keys.json"), paths.getSavedUnlockKeysPath());
 		assertEquals(root.resolve("settings-lock.json"), paths.getSettingsLockPath());
 		assertEquals(root.resolve("discord-device.json"), paths.getDiscordCredentialPath());

@@ -8,20 +8,20 @@ import static org.junit.Assert.assertEquals;
 public class DesktopStoragePathsTest
 {
 	@Test
-	public void prefersLocalApplicationDataForDeepLinkInbox()
+	public void prefersLocalApplicationDataForApplicationDataDirectory()
 	{
 		assertEquals(
-			Paths.get("local-app-data", "HapticScape", "deep-links"),
-			DesktopStoragePaths.deepLinkInboxPath("local-app-data", "home")
+			Paths.get("local-app-data", "HapticScape"),
+			DesktopStoragePaths.applicationDataDirectory("local-app-data", "home")
 		);
 	}
 
 	@Test
-	public void fallsBackToUserHomeWhenLocalApplicationDataIsMissing()
+	public void fallsBackToUserHomeForApplicationDataDirectory()
 	{
 		assertEquals(
-			Paths.get("home", ".hapticscape", "deep-links"),
-			DesktopStoragePaths.deepLinkInboxPath(null, "home")
+			Paths.get("home", ".hapticscape"),
+			DesktopStoragePaths.applicationDataDirectory(null, "home")
 		);
 	}
 
@@ -29,8 +29,17 @@ public class DesktopStoragePathsTest
 	public void fallsBackToUserHomeWhenLocalApplicationDataIsBlank()
 	{
 		assertEquals(
-			Paths.get("home", ".hapticscape", "deep-links"),
-			DesktopStoragePaths.deepLinkInboxPath("   ", "home")
+			Paths.get("home", ".hapticscape"),
+			DesktopStoragePaths.applicationDataDirectory("   ", "home")
+		);
+	}
+
+	@Test
+	public void deepLinkInboxLivesUnderApplicationDataDirectory()
+	{
+		assertEquals(
+			Paths.get("local-app-data", "HapticScape", "deep-links"),
+			DesktopStoragePaths.deepLinkInboxPath("local-app-data", "home")
 		);
 	}
 }
