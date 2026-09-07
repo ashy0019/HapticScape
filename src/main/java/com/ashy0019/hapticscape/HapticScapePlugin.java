@@ -12,8 +12,8 @@ import com.ashy0019.hapticscape.device.HapticRequest;
 import com.ashy0019.hapticscape.music.MusicResponse;
 import com.ashy0019.hapticscape.music.MusicSyncService;
 import com.ashy0019.hapticscape.music.MusicSyncSettings;
-import com.ashy0019.hapticscape.protocol.EventWireCodec;
 import com.ashy0019.hapticscape.protocol.InProcessWireGameplayEventTransport;
+import com.ashy0019.hapticscape.protocol.TransportWireCodec;
 import com.ashy0019.hapticscape.integration.desktop.DesktopAudioCaptureSources;
 import com.ashy0019.hapticscape.remote.DiscordCredentialStore;
 import com.ashy0019.hapticscape.integration.desktop.AwtExternalLinkOpener;
@@ -237,7 +237,8 @@ public class HapticScapePlugin extends Plugin
 		);
 		gameplayEvents.start();
 		GameplayEventSink gameplayTransport = new InProcessWireGameplayEventTransport(
-			new EventWireCodec(gson),
+			"runelite",
+			new TransportWireCodec(gson),
 			gameplayEvents
 		);
 		gameplayBridge = new RuneLiteGameplayBridge(client, itemManager, gameplayTransport);

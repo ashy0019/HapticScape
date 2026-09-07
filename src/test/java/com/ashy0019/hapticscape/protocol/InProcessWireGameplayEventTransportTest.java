@@ -92,7 +92,7 @@ public class InProcessWireGameplayEventTransportTest
 	}
 
 	@Test
-	public void resetSourceStateRemainsAControlSignal()
+	public void resetSourceStateRoundTripsAsAControlSignal()
 	{
 		RecordingSink downstream = new RecordingSink();
 		InProcessWireGameplayEventTransport transport = transport(downstream);
@@ -105,7 +105,8 @@ public class InProcessWireGameplayEventTransportTest
 	private static InProcessWireGameplayEventTransport transport(GameplayEventSink downstream)
 	{
 		return new InProcessWireGameplayEventTransport(
-			new EventWireCodec(new Gson()),
+			"runelite",
+			new TransportWireCodec(new Gson()),
 			downstream
 		);
 	}

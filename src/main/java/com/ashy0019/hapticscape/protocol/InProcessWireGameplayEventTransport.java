@@ -13,34 +13,32 @@ import com.ashy0019.hapticscape.event.XpEvent;
 import java.util.Objects;
 
 /**
- * In-process proof transport that deliberately round-trips every gameplay
- * event through the versioned wire codec before delivering it to core.
- *
- * <p>This keeps the application in one JVM while exercising the exact event
- * serialization and generic dispatch boundary that a later localhost
- * transport will use.</p>
+ * In-process proof transport that exercises the full transport framing,
+ * handshake, event-wire codec, and receiver dispatch contract without a socket.
  */
 public final class InProcessWireGameplayEventTransport implements GameplayEventSink
 {
-	private final EventWireCodec codec;
-	private final GameplayEventDispatcher dispatcher;
+	private final String source;
+	private final TransportWireCodec codec;
+	private final TransportSessionReceiver receiver;
 
 	public InProcessWireGameplayEventTransport(
-		EventWireCodec codec,
+		String source,
+		TransportWireCodec codec,
 		GameplayEventSink downstream)
 	{
+		this.source = TransportMessage.requireIdentifier(source, "source");
 		this.codec = Objects.requireNonNull(codec, "codec");
-		this.dispatcher = new GameplayEventDispatcher(
+		this.receiver = new TransportSessionReceiver(
 			Objects.requireNonNull(downstream, "downstream")
 		);
+		negotiate();
 	}
 
 	@Override
 	public void resetSourceState()
 	{
-		// Source lifecycle is a transport control signal rather than a gameplay
-		// event. Phase 3C will give control signals their localhost framing.
-		dispatcher.resetSourceState();
+		send(new TransportMessage.Reset(source));
 	}
 
 	@Override
@@ -109,19 +107,86 @@ public final class InProcessWireGameplayEventTransport implements GameplayEventS
 		publish(event);
 	}
 
+	private void negotiate()
+	{
+		TransportMessage response = roundTripResponse(new TransportMessage.Hello(
+			source,
+			EventProtocol.NAME,
+			EventProtocol.VERSION
+		));
+		if (!(response instanceof TransportMessage.HelloAck))
+		{
+			throw rejection(response, "Transport hello was not acknowledged");
+		}
+		TransportMessage.HelloAck ack = (TransportMessage.HelloAck) response;
+		if (!EventProtocol.NAME.equals(ack.getEventProtocol())
+			|| ack.getEventVersion() != EventProtocol.VERSION)
+		{
+			throw new TransportProtocolException("Transport hello acknowledged incompatible event protocol");
+		}
+	}
+
 	private void publish(HapticScapeEvent event)
 	{
-		dispatcher.publish(roundTrip(event));
+		send(new TransportMessage.Event(
+			TransportMessage.EventOperation.PUBLISH,
+			requireSource(event)
+		));
 	}
 
 	private void seed(HapticScapeEvent event)
 	{
-		dispatcher.seed(roundTrip(event));
+		send(new TransportMessage.Event(
+			TransportMessage.EventOperation.SEED,
+			requireSource(event)
+		));
 	}
 
-	private HapticScapeEvent roundTrip(HapticScapeEvent event)
+	private HapticScapeEvent requireSource(HapticScapeEvent event)
 	{
 		Objects.requireNonNull(event, "event");
-		return codec.decode(codec.encode(event));
+		if (!source.equals(event.getSource()))
+		{
+			throw new TransportProtocolException(
+				"Event source does not match transport source: " + event.getSource()
+			);
+		}
+		return event;
+	}
+
+	private void send(TransportMessage message)
+	{
+		TransportMessage decoded = codec.decode(codec.encode(message));
+		TransportMessage response = receiver.receive(decoded);
+		if (response != null)
+		{
+			TransportMessage roundTrippedResponse = codec.decode(codec.encode(response));
+			throw rejection(roundTrippedResponse, "Transport rejected message");
+		}
+	}
+
+	private TransportMessage roundTripResponse(TransportMessage message)
+	{
+		TransportMessage decoded = codec.decode(codec.encode(message));
+		TransportMessage response = receiver.receive(decoded);
+		if (response == null)
+		{
+			throw new TransportProtocolException("Transport control message produced no response");
+		}
+		return codec.decode(codec.encode(response));
+	}
+
+	private static TransportProtocolException rejection(
+		TransportMessage response,
+		String fallback)
+	{
+		if (response instanceof TransportMessage.Error)
+		{
+			TransportMessage.Error error = (TransportMessage.Error) response;
+			return new TransportProtocolException(
+				"Transport error [" + error.getCode() + "]: " + error.getMessage()
+			);
+		}
+		return new TransportProtocolException(fallback);
 	}
 }

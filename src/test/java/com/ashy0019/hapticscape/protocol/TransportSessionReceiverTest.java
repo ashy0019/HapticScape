@@ -1,0 +1,193 @@
+package com.ashy0019.hapticscape.protocol;
+
+import com.ashy0019.hapticscape.GameplayEventSink;
+import com.ashy0019.hapticscape.event.ChatEvent;
+import com.ashy0019.hapticscape.event.InventoryChangedEvent;
+import com.ashy0019.hapticscape.event.LootReceivedEvent;
+import com.ashy0019.hapticscape.event.NotificationEvent;
+import com.ashy0019.hapticscape.event.PlayerDeathEvent;
+import com.ashy0019.hapticscape.event.ToxicStatusChangedEvent;
+import com.ashy0019.hapticscape.event.VitalsChangedEvent;
+import com.ashy0019.hapticscape.event.XpEvent;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+
+public class TransportSessionReceiverTest
+{
+	@Test
+	public void requiresHelloAndNegotiatesEventProtocol()
+	{
+		RecordingSink sink = new RecordingSink();
+		TransportSessionReceiver receiver = new TransportSessionReceiver(sink);
+
+		TransportMessage response = receiver.receive(new TransportMessage.Reset("runelite"));
+		assertError("hello_required", response);
+		assertFalse(receiver.isReady());
+
+		response = receiver.receive(new TransportMessage.Hello(
+			"runelite",
+			EventProtocol.NAME,
+			EventProtocol.VERSION
+		));
+		assertTrue(response instanceof TransportMessage.HelloAck);
+		assertTrue(receiver.isReady());
+		assertEquals("runelite", receiver.getSource());
+	}
+
+	@Test
+	public void rejectsUnsupportedEventVersion()
+	{
+		TransportSessionReceiver receiver = new TransportSessionReceiver(new RecordingSink());
+		TransportMessage response = receiver.receive(new TransportMessage.Hello(
+			"runelite",
+			EventProtocol.NAME,
+			EventProtocol.VERSION + 1
+		));
+
+		assertError("unsupported_event_version", response);
+		assertFalse(receiver.isReady());
+	}
+
+	@Test
+	public void dispatchesPublishSeedAndResetAfterHello()
+	{
+		RecordingSink sink = new RecordingSink();
+		TransportSessionReceiver receiver = ready(sink);
+
+		assertNull(receiver.receive(new TransportMessage.Event(
+			TransportMessage.EventOperation.PUBLISH,
+			new PlayerDeathEvent("runelite")
+		)));
+		assertEquals(1, sink.deathCount);
+
+		assertNull(receiver.receive(new TransportMessage.Event(
+			TransportMessage.EventOperation.SEED,
+			new InventoryChangedEvent("runelite", 12, 28)
+		)));
+		assertEquals(1, sink.seedInventoryCount);
+
+		assertNull(receiver.receive(new TransportMessage.Reset("runelite")));
+		assertEquals(1, sink.resetCount);
+	}
+
+	@Test
+	public void rejectsMessagesFromAnotherSource()
+	{
+		RecordingSink sink = new RecordingSink();
+		TransportSessionReceiver receiver = ready(sink);
+
+		TransportMessage response = receiver.receive(new TransportMessage.Event(
+			TransportMessage.EventOperation.PUBLISH,
+			new PlayerDeathEvent("other-source")
+		));
+		assertError("source_mismatch", response);
+		assertEquals(0, sink.deathCount);
+
+		response = receiver.receive(new TransportMessage.Reset("other-source"));
+		assertError("source_mismatch", response);
+		assertEquals(0, sink.resetCount);
+	}
+
+	@Test
+	public void rejectsInvalidSeedEventFamily()
+	{
+		TransportSessionReceiver receiver = ready(new RecordingSink());
+		TransportMessage response = receiver.receive(new TransportMessage.Event(
+			TransportMessage.EventOperation.SEED,
+			new PlayerDeathEvent("runelite")
+		));
+		assertError("invalid_event_operation", response);
+	}
+
+	private static TransportSessionReceiver ready(RecordingSink sink)
+	{
+		TransportSessionReceiver receiver = new TransportSessionReceiver(sink);
+		TransportMessage response = receiver.receive(new TransportMessage.Hello(
+			"runelite",
+			EventProtocol.NAME,
+			EventProtocol.VERSION
+		));
+		assertTrue(response instanceof TransportMessage.HelloAck);
+		return receiver;
+	}
+
+	private static void assertError(String code, TransportMessage message)
+	{
+		assertTrue(message instanceof TransportMessage.Error);
+		assertEquals(code, ((TransportMessage.Error) message).getCode());
+	}
+
+	private static final class RecordingSink implements GameplayEventSink
+	{
+		private int resetCount;
+		private int seedInventoryCount;
+		private int deathCount;
+
+		@Override
+		public void resetSourceState()
+		{
+			resetCount++;
+		}
+
+		@Override
+		public void seedVitals(VitalsChangedEvent event)
+		{
+		}
+
+		@Override
+		public void seedInventory(InventoryChangedEvent event)
+		{
+			seedInventoryCount++;
+		}
+
+		@Override
+		public void seedToxicStatus(ToxicStatusChangedEvent event)
+		{
+		}
+
+		@Override
+		public void onXpEvent(XpEvent event)
+		{
+		}
+
+		@Override
+		public void onChatEvent(ChatEvent event)
+		{
+		}
+
+		@Override
+		public void onVitalsEvent(VitalsChangedEvent event)
+		{
+		}
+
+		@Override
+		public void onInventoryEvent(InventoryChangedEvent event)
+		{
+		}
+
+		@Override
+		public void onToxicStatusEvent(ToxicStatusChangedEvent event)
+		{
+		}
+
+		@Override
+		public void onLootEvent(LootReceivedEvent event)
+		{
+		}
+
+		@Override
+		public void onPlayerDeathEvent(PlayerDeathEvent event)
+		{
+			deathCount++;
+		}
+
+		@Override
+		public void onNotificationEvent(NotificationEvent event)
+		{
+		}
+	}
+}
