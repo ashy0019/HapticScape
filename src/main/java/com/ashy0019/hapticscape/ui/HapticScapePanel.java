@@ -7,6 +7,7 @@ import com.ashy0019.hapticscape.CustomPatternEntry;
 import com.ashy0019.hapticscape.CustomPatternLibrary;
 import com.ashy0019.hapticscape.HapticPatternSelection;
 import com.ashy0019.hapticscape.HapticScapeConfig;
+import com.ashy0019.hapticscape.HapticScapeSettingKeys;
 import com.ashy0019.hapticscape.NotificationFeedbackSettings;
 import com.ashy0019.hapticscape.SkillFeedbackProfiles;
 import com.ashy0019.hapticscape.SkillSelection;
@@ -38,6 +39,7 @@ import com.ashy0019.hapticscape.remote.SettingsLockListener;
 import com.ashy0019.hapticscape.remote.SettingsLockService;
 import com.ashy0019.hapticscape.remote.SettingsLockSnapshot;
 import com.ashy0019.hapticscape.remote.SettingsLockTarget;
+import com.ashy0019.hapticscape.remote.SettingsStore;
 import com.ashy0019.hapticscape.rogue.ui.RogueLauncherPanel;
 import com.ashy0019.hapticscape.rogue.ui.RoguePanel;
 import com.ashy0019.hapticscape.update.UpdateCheckService;
@@ -79,7 +81,6 @@ import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.text.JTextComponent;
 import net.runelite.api.Skill;
-import net.runelite.client.config.ConfigManager;
 import net.runelite.client.ui.PluginPanel;
 
 public final class HapticScapePanel extends PluginPanel
@@ -87,8 +88,6 @@ public final class HapticScapePanel extends PluginPanel
 {
 	private static final int DEVELOPER_UNLOCK_CLICKS = 9;
 	private static final long DEVELOPER_UNLOCK_WINDOW_NANOS = TimeUnit.SECONDS.toNanos(4);
-	private static final String ROGUE_UNLOCKED_KEY = "rogueUnlocked";
-	private static final String ROGUE_UNLOCK_STING_PLAYED_KEY = "rogueUnlockStingPlayed";
 	private static final String NORMAL_CARD = "normal";
 	private static final String REMOTE_CARD = "remote";
 	private static final String ROGUE_CARD = "rogue";
@@ -102,7 +101,7 @@ public final class HapticScapePanel extends PluginPanel
 		"<html><b>Post-session lock</b><br>armed after session</html>";
 
 	private final HapticScapeConfig config;
-	private final ConfigManager configManager;
+	private final SettingsStore settingsStore;
 	private final Consumer<RogueFeedbackEvent> rogueFeedbackAction;
 	private final Runnable rogueUnlockSoundAction;
 	private final KonamiCodeDetector konamiCodeDetector = new KonamiCodeDetector();
@@ -195,7 +194,7 @@ public final class HapticScapePanel extends PluginPanel
 
 	public HapticScapePanel(
 		HapticScapeConfig config,
-		ConfigManager configManager,
+		SettingsStore settingsStore,
 		Runnable connectAction,
 		Runnable disconnectAction,
 		Runnable testAction,
@@ -220,7 +219,7 @@ public final class HapticScapePanel extends PluginPanel
 	{
 		super();
 		this.config = config;
-		this.configManager = configManager;
+		this.settingsStore = settingsStore;
 		this.remoteSessionManager = remoteSessionManager;
 		this.settingsLockService = settingsLockService;
 		this.rogueFeedbackAction = rogueFeedbackAction;
@@ -415,13 +414,13 @@ public final class HapticScapePanel extends PluginPanel
 		updatesPanel = new UpdatesPanel(updatePreferencesStore, updateCheckService);
 		remoteControlPanel = new RemoteControlPanel(
 			config,
-			configManager,
+			settingsStore,
 			remoteSessionManager,
 			remotePairingService,
 			discordPairingBridge,
 			settingsLockDraft
 		);
-		roguePanel = new RoguePanel(configManager, rogueFeedbackAction);
+		roguePanel = new RoguePanel(settingsStore, rogueFeedbackAction);
 		rogueLauncher = new RogueLauncherPanel(this::toggleRogueView);
 
 		tabs = new JTabbedPane(JTabbedPane.TOP, JTabbedPane.SCROLL_TAB_LAYOUT);
@@ -575,7 +574,7 @@ public final class HapticScapePanel extends PluginPanel
 		sidebarActionFocusGuard = SidebarActionFocusGuard.install(this);
 		contentLayout.show(contentHost, NORMAL_CARD);
 
-		if (Boolean.parseBoolean(configManager.getConfiguration(HapticScapeConfig.GROUP, ROGUE_UNLOCKED_KEY)))
+		if (Boolean.parseBoolean(settingsStore.get(HapticScapeSettingKeys.ROGUE_UNLOCKED)))
 		{
 			ensureRogueAccess(false, false);
 		}
@@ -943,7 +942,7 @@ public final class HapticScapePanel extends PluginPanel
 		{
 			return;
 		}
-		configManager.setConfiguration(HapticScapeConfig.GROUP, key, value);
+		settingsStore.set(key, value);
 	}
 
 	private void writeFeedbackSetting(String key, Object value)
@@ -1111,21 +1110,14 @@ public final class HapticScapePanel extends PluginPanel
 	private void unlockRogueMode(boolean celebrate)
 	{
 		boolean firstUnlock = !rogueModeUnlocked;
-		boolean unlockStingPlayed = Boolean.parseBoolean(configManager.getConfiguration(
-			HapticScapeConfig.GROUP,
-			ROGUE_UNLOCK_STING_PLAYED_KEY
-		));
+		boolean unlockStingPlayed = Boolean.parseBoolean(settingsStore.get(HapticScapeSettingKeys.ROGUE_UNLOCK_STING_PLAYED));
 		if (!unlockStingPlayed && rogueUnlockSoundAction != null)
 		{
 			rogueUnlockSoundAction.run();
-			configManager.setConfiguration(
-				HapticScapeConfig.GROUP,
-				ROGUE_UNLOCK_STING_PLAYED_KEY,
-				true
-			);
+			settingsStore.set(HapticScapeSettingKeys.ROGUE_UNLOCK_STING_PLAYED, true);
 		}
 		ensureRogueAccess(true, firstUnlock);
-		configManager.setConfiguration(HapticScapeConfig.GROUP, ROGUE_UNLOCKED_KEY, true);
+		settingsStore.set(HapticScapeSettingKeys.ROGUE_UNLOCKED, true);
 		rogueLauncher.celebrate();
 		roguePanel.reveal();
 		if (celebrate && rogueFeedbackAction != null)
@@ -1203,12 +1195,8 @@ public final class HapticScapePanel extends PluginPanel
 		rogueModeUnlocked = false;
 		konamiCodeDetector.reset();
 		rogueLauncher.resetLocked();
-		configManager.setConfiguration(HapticScapeConfig.GROUP, ROGUE_UNLOCKED_KEY, false);
-		configManager.setConfiguration(
-			HapticScapeConfig.GROUP,
-			ROGUE_UNLOCK_STING_PLAYED_KEY,
-			false
-		);
+		settingsStore.set(HapticScapeSettingKeys.ROGUE_UNLOCKED, false);
+		settingsStore.set(HapticScapeSettingKeys.ROGUE_UNLOCK_STING_PLAYED, false);
 		statusLabel.setText("Rogue discovery reset - enter the Konami code again");
 		developerStatusTimer.restart();
 	}

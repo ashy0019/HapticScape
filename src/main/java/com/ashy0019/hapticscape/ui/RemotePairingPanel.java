@@ -1,6 +1,7 @@
 package com.ashy0019.hapticscape.ui;
 
 import com.ashy0019.hapticscape.HapticScapeConfig;
+import com.ashy0019.hapticscape.HapticScapeSettingKeys;
 import com.ashy0019.hapticscape.remote.DiscordLinkListener;
 import com.ashy0019.hapticscape.remote.DiscordLinkSnapshot;
 import com.ashy0019.hapticscape.remote.DiscordLinkState;
@@ -13,6 +14,7 @@ import com.ashy0019.hapticscape.remote.RemoteRole;
 import com.ashy0019.hapticscape.remote.RemoteSessionManager;
 import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteSessionState;
+import com.ashy0019.hapticscape.remote.SettingsStore;
 import java.awt.BorderLayout;
 import java.awt.Desktop;
 import java.awt.Dimension;
@@ -33,13 +35,12 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
-import net.runelite.client.config.ConfigManager;
 
 /** Owns invitation abstraction, temporary pairing codes, and direct-code fallback UI. */
 final class RemotePairingPanel extends JPanel
 {
 	private final HapticScapeConfig config;
-	private final ConfigManager configManager;
+	private final SettingsStore settingsStore;
 	private final RemoteSessionManager sessionManager;
 	private final RemotePairingService pairingService;
 	private final DiscordPairingBridge discordPairingBridge;
@@ -74,7 +75,7 @@ final class RemotePairingPanel extends JPanel
 
 	RemotePairingPanel(
 		HapticScapeConfig config,
-		ConfigManager configManager,
+		SettingsStore settingsStore,
 		RemoteSessionManager sessionManager,
 		RemotePairingService pairingService,
 		DiscordPairingBridge discordPairingBridge,
@@ -82,7 +83,7 @@ final class RemotePairingPanel extends JPanel
 		Consumer<String> errorSink)
 	{
 		this.config = Objects.requireNonNull(config, "config");
-		this.configManager = Objects.requireNonNull(configManager, "configManager");
+		this.settingsStore = Objects.requireNonNull(settingsStore, "settingsStore");
 		this.sessionManager = Objects.requireNonNull(sessionManager, "sessionManager");
 		this.pairingService = Objects.requireNonNull(pairingService, "pairingService");
 		this.discordPairingBridge = Objects.requireNonNull(
@@ -362,11 +363,7 @@ final class RemotePairingPanel extends JPanel
 		}
 		try
 		{
-			configManager.setConfiguration(
-				HapticScapeConfig.GROUP,
-				HapticScapeConfig.REMOTE_RELAY_URL_KEY,
-				relayUrl
-			);
+			settingsStore.set(HapticScapeSettingKeys.REMOTE_RELAY_URL, relayUrl);
 			pairingBusy = true;
 			long attempt = ++pairingAttempt;
 			statusSink.accept("Creating secure connection code...");
@@ -472,11 +469,7 @@ final class RemotePairingPanel extends JPanel
 			{
 				return;
 			}
-			configManager.setConfiguration(
-				HapticScapeConfig.GROUP,
-				HapticScapeConfig.REMOTE_RELAY_URL_KEY,
-				relayUrl
-			);
+			settingsStore.set(HapticScapeSettingKeys.REMOTE_RELAY_URL, relayUrl);
 			pairingBusy = true;
 			long attempt = ++pairingAttempt;
 			refreshConnectionControls();

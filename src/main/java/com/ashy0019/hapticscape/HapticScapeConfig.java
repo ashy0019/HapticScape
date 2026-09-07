@@ -46,7 +46,7 @@ public interface HapticScapeConfig extends Config, RemoteSettingsSource, RemoteP
 	String CLICKER_GENERIC_NOTIFICATION_ENABLED_KEY = HapticScapeSettingKeys.CLICKER_GENERIC_NOTIFICATION_ENABLED;
 	String CLICKER_ALERT_SETTINGS_KEY = HapticScapeSettingKeys.CLICKER_ALERT_SETTINGS;
 	String CLICKER_PHRASE_RULES_KEY = HapticScapeSettingKeys.CLICKER_PHRASE_RULES;
-	String REMOTE_RELAY_URL_KEY = "remoteRelayUrl";
+	String REMOTE_RELAY_URL_KEY = HapticScapeSettingKeys.REMOTE_RELAY_URL;
 	String DEFAULT_REMOTE_RELAY_URL =
 		"wss://hapticscape-remote-relay.hapticscape.workers.dev/relay";
 	String REMOTE_SETTINGS_ALLOWED_KEY = HapticScapeSettingKeys.REMOTE_SETTINGS_ALLOWED;

@@ -44,6 +44,10 @@ public final class HapticScapeSettingKeys
 	public static final String CLICKER_GENERIC_NOTIFICATION_ENABLED = "clickerGenericNotificationEnabled";
 	public static final String CLICKER_ALERT_SETTINGS = "clickerAlertSettings";
 	public static final String CLICKER_PHRASE_RULES = "clickerPhraseRules";
+	public static final String REMOTE_RELAY_URL = "remoteRelayUrl";
+	public static final String ROGUE_UNLOCKED = "rogueUnlocked";
+	public static final String ROGUE_UNLOCK_STING_PLAYED = "rogueUnlockStingPlayed";
+	public static final String ROGUE_COINS = "rogueCoins";
 	public static final String REMOTE_SETTINGS_ALLOWED = "remoteSettingsAllowed";
 	public static final String REMOTE_HAPTICS_ALLOWED = "remoteHapticsAllowed";
 	public static final String REMOTE_LIVE_HAPTICS_ALLOWED = "remoteLiveHapticsAllowed";

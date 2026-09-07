@@ -19,6 +19,7 @@ import com.ashy0019.hapticscape.remote.RemoteSettingsSnapshot;
 import com.ashy0019.hapticscape.remote.SettingsLockCatalog;
 import com.ashy0019.hapticscape.remote.SettingsLockProposal;
 import com.ashy0019.hapticscape.remote.SettingsLockTarget;
+import com.ashy0019.hapticscape.remote.SettingsStore;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
@@ -43,7 +44,6 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
-import net.runelite.client.config.ConfigManager;
 
 final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 {
@@ -72,7 +72,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 
 	RemoteControlPanel(
 		HapticScapeConfig config,
-		ConfigManager configManager,
+		SettingsStore settingsStore,
 		RemoteSessionManager sessionManager,
 		RemotePairingService pairingService,
 		DiscordPairingBridge discordPairingBridge,
@@ -88,7 +88,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		this.liveForgePanel = new RemoteLiveForgePanel(sessionManager);
 		this.pairingPanel = new RemotePairingPanel(
 			config,
-			configManager,
+			settingsStore,
 			sessionManager,
 			pairingService,
 			discordPairingBridge,

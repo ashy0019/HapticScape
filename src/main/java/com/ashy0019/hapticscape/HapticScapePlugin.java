@@ -26,7 +26,7 @@ import com.ashy0019.hapticscape.integration.runelite.RuneLiteSettingsWriter;
 import com.ashy0019.hapticscape.remote.RemoteSettingsSnapshot;
 import com.ashy0019.hapticscape.remote.SettingsBackedRemotePermissionsStore;
 import com.ashy0019.hapticscape.remote.SettingsBackedRemoteSettingsStore;
-import com.ashy0019.hapticscape.remote.SettingsWriter;
+import com.ashy0019.hapticscape.remote.SettingsStore;
 import com.ashy0019.hapticscape.remote.SettingsLockService;
 import com.ashy0019.hapticscape.ui.HapticScapePanel;
 import com.ashy0019.hapticscape.ui.Level99CelebrationOverlay;
@@ -176,15 +176,15 @@ public class HapticScapePlugin extends Plugin
 			runeLiteConfig,
 			chatMessageManager
 		);
-		SettingsWriter settingsWriter =
+		SettingsStore settingsStore =
 			new RuneLiteSettingsWriter(configManager, HapticScapeConfig.GROUP);
 		remoteSessionManager = new RemoteSessionManager(
 			httpClient,
 			gson,
-			new SettingsBackedRemoteSettingsStore(config, settingsWriter),
+			new SettingsBackedRemoteSettingsStore(config, settingsStore),
 			effectiveSettingsService,
 			settingsLockService,
-			new SettingsBackedRemotePermissionsStore(config, settingsWriter),
+			new SettingsBackedRemotePermissionsStore(config, settingsStore),
 			feedbackCoordinator.createRemoteActionExecutor()
 		);
 		remoteSessionManager.addListener(new RemoteSessionListener()
@@ -224,7 +224,7 @@ public class HapticScapePlugin extends Plugin
 		discordPairingBridge.start();
 		panel = new HapticScapePanel(
 			config,
-			configManager,
+			settingsStore,
 			this::connectToIntiface,
 			intifaceService::disconnect,
 			this::sendTestPattern,
