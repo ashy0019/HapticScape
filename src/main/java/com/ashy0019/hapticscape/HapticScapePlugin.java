@@ -12,7 +12,8 @@ import com.ashy0019.hapticscape.music.MusicSyncService;
 import com.ashy0019.hapticscape.music.MusicSyncSettings;
 import com.ashy0019.hapticscape.music.WasapiLoopbackCapture;
 import com.ashy0019.hapticscape.remote.DiscordCredentialStore;
-import com.ashy0019.hapticscape.remote.DiscordDeepLinkInbox;
+import com.ashy0019.hapticscape.integration.desktop.DesktopDiscordDeepLinkInbox;
+import com.ashy0019.hapticscape.integration.desktop.DesktopSecretProtectors;
 import com.ashy0019.hapticscape.remote.DiscordJoinConsentHandler;
 import com.ashy0019.hapticscape.remote.DiscordJoinRequest;
 import com.ashy0019.hapticscape.remote.DiscordPairingBridge;
@@ -25,6 +26,7 @@ import com.ashy0019.hapticscape.integration.runelite.RuneLiteGameplayBridge;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteStoragePaths;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteSettingsWriter;
 import com.ashy0019.hapticscape.remote.RemoteSettingsSnapshot;
+import com.ashy0019.hapticscape.remote.SavedUnlockKeyStore;
 import com.ashy0019.hapticscape.remote.SettingsBackedRemotePermissionsStore;
 import com.ashy0019.hapticscape.remote.SettingsBackedRemoteSettingsStore;
 import com.ashy0019.hapticscape.remote.SettingsStore;
@@ -181,13 +183,18 @@ public class HapticScapePlugin extends Plugin
 		);
 		SettingsStore settingsStore =
 			new RuneLiteSettingsWriter(configManager, HapticScapeConfig.GROUP);
+		SavedUnlockKeyStore savedUnlockKeyStore = new SavedUnlockKeyStore(
+			gson,
+			storagePaths,
+			DesktopSecretProtectors.savedUnlockKeys()
+		);
 		remoteSessionManager = new RemoteSessionManager(
 			httpClient,
 			gson,
 			new SettingsBackedRemoteSettingsStore(config, settingsStore),
 			effectiveSettingsService,
 			settingsLockService,
-			storagePaths,
+			savedUnlockKeyStore,
 			new SettingsBackedRemotePermissionsStore(config, settingsStore),
 			feedbackCoordinator.createRemoteActionExecutor()
 		);
@@ -223,7 +230,11 @@ public class HapticScapePlugin extends Plugin
 			gson,
 			remoteSessionManager,
 			remotePairingService,
-			new DiscordCredentialStore(gson, storagePaths)
+			new DiscordCredentialStore(
+				gson,
+				storagePaths,
+				DesktopSecretProtectors.discordCredentials()
+			)
 		);
 		discordPairingBridge.start();
 		panel = new HapticScapePanel(
@@ -298,7 +309,7 @@ public class HapticScapePlugin extends Plugin
 				});
 			}
 		});
-		DiscordDeepLinkInbox.getInstance().setHandler(discordPairingBridge::acceptDeepLink);
+		DesktopDiscordDeepLinkInbox.getInstance().setHandler(discordPairingBridge::acceptDeepLink);
 
 		log.info("HapticScape started");
 	}
@@ -306,7 +317,7 @@ public class HapticScapePlugin extends Plugin
 	@Override
 	protected void shutDown()
 	{
-		DiscordDeepLinkInbox.getInstance().setHandler(null);
+		DesktopDiscordDeepLinkInbox.getInstance().setHandler(null);
 		gameplayBridge = null;
 		if (gameplayEvents != null)
 		{

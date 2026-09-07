@@ -15,7 +15,7 @@ import java.util.Optional;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/** Stores one DPAPI-protected credential for the linked Discord account. */
+/** Stores one platform-protected credential for the linked Discord account. */
 public final class DiscordCredentialStore
 {
 	private static final Logger LOG = Logger.getLogger(DiscordCredentialStore.class.getName());
@@ -28,12 +28,15 @@ public final class DiscordCredentialStore
 	private DiscordDeviceCredential credential;
 	private String loadFailure;
 
-	public DiscordCredentialStore(Gson gson, HapticScapeStoragePaths storagePaths)
+	public DiscordCredentialStore(
+		Gson gson,
+		HapticScapeStoragePaths storagePaths,
+		UnlockKeyProtector protector)
 	{
 		this(
 			gson,
 			Objects.requireNonNull(storagePaths, "storagePaths").getDiscordCredentialPath(),
-			new WindowsDpapiDiscordCredentialProtector()
+			Objects.requireNonNull(protector, "protector")
 		);
 	}
 

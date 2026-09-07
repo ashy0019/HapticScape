@@ -1,6 +1,6 @@
 package com.ashy0019.hapticscape.remote;
 
-interface UnlockKeyProtector
+public interface UnlockKeyProtector
 {
 	boolean isAvailable();
 

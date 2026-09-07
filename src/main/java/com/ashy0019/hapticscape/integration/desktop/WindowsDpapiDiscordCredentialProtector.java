@@ -1,4 +1,6 @@
-package com.ashy0019.hapticscape.remote;
+package com.ashy0019.hapticscape.integration.desktop;
+
+import com.ashy0019.hapticscape.remote.UnlockKeyProtector;
 
 import com.sun.jna.Platform;
 import com.sun.jna.platform.win32.Crypt32Util;

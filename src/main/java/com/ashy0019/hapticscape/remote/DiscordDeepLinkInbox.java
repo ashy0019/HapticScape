@@ -5,7 +5,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.attribute.FileTime;
 import java.time.Duration;
 import java.time.Instant;
@@ -18,8 +17,6 @@ import java.util.function.Consumer;
 /** Watches the per-user launcher inbox for validated HapticScape protocol requests. */
 public final class DiscordDeepLinkInbox
 {
-	private static final DiscordDeepLinkInbox INSTANCE =
-		new DiscordDeepLinkInbox(defaultInboxPath());
 	private static final Duration MAXIMUM_AGE = Duration.ofMinutes(5);
 	private static final long MAXIMUM_FILE_BYTES = 2048;
 
@@ -28,7 +25,7 @@ public final class DiscordDeepLinkInbox
 	private volatile Consumer<DiscordDeepLinkRequest> handler;
 	private volatile boolean started;
 
-	DiscordDeepLinkInbox(Path inboxPath)
+	public DiscordDeepLinkInbox(Path inboxPath)
 	{
 		this.inboxPath = inboxPath;
 		this.watcher = Executors.newSingleThreadScheduledExecutor(runnable ->
@@ -37,11 +34,6 @@ public final class DiscordDeepLinkInbox
 			thread.setDaemon(true);
 			return thread;
 		});
-	}
-
-	public static DiscordDeepLinkInbox getInstance()
-	{
-		return INSTANCE;
 	}
 
 	public synchronized void start()
@@ -139,15 +131,5 @@ public final class DiscordDeepLinkInbox
 		{
 			// The inbox is optional until the packaged launcher creates it.
 		}
-	}
-
-	private static Path defaultInboxPath()
-	{
-		String localApplicationData = System.getenv("LOCALAPPDATA");
-		if (localApplicationData != null && !localApplicationData.trim().isEmpty())
-		{
-			return Paths.get(localApplicationData, "HapticScape", "deep-links");
-		}
-		return Paths.get(System.getProperty("user.home"), ".hapticscape", "deep-links");
 	}
 }
