@@ -1,12 +1,16 @@
 package com.ashy0019.hapticscape;
 
 import com.ashy0019.hapticscape.event.ChatEvent;
+import com.ashy0019.hapticscape.event.InventoryChangedEvent;
 import com.ashy0019.hapticscape.event.PlayerDeathEvent;
+import com.ashy0019.hapticscape.event.ToxicStatusChangedEvent;
 import com.ashy0019.hapticscape.event.VitalsChangedEvent;
 import com.ashy0019.hapticscape.event.XpEvent;
 import com.ashy0019.hapticscape.event.XpEventTracker;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteChatEventAdapter;
+import com.ashy0019.hapticscape.integration.runelite.RuneLiteInventoryEventAdapter;
 import com.ashy0019.hapticscape.integration.runelite.RuneLitePlayerDeathEventAdapter;
+import com.ashy0019.hapticscape.integration.runelite.RuneLiteToxicStatusEventAdapter;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteVitalsEventAdapter;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteXpEventAdapter;
 import com.ashy0019.hapticscape.remote.RemoteSettingsSnapshot;
@@ -36,8 +40,6 @@ import net.runelite.client.ui.ClientUI;
 /** Tracks RuneLite gameplay state and translates raw events into feedback decisions. */
 final class GameplayEventCoordinator implements AutoCloseable
 {
-	private static final int VENOM_THRESHOLD = 1_000_000;
-
 	interface FeedbackSink
 	{
 		void handleXp(
@@ -61,17 +63,20 @@ final class GameplayEventCoordinator implements AutoCloseable
 	private final XpEventTracker xpTracker = new XpEventTracker();
 	private final RuneLiteXpEventAdapter xpEventAdapter = new RuneLiteXpEventAdapter();
 	private final RuneLiteChatEventAdapter chatEventAdapter = new RuneLiteChatEventAdapter();
+	private final RuneLiteInventoryEventAdapter inventoryEventAdapter =
+		new RuneLiteInventoryEventAdapter();
 	private final RuneLitePlayerDeathEventAdapter playerDeathEventAdapter =
 		new RuneLitePlayerDeathEventAdapter();
+	private final RuneLiteToxicStatusEventAdapter toxicStatusEventAdapter =
+		new RuneLiteToxicStatusEventAdapter();
 	private final RuneLiteVitalsEventAdapter vitalsEventAdapter =
 		new RuneLiteVitalsEventAdapter();
 	private final VitalsAlertTracker vitalsAlertTracker = new VitalsAlertTracker();
+	private final InventoryAlertTracker inventoryAlertTracker = new InventoryAlertTracker();
+	private final ToxicStatusAlertTracker toxicStatusAlertTracker = new ToxicStatusAlertTracker();
 	private final AlertDeduplicator alertDeduplicator = new AlertDeduplicator();
 
 	private ScheduledExecutorService alertScheduler;
-	private boolean inventoryFullKnown;
-	private boolean inventoryFull;
-	private int poisonState = -1;
 
 	GameplayEventCoordinator(
 		Client client,
@@ -176,20 +181,12 @@ final class GameplayEventCoordinator implements AutoCloseable
 
 	void onItemContainerChanged(ItemContainerChanged event)
 	{
-		if (client.getGameState() != GameState.LOGGED_IN
-			|| event.getContainerId() != InventoryID.INV)
+		if (client.getGameState() != GameState.LOGGED_IN)
 		{
 			return;
 		}
 
-		ItemContainer inventory = event.getItemContainer();
-		boolean full = inventory.size() > 0 && inventory.count() >= inventory.size();
-		if (inventoryFullKnown && !inventoryFull && full)
-		{
-			dispatchSpecificAlert(AlertCategory.INVENTORY_FULL);
-		}
-		inventoryFullKnown = true;
-		inventoryFull = full;
+		inventoryEventAdapter.adapt(event).ifPresent(this::handleInventoryChangedEvent);
 	}
 
 	void onVarbitChanged(VarbitChanged event)
@@ -200,18 +197,7 @@ final class GameplayEventCoordinator implements AutoCloseable
 		}
 
 		vitalsEventAdapter.adapt(event).ifPresent(this::handleVitalsChangedEvent);
-
-		if (event.getVarpId() == VarPlayerID.POISON)
-		{
-			int currentPoisonState = classifyPoisonState(event.getValue());
-			boolean newlyAffected = poisonState == 0 && currentPoisonState > 0;
-			boolean newlyEnvenomed = poisonState == 1 && currentPoisonState == 2;
-			if (poisonState >= 0 && (newlyAffected || newlyEnvenomed))
-			{
-				dispatchSpecificAlert(AlertCategory.POISONED_OR_VENOMED);
-			}
-			poisonState = currentPoisonState;
-		}
+		toxicStatusEventAdapter.adapt(event).ifPresent(this::handleToxicStatusChangedEvent);
 	}
 
 	void onLootReceived(Collection<ItemStack> items)
@@ -327,22 +313,23 @@ final class GameplayEventCoordinator implements AutoCloseable
 			client.getVarpValue(VarPlayerID.SA_ENERGY)
 		));
 
-		poisonState = classifyPoisonState(client.getVarpValue(VarPlayerID.POISON));
+		toxicStatusAlertTracker.seed(toxicStatusEventAdapter.fromVarp(
+			client.getVarpValue(VarPlayerID.POISON)
+		));
 		ItemContainer inventory = client.getItemContainer(InventoryID.INV);
-		inventoryFullKnown = inventory != null;
-		inventoryFull = inventory != null
-			&& inventory.size() > 0
-			&& inventory.count() >= inventory.size();
+		if (inventory != null)
+		{
+			inventoryAlertTracker.seed(inventoryEventAdapter.inventory(inventory));
+		}
 	}
 
 	private void resetTrackers()
 	{
 		xpTracker.reset();
 		vitalsAlertTracker.reset();
+		inventoryAlertTracker.reset();
+		toxicStatusAlertTracker.reset();
 		alertDeduplicator.reset();
-		inventoryFullKnown = false;
-		inventoryFull = false;
-		poisonState = -1;
 	}
 
 	void handleVitalsChangedEvent(VitalsChangedEvent event)
@@ -352,6 +339,19 @@ final class GameplayEventCoordinator implements AutoCloseable
 			event,
 			settingsSupplier.get().getAlertTriggerSettings()
 		).ifPresent(this::dispatchSpecificAlert);
+	}
+
+
+	void handleInventoryChangedEvent(InventoryChangedEvent event)
+	{
+		Objects.requireNonNull(event, "event");
+		inventoryAlertTracker.update(event).ifPresent(this::dispatchSpecificAlert);
+	}
+
+	void handleToxicStatusChangedEvent(ToxicStatusChangedEvent event)
+	{
+		Objects.requireNonNull(event, "event");
+		toxicStatusAlertTracker.update(event).ifPresent(this::dispatchSpecificAlert);
 	}
 
 	private void dispatchSpecificAlert(AlertCategory category)
@@ -365,12 +365,4 @@ final class GameplayEventCoordinator implements AutoCloseable
 		feedback.dispatchSpecificAlert(category, allowClick);
 	}
 
-	static int classifyPoisonState(int poisonValue)
-	{
-		if (poisonValue <= 0)
-		{
-			return 0;
-		}
-		return poisonValue >= VENOM_THRESHOLD ? 2 : 1;
-	}
 }
