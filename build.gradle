@@ -15,6 +15,7 @@ repositories {
 
 def runeLiteVersion = '1.12.38'
 def pluginMainClass = 'com.ashy0019.hapticscape.HapticScapeClient'
+def desktopMainClass = 'com.ashy0019.hapticscape.desktop.HapticScapeDesktopMain'
 def appVersion = providers.gradleProperty('appVersion').orElse('development')
 version = appVersion.get()
 def approvedRuntimeModules = [
@@ -54,6 +55,21 @@ def approvedRuntimeModules = [
 	'org.slf4j:slf4j-api'
 ] as Set
 
+// The standalone desktop artifact intentionally carries only the dependencies
+// used by the RuneLite-free HapticScape runtime. These are currently resolved
+// through the existing RuneLite test host so we can split artifacts without
+// changing dependency versions in the same phase.
+def standaloneRuntimeModules = [
+	'ch.qos.logback:logback-classic',
+	'ch.qos.logback:logback-core',
+	'com.google.code.gson:gson',
+	'com.squareup.okhttp3:okhttp',
+	'com.squareup.okio:okio',
+	'net.java.dev.jna:jna',
+	'net.java.dev.jna:jna-platform',
+	'org.slf4j:slf4j-api'
+] as Set
+
 dependencies {
 	compileOnly group: 'net.runelite', name:'client', version: runeLiteVersion
 
@@ -83,6 +99,42 @@ def packagedRuntimeFiles = {
 	configurations.testRuntimeClasspath.findAll { !testOnlyFiles.contains(it) }
 }
 
+def standaloneRuntimeArtifacts = {
+	configurations.testRuntimeClasspath.resolvedConfiguration.resolvedArtifacts.findAll { artifact ->
+		def module = "${artifact.moduleVersion.id.group}:${artifact.name}".toString()
+		!isTestOnlyRuntimeArtifact(artifact) && standaloneRuntimeModules.contains(module)
+	}
+}
+
+def standaloneRuntimeFiles = {
+	standaloneRuntimeArtifacts().collect { it.file }
+}
+
+def bridgeClassIncludes = [
+	'com/ashy0019/hapticscape/HapticScapePlugin*.class',
+	'com/ashy0019/hapticscape/GameplayEventSink*.class',
+	'com/ashy0019/hapticscape/SkillIds*.class',
+	'com/ashy0019/hapticscape/event/**',
+	'com/ashy0019/hapticscape/integration/runelite/RuneLiteChatEventAdapter*.class',
+	'com/ashy0019/hapticscape/integration/runelite/RuneLiteGameplayBridge*.class',
+	'com/ashy0019/hapticscape/integration/runelite/RuneLiteInventoryEventAdapter*.class',
+	'com/ashy0019/hapticscape/integration/runelite/RuneLiteLootEventAdapter*.class',
+	'com/ashy0019/hapticscape/integration/runelite/RuneLiteNotificationEventAdapter*.class',
+	'com/ashy0019/hapticscape/integration/runelite/RuneLitePlayerDeathEventAdapter*.class',
+	'com/ashy0019/hapticscape/integration/runelite/RuneLiteToxicStatusEventAdapter*.class',
+	'com/ashy0019/hapticscape/integration/runelite/RuneLiteVitalsEventAdapter*.class',
+	'com/ashy0019/hapticscape/integration/runelite/RuneLiteXpEventAdapter*.class',
+	'com/ashy0019/hapticscape/protocol/EventEnvelope*.class',
+	'com/ashy0019/hapticscape/protocol/EventProtocol*.class',
+	'com/ashy0019/hapticscape/protocol/EventWireCodec*.class',
+	'com/ashy0019/hapticscape/protocol/LocalhostFrameIo*.class',
+	'com/ashy0019/hapticscape/protocol/LocalhostGameplayEventTransport*.class',
+	'com/ashy0019/hapticscape/protocol/LocalhostTransportEndpoint*.class',
+	'com/ashy0019/hapticscape/protocol/TransportMessage*.class',
+	'com/ashy0019/hapticscape/protocol/TransportProtocol*.class',
+	'com/ashy0019/hapticscape/protocol/TransportWireCodec*.class'
+]
+
 group = 'com.ashy0019'
 
 tasks.withType(JavaCompile).configureEach {
@@ -105,15 +157,198 @@ tasks.register('run', JavaExec) {
 	args "--developer-mode", "--debug"
 }
 
-// Standalone desktop prototype. It intentionally uses the current test runtime
-// classpath until the standalone and RuneLite artifacts are split in the next phase.
-tasks.register('runStandalone', JavaExec) {
-	classpath = sourceSets.test.runtimeClasspath
-	mainClass = 'com.ashy0019.hapticscape.desktop.HapticScapeDesktopMain'
+tasks.register('standaloneJar', Jar) {
+	dependsOn tasks.named('classes')
+	dependsOn configurations.testRuntimeClasspath
+	manifest {
+		attributes(
+			'Main-Class': desktopMainClass,
+			'Multi-Release': true,
+			'Implementation-Title': 'HapticScape Desktop',
+			'Implementation-Version': appVersion.get()
+		)
+	}
 
+	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+	from(sourceSets.main.output) {
+		// RuneLite is a separate event source now. None of its bootstrap, config,
+		// plugin, or adapter classes belong in the desktop application.
+		exclude 'com/ashy0019/hapticscape/HapticScapeClient*.class'
+		exclude 'com/ashy0019/hapticscape/HapticScapePlugin*.class'
+		exclude 'com/ashy0019/hapticscape/HapticScapeConfig*.class'
+		exclude 'com/ashy0019/hapticscape/integration/runelite/**'
+	}
+	from {
+		standaloneRuntimeFiles().collect { file ->
+			file.isDirectory() ? file : zipTree(file)
+		}
+	}
+
+	exclude 'META-INF/INDEX.LIST'
+	exclude 'META-INF/*.SF'
+	exclude 'META-INF/*.DSA'
+	exclude 'META-INF/*.RSA'
+	exclude '**/module-info.class'
+
+	group = BasePlugin.BUILD_GROUP
+	archiveClassifier.set('desktop')
+	archiveFileName.set('hapticscape-desktop.jar')
+}
+
+tasks.register('bridgeJar', Jar) {
+	dependsOn tasks.named('classes')
+	manifest {
+		attributes(
+			'Implementation-Title': 'HapticScape RuneLite Bridge',
+			'Implementation-Version': appVersion.get()
+		)
+	}
+
+	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+	from(sourceSets.main.output) {
+		include bridgeClassIncludes
+	}
+	from(layout.projectDirectory.file('runelite-plugin.properties'))
+
+	group = BasePlugin.BUILD_GROUP
+	archiveClassifier.set('bridge')
+	archiveFileName.set('hapticscape-runelite-bridge.jar')
+}
+
+tasks.register('runStandalone', JavaExec) {
+	dependsOn tasks.named('standaloneJar')
+	classpath = files(tasks.named('standaloneJar').flatMap { it.archiveFile })
+	mainClass = desktopMainClass
 	jvmArgs "-ea"
 }
 
+tasks.register('verifyStandaloneJar') {
+	dependsOn tasks.named('standaloneJar')
+
+	doLast {
+		def jarFile = tasks.named('standaloneJar').get().archiveFile.get().asFile
+		def hasLauncher = false
+		def hasVersionResource = false
+		def forbiddenEntries = []
+		def runeLiteReferences = []
+
+		zipTree(jarFile).visit { details ->
+			if (details.directory) {
+				return
+			}
+
+			def path = details.relativePath.pathString
+			if (path == 'com/ashy0019/hapticscape/desktop/HapticScapeDesktopMain.class') {
+				hasLauncher = true
+			}
+			if (path == 'hapticscape-version.properties') {
+				hasVersionResource = true
+			}
+			if (path.startsWith('net/runelite/')
+				|| path.startsWith('com/ashy0019/hapticscape/integration/runelite/')
+				|| path.startsWith('com/ashy0019/hapticscape/HapticScapePlugin')
+				|| path.startsWith('com/ashy0019/hapticscape/HapticScapeClient')
+				|| path.startsWith('com/ashy0019/hapticscape/HapticScapeConfig')
+				|| path.startsWith('org/junit/')
+				|| path.startsWith('org/hamcrest/')
+				|| (path.startsWith('com/ashy0019/hapticscape/') && path.endsWith('Test.class'))) {
+				forbiddenEntries.add(path)
+			}
+
+			if (path.startsWith('com/ashy0019/hapticscape/') && path.endsWith('.class')) {
+				def classBytes = new String(details.file.bytes, 'ISO-8859-1')
+				if (classBytes.contains('net/runelite/')) {
+					runeLiteReferences.add(path)
+				}
+			}
+		}
+
+		if (!hasLauncher) {
+			throw new GradleException('The standalone desktop launcher class is missing.')
+		}
+		if (!hasVersionResource) {
+			throw new GradleException('The standalone version metadata is missing.')
+		}
+		if (!forbiddenEntries.isEmpty()) {
+			throw new GradleException(
+				"RuneLite/test code leaked into the standalone JAR: ${forbiddenEntries.sort().join(', ')}"
+			)
+		}
+		if (!runeLiteReferences.isEmpty()) {
+			throw new GradleException(
+				"Standalone HapticScape classes still reference RuneLite: ${runeLiteReferences.sort().join(', ')}"
+			)
+		}
+	}
+}
+
+tasks.register('verifyBridgeJar') {
+	dependsOn tasks.named('bridgeJar')
+
+	doLast {
+		def jarFile = tasks.named('bridgeJar').get().archiveFile.get().asFile
+		def hasPlugin = false
+		def hasPluginMetadata = false
+		def forbiddenEntries = []
+
+		zipTree(jarFile).visit { details ->
+			if (details.directory) {
+				return
+			}
+
+			def path = details.relativePath.pathString
+			if (path == 'com/ashy0019/hapticscape/HapticScapePlugin.class') {
+				hasPlugin = true
+			}
+			if (path == 'runelite-plugin.properties') {
+				hasPluginMetadata = true
+			}
+			if (path.startsWith('net/runelite/')
+				|| path.startsWith('com/google/')
+				|| path.startsWith('org/slf4j/')
+				|| path.startsWith('ch/qos/logback/')
+				|| path.startsWith('okhttp3/')
+				|| path.startsWith('okio/')
+				|| path.startsWith('com/sun/jna/')
+				|| path.startsWith('com/ashy0019/hapticscape/desktop/')
+				|| path.startsWith('com/ashy0019/hapticscape/integration/desktop/')
+				|| path.startsWith('com/ashy0019/hapticscape/device/')
+				|| path.startsWith('com/ashy0019/hapticscape/music/')
+				|| path.startsWith('com/ashy0019/hapticscape/remote/')
+				|| path.startsWith('com/ashy0019/hapticscape/ui/')
+				|| path.startsWith('org/junit/')
+				|| path.startsWith('org/hamcrest/')
+				|| path.endsWith('Test.class')) {
+				forbiddenEntries.add(path)
+			}
+		}
+
+		if (!hasPlugin) {
+			throw new GradleException('The RuneLite bridge plugin class is missing.')
+		}
+		if (!hasPluginMetadata) {
+			throw new GradleException('runelite-plugin.properties is missing from the bridge JAR.')
+		}
+		if (!forbiddenEntries.isEmpty()) {
+			throw new GradleException(
+				"Standalone or shaded dependency code leaked into the bridge JAR: ${forbiddenEntries.sort().join(', ')}"
+			)
+		}
+	}
+}
+
+tasks.register('verifySplitArtifacts') {
+	dependsOn tasks.named('verifyStandaloneJar')
+	dependsOn tasks.named('verifyBridgeJar')
+}
+
+// Keep every ordinary test run enforcing the artifact boundary as well.
+tasks.named('test') {
+	dependsOn tasks.named('verifySplitArtifacts')
+}
+
+// Legacy combined client JAR retained only until the Windows packaging script
+// is migrated to the standalone artifact in Phase 4B.
 tasks.register('shadowJar', Jar) {
 	dependsOn configurations.testRuntimeClasspath
 	manifest {
