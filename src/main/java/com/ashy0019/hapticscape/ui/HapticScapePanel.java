@@ -79,9 +79,8 @@ import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import net.runelite.api.Skill;
-import net.runelite.client.ui.PluginPanel;
 
-public final class HapticScapePanel extends PluginPanel
+public final class HapticScapePanel extends JPanel
 	implements RemoteSessionListener, SettingsLockListener
 {
 	private static final int DEVELOPER_UNLOCK_CLICKS = 9;
@@ -159,6 +158,7 @@ public final class HapticScapePanel extends PluginPanel
 	private final LockableCheckBoxBinding level99LockBinding;
 	private final LockableSectionHeader feedbackBlockHeader;
 	private final RemoteControlPanel remoteControlPanel;
+	private final JScrollPane pageScrollPane;
 	private final GlobalUiHooks.Registration pageScrollRouting;
 	private final SidebarActionFocusGuard sidebarActionFocusGuard;
 	private final RoguePanel roguePanel;
@@ -196,6 +196,7 @@ public final class HapticScapePanel extends PluginPanel
 		ExternalLinkOpener externalLinkOpener,
 		TextClipboard clipboard,
 		GlobalUiHooks globalUiHooks,
+		JScrollPane pageScrollPane,
 		Runnable connectAction,
 		Runnable disconnectAction,
 		Runnable testAction,
@@ -225,6 +226,10 @@ public final class HapticScapePanel extends PluginPanel
 		this.settingsLockService = settingsLockService;
 		this.rogueFeedbackAction = rogueFeedbackAction;
 		this.rogueUnlockSoundAction = rogueUnlockSoundAction;
+		this.pageScrollPane = java.util.Objects.requireNonNull(
+			pageScrollPane,
+			"pageScrollPane"
+		);
 		setLayout(new BorderLayout(0, 6));
 		setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
@@ -570,9 +575,8 @@ public final class HapticScapePanel extends PluginPanel
 		contentHost.add(roguePanel, ROGUE_CARD);
 		add(rogueLauncher, BorderLayout.NORTH);
 		add(contentHost, BorderLayout.CENTER);
-		// PluginPanel already owns the scroll pane displayed by RuneLite. A second
-		// full-page scroll pane expands inside that wrapper and has no range to move.
-		JScrollPane pageScrollPane = getScrollPane();
+		// The host owns the page viewport. RuneLite currently supplies its sidebar
+		// scroll pane; the standalone desktop host can supply its own later.
 		pageScrollPane.getVerticalScrollBar().setUnitIncrement(16);
 		pageScrollRouting = globalUiHooks.installSidebarScrollRouting(pageScrollPane, this);
 		sidebarActionFocusGuard = SidebarActionFocusGuard.install(this);
@@ -1367,7 +1371,7 @@ public final class HapticScapePanel extends PluginPanel
 		if (current.isParticipantControlled() || isSubjectWorkspaceActive(current))
 		{
 			SidebarViewportAnchor viewportAnchor = SidebarViewportAnchor.capture(
-				getScrollPane()
+				pageScrollPane
 			);
 			viewportAnchor.holdThroughLayout(() ->
 			{
@@ -1614,7 +1618,7 @@ public final class HapticScapePanel extends PluginPanel
 			snapshot
 		);
 		SidebarViewportAnchor viewportAnchor = SidebarViewportAnchor.capture(
-			getScrollPane()
+			pageScrollPane
 		);
 		if (preserveControllerViewport)
 		{

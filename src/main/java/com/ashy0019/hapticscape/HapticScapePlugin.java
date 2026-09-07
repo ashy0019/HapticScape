@@ -31,6 +31,7 @@ import com.ashy0019.hapticscape.host.DesktopNotificationService;
 import com.ashy0019.hapticscape.host.SourceMessageService;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteDesktopNotificationService;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteGameplayBridge;
+import com.ashy0019.hapticscape.integration.runelite.RuneLiteHapticScapePluginPanel;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteSkillCatalog;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteSourceMessageService;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteStoragePaths;
@@ -109,6 +110,7 @@ public class HapticScapePlugin extends Plugin
 	private SoundPlayer soundPlayer;
 	private SourceMessageService sourceMessages;
 	private HapticScapePanel panel;
+	private RuneLiteHapticScapePluginPanel panelHost;
 	private NavigationButton navigationButton;
 	private Level99CelebrationOverlay level99CelebrationOverlay;
 	private UpdatePreferencesStore updatePreferencesStore;
@@ -247,12 +249,14 @@ public class HapticScapePlugin extends Plugin
 			)
 		);
 		discordPairingBridge.start();
+		panelHost = new RuneLiteHapticScapePluginPanel();
 		panel = new HapticScapePanel(
 			config,
 			settingsStore,
 			new AwtExternalLinkOpener(),
 			new AwtTextClipboard(),
 			new AwtGlobalUiHooks(),
+			panelHost.getSidebarScrollPane(),
 			this::connectToIntiface,
 			intifaceService::disconnect,
 			this::sendTestPattern,
@@ -275,13 +279,14 @@ public class HapticScapePlugin extends Plugin
 			this::playRogueUnlockStingAsync,
 			feedbackCoordinator::stopAll
 		);
+		panelHost.setContent(panel);
 		intifaceService.setConnectionListener(panel::updateConnection);
 		musicSyncService.setListener(panel::updateMusicSync);
 		musicSyncService.updateSettings(effectiveSettingsService.current().getMusicSyncSettings());
 		navigationButton = NavigationButton.builder()
 			.tooltip("HapticScape")
 			.icon(loadNavigationIcon())
-			.panel(panel)
+			.panel(panelHost)
 			.priority(5)
 			.build();
 		clientToolbar.addNavigation(navigationButton);
@@ -386,6 +391,7 @@ public class HapticScapePlugin extends Plugin
 			panel.close();
 			panel = null;
 		}
+		panelHost = null;
 		settingsLockService = null;
 		if (updateCheckService != null)
 		{
