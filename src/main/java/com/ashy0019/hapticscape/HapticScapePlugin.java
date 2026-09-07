@@ -1,6 +1,8 @@
 package com.ashy0019.hapticscape;
 
-import com.ashy0019.hapticscape.clicker.AudioPlayerClickPlayback;
+import com.ashy0019.hapticscape.audio.HapticScapeSound;
+import com.ashy0019.hapticscape.audio.SoundPlayer;
+import com.ashy0019.hapticscape.clicker.SoundPlayerClickPlayback;
 import com.ashy0019.hapticscape.clicker.ClickerService;
 import com.ashy0019.hapticscape.clicker.ClickerSettings;
 import com.ashy0019.hapticscape.device.DefaultIntifaceService;
@@ -27,6 +29,7 @@ import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteGameplayBridge;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteStoragePaths;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteSettingsWriter;
+import com.ashy0019.hapticscape.integration.runelite.RuneLiteSoundPlayer;
 import com.ashy0019.hapticscape.remote.RemoteSettingsSnapshot;
 import com.ashy0019.hapticscape.remote.SavedUnlockKeyStore;
 import com.ashy0019.hapticscape.remote.SettingsBackedRemotePermissionsStore;
@@ -87,9 +90,7 @@ import okhttp3.OkHttpClient;
 )
 public class HapticScapePlugin extends Plugin
 {
-	private static final String LEVEL_99_CHEER_RESOURCE = "/level99-cheer.wav";
 	private static final float LEVEL_99_CHEER_GAIN_DB = -4.0f;
-	private static final String ROGUE_UNLOCK_STING_RESOURCE = "/rogue/rogue-unlock.wav";
 	private static final float ROGUE_UNLOCK_STING_GAIN_DB = -4.0f;
 	private final Level99CelebrationController level99CelebrationController =
 		new Level99CelebrationController();
@@ -103,6 +104,7 @@ public class HapticScapePlugin extends Plugin
 	private SettingsLockService settingsLockService;
 	private MusicSyncService musicSyncService;
 	private ClickerService clickerService;
+	private SoundPlayer soundPlayer;
 	private HapticScapePanel panel;
 	private NavigationButton navigationButton;
 	private Level99CelebrationOverlay level99CelebrationOverlay;
@@ -169,8 +171,9 @@ public class HapticScapePlugin extends Plugin
 			WasapiLoopbackCapture::new,
 			musicSettingsFromConfig()
 		);
+		soundPlayer = new RuneLiteSoundPlayer(audioPlayer);
 		clickerService = new ClickerService(
-			new AudioPlayerClickPlayback(audioPlayer),
+			new SoundPlayerClickPlayback(soundPlayer),
 			clickerSettingsFromConfig()
 		);
 		feedbackCoordinator = new FeedbackCoordinator(
@@ -560,9 +563,8 @@ public class HapticScapePlugin extends Plugin
 	{
 		try
 		{
-			audioPlayer.play(
-				HapticScapePlugin.class,
-				LEVEL_99_CHEER_RESOURCE,
+			soundPlayer.play(
+				HapticScapeSound.LEVEL_99_CHEER,
 				LEVEL_99_CHEER_GAIN_DB
 			);
 		}
@@ -684,9 +686,8 @@ public class HapticScapePlugin extends Plugin
 	{
 		try
 		{
-			audioPlayer.play(
-				HapticScapePlugin.class,
-				ROGUE_UNLOCK_STING_RESOURCE,
+			soundPlayer.play(
+				HapticScapeSound.ROGUE_UNLOCK_STING,
 				ROGUE_UNLOCK_STING_GAIN_DB
 			);
 		}

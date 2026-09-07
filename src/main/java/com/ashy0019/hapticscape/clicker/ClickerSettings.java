@@ -32,8 +32,8 @@ public final class ClickerSettings
 	}
 
 	/**
-	 * Converts the linear user-facing percentage to the decibel gain expected
-	 * by RuneLite's AudioPlayer. Callers must treat zero percent as silence.
+	 * Converts the linear user-facing percentage to decibel gain for the host
+	 * sound service. Callers must treat zero percent as silence.
 	 */
 	public float getGainDb()
 	{
