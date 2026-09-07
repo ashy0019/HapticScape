@@ -86,7 +86,7 @@ final class ClickerPhraseRulesPanel extends JPanel
 		setBorder(BorderFactory.createTitledBorder("Phrase clicks"));
 
 		JLabel description = new JLabel(
-			"Click when a RuneLite chat message matches a local rule."
+			"Click when an incoming chat message matches a local rule."
 		);
 		description.setToolTipText(
 			"Contains and Exact ignore case. Regex uses Java regular expressions."

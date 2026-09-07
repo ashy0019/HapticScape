@@ -19,7 +19,7 @@ import javax.swing.JPanel;
 /**
  * Full-canvas Rogue Mode blackjack panel. Controls, chips, table art, future
  * multiplayer seats, and the event log all live inside CasinoScenePanel so the
- * entire RuneLite sidebar becomes the game rather than framing a tiny scene.
+ * entire host panel becomes the game rather than framing a tiny scene.
  */
 public final class RoguePanel extends JPanel
 {

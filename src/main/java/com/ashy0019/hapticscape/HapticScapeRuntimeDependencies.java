@@ -15,9 +15,8 @@ import okhttp3.OkHttpClient;
 /**
  * Host-neutral dependencies required to compose one HapticScape runtime.
  *
- * <p>RuneLite and the future standalone desktop process provide different
- * implementations of these boundaries, while the runtime graph itself remains
- * identical.</p>
+ * <p>Different hosts provide their own implementations of these boundaries,
+ * while the runtime graph itself remains identical.</p>
  */
 public final class HapticScapeRuntimeDependencies
 {

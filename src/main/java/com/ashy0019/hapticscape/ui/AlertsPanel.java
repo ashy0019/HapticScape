@@ -41,7 +41,7 @@ final class AlertsPanel extends JPanel
 		new JCheckBox("Haptic generic notifications");
 	private final JCheckBox genericClickEnabledCheckBox =
 		new JCheckBox("Click generic notifications");
-	private final JCheckBox respectFocusCheckBox = new JCheckBox("Respect RuneLite focus");
+	private final JCheckBox respectFocusCheckBox = new JCheckBox("Respect source focus");
 	private final JSlider genericIntensitySlider;
 	private final JLabel genericIntensityValueLabel = new JLabel();
 	private final JComboBox<HapticPatternSelection> genericPatternComboBox;
@@ -373,15 +373,15 @@ final class AlertsPanel extends JPanel
 
 		genericEnabledCheckBox.setSelected(genericEnabled);
 		genericEnabledCheckBox.setToolTipText(
-			"Play the Generic profile for unclassified RuneLite notifications"
+			"Play the Generic profile for unclassified source notifications"
 		);
 		genericClickEnabledCheckBox.setSelected(genericClickEnabled);
 		genericClickEnabledCheckBox.setToolTipText(
-			"Play one click for an unclassified RuneLite notification"
+			"Play one click for an unclassified source notification"
 		);
 		respectFocusCheckBox.setSelected(respectFocus);
 		respectFocusCheckBox.setToolTipText(
-			"Honor RuneLite focus suppression for generic notifications"
+			"Honor the event source focus policy for generic notifications"
 		);
 		genericIntensityValueLabel.setText(genericIntensityPercent + "%");
 

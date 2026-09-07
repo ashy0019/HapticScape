@@ -8,7 +8,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 
-/** Holds RuneLite's outer sidebar position through a queued Swing layout transaction. */
+/** Holds the host sidebar position through a queued Swing layout transaction. */
 final class SidebarViewportAnchor
 {
 	private final JScrollBar scrollBar;

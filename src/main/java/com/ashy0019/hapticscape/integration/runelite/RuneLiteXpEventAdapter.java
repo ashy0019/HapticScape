@@ -13,12 +13,14 @@ import net.runelite.api.Skill;
  */
 public final class RuneLiteXpEventAdapter
 {
+	private static final String SOURCE = "runelite";
+
 	public XpEvent update(XpEventTracker tracker, Skill skill, int currentXp)
 	{
 		Objects.requireNonNull(tracker, "tracker");
 		Objects.requireNonNull(skill, "skill");
 		return tracker.update(
-			XpEvent.SOURCE_RUNELITE,
+			SOURCE,
 			skillId(skill),
 			currentXp,
 			realLevelForXp(currentXp)
@@ -30,7 +32,7 @@ public final class RuneLiteXpEventAdapter
 		Objects.requireNonNull(tracker, "tracker");
 		Objects.requireNonNull(skill, "skill");
 		tracker.seed(
-			XpEvent.SOURCE_RUNELITE,
+			SOURCE,
 			skillId(skill),
 			currentXp,
 			realLevelForXp(currentXp)

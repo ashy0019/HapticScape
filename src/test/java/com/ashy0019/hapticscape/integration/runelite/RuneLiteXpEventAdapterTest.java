@@ -21,7 +21,7 @@ public class RuneLiteXpEventAdapterTest
 		adapter.seed(tracker, Skill.COOKING, 1_000);
 		XpEvent event = adapter.update(tracker, Skill.COOKING, 1_050);
 
-		assertEquals(XpEvent.SOURCE_RUNELITE, event.getSource());
+		assertEquals("runelite", event.getSource());
 		assertEquals("cooking", event.getSkillId());
 		assertEquals(50, event.getGainedXp());
 	}

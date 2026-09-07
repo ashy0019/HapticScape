@@ -4,12 +4,11 @@ import com.ashy0019.hapticscape.SkillIds;
 import java.util.Objects;
 
 /**
- * Source-neutral XP event. It intentionally contains no RuneLite types so it can
- * later cross the desktop IPC boundary unchanged.
+ * Source-neutral XP event. Source-specific types and identifiers are translated
+ * before this event crosses into HapticScape core logic.
  */
 public final class XpEvent implements HapticScapeEvent
 {
-	public static final String SOURCE_RUNELITE = "runelite";
 	public static final String TYPE = "xp";
 
 	private final String source;

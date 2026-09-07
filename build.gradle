@@ -65,6 +65,15 @@ def standaloneRuntimeFiles = {
 	standaloneRuntimeArtifacts().collect { it.file }
 }
 
+def runeLiteBoundarySourceFiles = [
+	'src/main/java/com/ashy0019/hapticscape/HapticScapeClient.java',
+	'src/main/java/com/ashy0019/hapticscape/HapticScapeConfig.java',
+	'src/main/java/com/ashy0019/hapticscape/HapticScapePlugin.java'
+] as Set
+
+def runeLiteBoundarySourceDirectory =
+	'src/main/java/com/ashy0019/hapticscape/integration/runelite/'
+
 def bridgeClassIncludes = [
 	'com/ashy0019/hapticscape/HapticScapePlugin*.class',
 	'com/ashy0019/hapticscape/GameplayEventSink*.class',
@@ -175,6 +184,41 @@ tasks.register('runStandalone', JavaExec) {
 	classpath = files(tasks.named('standaloneJar').flatMap { it.archiveFile })
 	mainClass = desktopMainClass
 	jvmArgs "-ea"
+}
+
+tasks.register('verifyCoreRuneLiteIndependence') {
+	def productionJavaSources = fileTree('src/main/java') {
+		include '**/*.java'
+	}
+	inputs.files(productionJavaSources)
+
+	doLast {
+		def violations = []
+
+		productionJavaSources.files.sort { left, right ->
+			project.relativePath(left) <=> project.relativePath(right)
+		}.each { sourceFile ->
+			def relativePath = project.relativePath(sourceFile).replace('\\', '/')
+			def isRuneLiteBoundary = runeLiteBoundarySourceFiles.contains(relativePath)
+				|| relativePath.startsWith(runeLiteBoundarySourceDirectory)
+			if (isRuneLiteBoundary) {
+				return
+			}
+
+			sourceFile.eachLine('UTF-8') { line, lineNumber ->
+				if (line.toLowerCase(java.util.Locale.ROOT).contains('runelite')) {
+					violations.add("${relativePath}:${lineNumber}: ${line.trim()}")
+				}
+			}
+		}
+
+		if (!violations.isEmpty()) {
+			throw new GradleException(
+				'RuneLite-specific terminology leaked outside the temporary RuneLite boundary:\n  '
+					+ violations.join('\n  ')
+			)
+		}
+	}
 }
 
 tasks.register('verifyStandaloneDependencies') {
@@ -318,6 +362,7 @@ tasks.register('verifyBridgeJar') {
 }
 
 tasks.register('verifySplitArtifacts') {
+	dependsOn tasks.named('verifyCoreRuneLiteIndependence')
 	dependsOn tasks.named('verifyStandaloneJar')
 	dependsOn tasks.named('verifyBridgeJar')
 }

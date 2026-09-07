@@ -179,7 +179,7 @@ final class RemoteActionsPanel extends JPanel
 
 		desktopNotification.setName("remoteDesktopDestination");
 		localChatbox.setName("remoteChatboxDestination");
-		desktopNotification.setToolTipText("Show a local RuneLite desktop notification");
+		desktopNotification.setToolTipText("Show a local operating-system notification");
 		localChatbox.setToolTipText(
 			"Show a local-only HapticScape console line; nothing is sent to Jagex"
 		);

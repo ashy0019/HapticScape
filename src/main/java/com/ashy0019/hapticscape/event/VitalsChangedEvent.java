@@ -4,7 +4,7 @@ import java.util.Objects;
 
 /**
  * Source-neutral observation of a gameplay resource used by HapticScape alert
- * policy. RuneLite-specific skills, varps and event classes are translated
+ * policy. Source-specific resource identifiers and event classes are translated
  * before this event crosses into core logic.
  */
 public final class VitalsChangedEvent implements HapticScapeEvent
