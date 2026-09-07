@@ -1,12 +1,12 @@
 package com.ashy0019.hapticscape.ui;
 
+import com.ashy0019.hapticscape.host.GlobalUiHooks;
 import com.ashy0019.hapticscape.remote.RemotePermissions;
 import com.ashy0019.hapticscape.remote.RemoteRole;
 import com.ashy0019.hapticscape.remote.RemoteSessionManager;
 import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteSessionState;
 import java.awt.BasicStroke;
-import java.awt.AWTEvent;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
@@ -16,11 +16,8 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Polygon;
 import java.awt.RenderingHints;
-import java.awt.Toolkit;
-import java.awt.event.AWTEventListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.event.WindowEvent;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Objects;
@@ -55,25 +52,9 @@ final class RemoteLiveForgePanel extends JPanel
 	private int requestedIntensity;
 	private long gestureStartedAtMillis;
 
-	private final AWTEventListener gestureSafetyListener = event ->
-	{
-		if (!streaming)
-		{
-			return;
-		}
-		if (event instanceof MouseEvent
-			&& event.getID() == MouseEvent.MOUSE_RELEASED)
-		{
-			endGesture();
-		}
-		else if (event instanceof WindowEvent
-			&& event.getID() == WindowEvent.WINDOW_LOST_FOCUS)
-		{
-			endGesture();
-		}
-	};
+	private final GlobalUiHooks.Registration gestureSafetyHook;
 
-	RemoteLiveForgePanel(RemoteSessionManager sessionManager)
+	RemoteLiveForgePanel(RemoteSessionManager sessionManager, GlobalUiHooks globalUiHooks)
 	{
 		this(new LiveDispatcher()
 		{
@@ -100,13 +81,19 @@ final class RemoteLiveForgePanel extends JPanel
 			{
 				sessionManager.stopRemoteOutput();
 			}
-		});
+		}, globalUiHooks);
 		apply(sessionManager.getSnapshot(), sessionManager.getPeerPermissions());
 	}
 
 	RemoteLiveForgePanel(LiveDispatcher dispatcher)
 	{
+		this(dispatcher, GlobalUiHooks.noop());
+	}
+
+	RemoteLiveForgePanel(LiveDispatcher dispatcher, GlobalUiHooks globalUiHooks)
+	{
 		this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
+		Objects.requireNonNull(globalUiHooks, "globalUiHooks");
 		setName("remoteLiveForgePanel");
 		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
 		setBorder(BorderFactory.createTitledBorder("Live Forge"));
@@ -195,10 +182,7 @@ final class RemoteLiveForgePanel extends JPanel
 		canvas.addMouseMotionListener(drawing);
 		stopButton.addActionListener(event -> stopImmediately());
 		sampleTimer.setCoalesce(true);
-		Toolkit.getDefaultToolkit().addAWTEventListener(
-			gestureSafetyListener,
-			AWTEvent.MOUSE_EVENT_MASK | AWTEvent.WINDOW_FOCUS_EVENT_MASK
-		);
+		gestureSafetyHook = globalUiHooks.onGestureEnd(this::endGesture);
 		apply(RemoteSessionSnapshot.local(), RemotePermissions.defaults());
 	}
 
@@ -265,7 +249,7 @@ final class RemoteLiveForgePanel extends JPanel
 	{
 		endGesture();
 		sampleTimer.stop();
-		Toolkit.getDefaultToolkit().removeAWTEventListener(gestureSafetyListener);
+		gestureSafetyHook.close();
 		canvas.clear();
 	}
 

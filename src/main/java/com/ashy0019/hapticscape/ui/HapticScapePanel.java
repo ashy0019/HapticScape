@@ -19,6 +19,7 @@ import com.ashy0019.hapticscape.device.ConnectionSnapshot;
 import com.ashy0019.hapticscape.device.ConnectionState;
 import com.ashy0019.hapticscape.device.DeviceInfo;
 import com.ashy0019.hapticscape.host.ExternalLinkOpener;
+import com.ashy0019.hapticscape.host.GlobalUiHooks;
 import com.ashy0019.hapticscape.host.TextClipboard;
 import com.ashy0019.hapticscape.music.MusicSyncSettings;
 import com.ashy0019.hapticscape.music.MusicSyncSnapshot;
@@ -52,11 +53,7 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
-import java.awt.KeyEventDispatcher;
-import java.awt.KeyboardFocusManager;
-import java.awt.Window;
 import java.awt.event.InputEvent;
-import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.Arrays;
@@ -81,7 +78,6 @@ import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
-import javax.swing.text.JTextComponent;
 import net.runelite.api.Skill;
 import net.runelite.client.ui.PluginPanel;
 
@@ -107,7 +103,7 @@ public final class HapticScapePanel extends PluginPanel
 	private final Consumer<RogueFeedbackEvent> rogueFeedbackAction;
 	private final Runnable rogueUnlockSoundAction;
 	private final KonamiCodeDetector konamiCodeDetector = new KonamiCodeDetector();
-	private final KeyEventDispatcher rogueKeyDispatcher;
+	private final GlobalUiHooks.Registration rogueKeyHook;
 	private final JTabbedPane tabs;
 	private final CardLayout contentLayout = new CardLayout();
 	private final JPanel contentHost = new JPanel(contentLayout);
@@ -163,7 +159,7 @@ public final class HapticScapePanel extends PluginPanel
 	private final LockableCheckBoxBinding level99LockBinding;
 	private final LockableSectionHeader feedbackBlockHeader;
 	private final RemoteControlPanel remoteControlPanel;
-	private final SidebarScrollRouter pageScrollRouter;
+	private final GlobalUiHooks.Registration pageScrollRouting;
 	private final SidebarActionFocusGuard sidebarActionFocusGuard;
 	private final RoguePanel roguePanel;
 	private final RogueLauncherPanel rogueLauncher;
@@ -199,6 +195,7 @@ public final class HapticScapePanel extends PluginPanel
 		SettingsStore settingsStore,
 		ExternalLinkOpener externalLinkOpener,
 		TextClipboard clipboard,
+		GlobalUiHooks globalUiHooks,
 		Runnable connectAction,
 		Runnable disconnectAction,
 		Runnable testAction,
@@ -421,6 +418,7 @@ public final class HapticScapePanel extends PluginPanel
 			settingsStore,
 			externalLinkOpener,
 			clipboard,
+			globalUiHooks,
 			remoteSessionManager,
 			remotePairingService,
 			discordPairingBridge,
@@ -576,7 +574,7 @@ public final class HapticScapePanel extends PluginPanel
 		// full-page scroll pane expands inside that wrapper and has no range to move.
 		JScrollPane pageScrollPane = getScrollPane();
 		pageScrollPane.getVerticalScrollBar().setUnitIncrement(16);
-		pageScrollRouter = SidebarScrollRouter.install(pageScrollPane, this);
+		pageScrollRouting = globalUiHooks.installSidebarScrollRouting(pageScrollPane, this);
 		sidebarActionFocusGuard = SidebarActionFocusGuard.install(this);
 		contentLayout.show(contentHost, NORMAL_CARD);
 
@@ -589,9 +587,7 @@ public final class HapticScapePanel extends PluginPanel
 		settingsLockService.addListener(this);
 		applyRemoteSessionState(remoteSessionManager.getSnapshot());
 		applyState(ConnectionSnapshot.disconnected());
-		rogueKeyDispatcher = this::handleRogueKeyEvent;
-		KeyboardFocusManager.getCurrentKeyboardFocusManager()
-			.addKeyEventDispatcher(rogueKeyDispatcher);
+		rogueKeyHook = globalUiHooks.onScopedKeyPress(this, this::handleRogueKeyPress);
 	}
 
 	public int getIntensityPercent()
@@ -1074,43 +1070,28 @@ public final class HapticScapePanel extends PluginPanel
 	public void close()
 	{
 		sidebarActionFocusGuard.close();
-		pageScrollRouter.close();
+		pageScrollRouting.close();
 		remoteSessionManager.removeListener(this);
 		settingsLockService.removeListener(this);
 		remoteControlPanel.close();
 		developerStatusTimer.stop();
-		KeyboardFocusManager.getCurrentKeyboardFocusManager()
-			.removeKeyEventDispatcher(rogueKeyDispatcher);
+		rogueKeyHook.close();
 		roguePanel.close();
 		rogueLauncher.close();
 		customPatternsPanel.close();
 	}
 
-	private boolean handleRogueKeyEvent(KeyEvent event)
+	private void handleRogueKeyPress(GlobalUiHooks.ScopedKeyPress event)
 	{
-		if (event.getID() != KeyEvent.KEY_PRESSED || event.isConsumed())
-		{
-			return false;
-		}
-
-		Window panelWindow = SwingUtilities.getWindowAncestor(this);
-		if (panelWindow == null
-			|| KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow() != panelWindow)
-		{
-			return false;
-		}
-
-		if (KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner() instanceof JTextComponent)
+		if (event.isTextInputFocused())
 		{
 			konamiCodeDetector.reset();
-			return false;
+			return;
 		}
-
 		if (konamiCodeDetector.acceptKeyCode(event.getKeyCode()))
 		{
 			SwingUtilities.invokeLater(() -> unlockRogueMode(true));
 		}
-		return false;
 	}
 
 	private void unlockRogueMode(boolean celebrate)

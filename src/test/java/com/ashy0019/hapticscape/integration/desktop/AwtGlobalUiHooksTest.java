@@ -1,8 +1,9 @@
-package com.ashy0019.hapticscape.ui;
+package com.ashy0019.hapticscape.integration.desktop;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import com.ashy0019.hapticscape.host.GlobalUiHooks;
 import java.awt.Dimension;
 import java.awt.event.InputEvent;
 import java.awt.event.MouseEvent;
@@ -18,7 +19,7 @@ import javax.swing.SwingUtilities;
 import net.runelite.client.ui.PluginPanel;
 import org.junit.Test;
 
-public class SidebarScrollRouterTest
+public class AwtGlobalUiHooksTest
 {
 	@Test
 	public void routesToTheScrollPaneOwnedByRuneLitePluginPanel() throws Exception
@@ -44,10 +45,8 @@ public class SidebarScrollRouterTest
 			));
 			runeLiteScroll.getVerticalScrollBar().setValue(100);
 
-			try (SidebarScrollRouter ignored = SidebarScrollRouter.install(
-				runeLiteScroll,
-				panel
-			))
+			try (GlobalUiHooks.Registration ignored =
+				new AwtGlobalUiHooks().installSidebarScrollRouting(runeLiteScroll, panel))
 			{
 				int before = runeLiteScroll.getVerticalScrollBar().getValue();
 				control.dispatchEvent(wheel(control, 1));
@@ -69,7 +68,8 @@ public class SidebarScrollRouterTest
 			slider.addMouseWheelListener(MouseWheelEvent::consume);
 			page.add(slider);
 			JScrollPane pageScroll = pageScroll(page);
-			try (SidebarScrollRouter ignored = SidebarScrollRouter.install(pageScroll))
+			try (GlobalUiHooks.Registration ignored =
+				new AwtGlobalUiHooks().installSidebarScrollRouting(pageScroll, page))
 			{
 				int before = pageScroll.getVerticalScrollBar().getValue();
 				slider.dispatchEvent(wheel(slider, 1));
@@ -88,7 +88,8 @@ public class SidebarScrollRouterTest
 		{
 			JPanel page = tallPage();
 			JScrollPane pageScroll = pageScroll(page);
-			try (SidebarScrollRouter ignored = SidebarScrollRouter.install(pageScroll))
+			try (GlobalUiHooks.Registration ignored =
+				new AwtGlobalUiHooks().installSidebarScrollRouting(pageScroll, page))
 			{
 				JButton addedLater = new JButton("Later");
 				addedLater.setBounds(10, 150, 100, 25);
@@ -115,10 +116,8 @@ public class SidebarScrollRouterTest
 			wholeView.add(header);
 			wholeView.add(pageScroll);
 
-			try (SidebarScrollRouter ignored = SidebarScrollRouter.install(
-				pageScroll,
-				wholeView
-			))
+			try (GlobalUiHooks.Registration ignored =
+				new AwtGlobalUiHooks().installSidebarScrollRouting(pageScroll, wholeView))
 			{
 				int before = pageScroll.getVerticalScrollBar().getValue();
 				header.dispatchEvent(wheel(header, 1));
@@ -141,7 +140,8 @@ public class SidebarScrollRouterTest
 			nested.getViewport().setViewSize(text.getPreferredSize());
 			page.add(nested);
 			JScrollPane pageScroll = pageScroll(page);
-			try (SidebarScrollRouter ignored = SidebarScrollRouter.install(pageScroll))
+			try (GlobalUiHooks.Registration ignored =
+				new AwtGlobalUiHooks().installSidebarScrollRouting(pageScroll, page))
 			{
 				int pageBefore = pageScroll.getVerticalScrollBar().getValue();
 				text.dispatchEvent(wheel(text, 1));

@@ -4,6 +4,7 @@ import com.ashy0019.hapticscape.HapticScapeConfig;
 import com.ashy0019.hapticscape.clicker.ClickerPhraseRule;
 import com.ashy0019.hapticscape.clicker.ClickerPhraseRules;
 import com.ashy0019.hapticscape.host.ExternalLinkOpener;
+import com.ashy0019.hapticscape.host.GlobalUiHooks;
 import com.ashy0019.hapticscape.host.TextClipboard;
 import com.ashy0019.hapticscape.remote.RemoteActionAcknowledgement;
 import com.ashy0019.hapticscape.remote.DiscordPairingBridge;
@@ -76,6 +77,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		SettingsStore settingsStore,
 		ExternalLinkOpener externalLinkOpener,
 		TextClipboard clipboard,
+		GlobalUiHooks globalUiHooks,
 		RemoteSessionManager sessionManager,
 		RemotePairingService pairingService,
 		DiscordPairingBridge discordPairingBridge,
@@ -89,7 +91,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		this.savedUnlockKeysPanel = new SavedUnlockKeysPanel(sessionManager, clipboard);
 		this.permissionsPanel = new RemotePermissionsPanel(sessionManager);
 		this.actionsPanel = new RemoteActionsPanel(sessionManager);
-		this.liveForgePanel = new RemoteLiveForgePanel(sessionManager);
+		this.liveForgePanel = new RemoteLiveForgePanel(sessionManager, globalUiHooks);
 		this.pairingPanel = new RemotePairingPanel(
 			config,
 			settingsStore,

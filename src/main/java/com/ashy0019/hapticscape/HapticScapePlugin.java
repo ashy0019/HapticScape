@@ -15,6 +15,7 @@ import com.ashy0019.hapticscape.music.MusicSyncSettings;
 import com.ashy0019.hapticscape.integration.desktop.DesktopAudioCaptureSources;
 import com.ashy0019.hapticscape.remote.DiscordCredentialStore;
 import com.ashy0019.hapticscape.integration.desktop.AwtExternalLinkOpener;
+import com.ashy0019.hapticscape.integration.desktop.AwtGlobalUiHooks;
 import com.ashy0019.hapticscape.integration.desktop.AwtTextClipboard;
 import com.ashy0019.hapticscape.integration.desktop.DesktopDiscordDeepLinkInbox;
 import com.ashy0019.hapticscape.integration.desktop.DesktopSecretProtectors;
@@ -251,6 +252,7 @@ public class HapticScapePlugin extends Plugin
 			settingsStore,
 			new AwtExternalLinkOpener(),
 			new AwtTextClipboard(),
+			new AwtGlobalUiHooks(),
 			this::connectToIntiface,
 			intifaceService::disconnect,
 			this::sendTestPattern,
