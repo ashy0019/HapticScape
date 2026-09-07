@@ -22,12 +22,14 @@ import com.ashy0019.hapticscape.remote.RemoteSessionListener;
 import com.ashy0019.hapticscape.remote.RemoteSessionManager;
 import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteGameplayBridge;
+import com.ashy0019.hapticscape.integration.runelite.RuneLiteStoragePaths;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteSettingsWriter;
 import com.ashy0019.hapticscape.remote.RemoteSettingsSnapshot;
 import com.ashy0019.hapticscape.remote.SettingsBackedRemotePermissionsStore;
 import com.ashy0019.hapticscape.remote.SettingsBackedRemoteSettingsStore;
 import com.ashy0019.hapticscape.remote.SettingsStore;
 import com.ashy0019.hapticscape.remote.SettingsLockService;
+import com.ashy0019.hapticscape.storage.HapticScapeStoragePaths;
 import com.ashy0019.hapticscape.ui.HapticScapePanel;
 import com.ashy0019.hapticscape.ui.Level99CelebrationOverlay;
 import com.ashy0019.hapticscape.update.UpdateCheckService;
@@ -156,7 +158,8 @@ public class HapticScapePlugin extends Plugin
 			new DefaultIntifaceService(httpClient, gson)
 		);
 		effectiveSettingsService = new EffectiveSettingsService(config);
-		settingsLockService = new SettingsLockService(gson);
+		HapticScapeStoragePaths storagePaths = RuneLiteStoragePaths.create();
+		settingsLockService = new SettingsLockService(gson, storagePaths);
 		musicSyncService = new MusicSyncService(
 			intifaceService,
 			WasapiLoopbackCapture::new,
@@ -184,6 +187,7 @@ public class HapticScapePlugin extends Plugin
 			new SettingsBackedRemoteSettingsStore(config, settingsStore),
 			effectiveSettingsService,
 			settingsLockService,
+			storagePaths,
 			new SettingsBackedRemotePermissionsStore(config, settingsStore),
 			feedbackCoordinator.createRemoteActionExecutor()
 		);
@@ -211,7 +215,7 @@ public class HapticScapePlugin extends Plugin
 		gameplayEvents.start();
 		gameplayBridge = new RuneLiteGameplayBridge(client, itemManager, gameplayEvents);
 		gameplayBridge.start();
-		updatePreferencesStore = new UpdatePreferencesStore(gson);
+		updatePreferencesStore = new UpdatePreferencesStore(gson, storagePaths);
 		updateCheckService = new UpdateCheckService(httpClient, gson);
 		RemotePairingService remotePairingService = new RemotePairingService(httpClient);
 		discordPairingBridge = new DiscordPairingBridge(
@@ -219,7 +223,7 @@ public class HapticScapePlugin extends Plugin
 			gson,
 			remoteSessionManager,
 			remotePairingService,
-			new DiscordCredentialStore(gson)
+			new DiscordCredentialStore(gson, storagePaths)
 		);
 		discordPairingBridge.start();
 		panel = new HapticScapePanel(

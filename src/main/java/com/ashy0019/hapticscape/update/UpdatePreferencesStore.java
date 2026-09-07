@@ -1,5 +1,6 @@
 package com.ashy0019.hapticscape.update;
 
+import com.ashy0019.hapticscape.storage.HapticScapeStoragePaths;
 import com.google.gson.Gson;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -12,7 +13,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.client.RuneLite;
 
 @Slf4j
 public final class UpdatePreferencesStore implements AutoCloseable
@@ -22,13 +22,12 @@ public final class UpdatePreferencesStore implements AutoCloseable
 	private final ExecutorService executor;
 	private volatile UpdatePreferences current = UpdatePreferences.defaults();
 
-	public UpdatePreferencesStore(Gson gson)
+	public UpdatePreferencesStore(Gson gson, HapticScapeStoragePaths storagePaths)
 	{
 		this(
 			gson,
-			RuneLite.RUNELITE_DIR.toPath()
-				.resolve("hapticscape")
-				.resolve("updater-settings.json"));
+			java.util.Objects.requireNonNull(storagePaths, "storagePaths")
+				.getUpdaterPreferencesPath());
 	}
 
 	UpdatePreferencesStore(Gson gson, Path settingsPath)

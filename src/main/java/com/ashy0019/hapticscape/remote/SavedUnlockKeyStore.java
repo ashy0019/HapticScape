@@ -1,5 +1,6 @@
 package com.ashy0019.hapticscape.remote;
 
+import com.ashy0019.hapticscape.storage.HapticScapeStoragePaths;
 import com.google.gson.Gson;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -23,7 +24,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import net.runelite.client.RuneLite;
 
 /** Persistent controller vault containing only DPAPI-protected unlock keys. */
 public final class SavedUnlockKeyStore
@@ -44,13 +44,11 @@ public final class SavedUnlockKeyStore
 	private List<SavedUnlockKey> entries = Collections.emptyList();
 	private String loadFailure;
 
-	public SavedUnlockKeyStore(Gson gson)
+	public SavedUnlockKeyStore(Gson gson, HapticScapeStoragePaths storagePaths)
 	{
 		this(
 			gson,
-			RuneLite.RUNELITE_DIR.toPath()
-				.resolve("hapticscape")
-				.resolve("saved-unlock-keys.json"),
+			Objects.requireNonNull(storagePaths, "storagePaths").getSavedUnlockKeysPath(),
 			new WindowsDpapiUnlockKeyProtector(),
 			Clock.systemDefaultZone()
 		);

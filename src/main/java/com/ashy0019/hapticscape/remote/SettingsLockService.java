@@ -1,6 +1,7 @@
 package com.ashy0019.hapticscape.remote;
 
 import com.ashy0019.hapticscape.HapticScapeSettingKeys;
+import com.ashy0019.hapticscape.storage.HapticScapeStoragePaths;
 import com.google.gson.Gson;
 import java.nio.file.Path;
 import java.security.SecureRandom;
@@ -13,7 +14,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
-import net.runelite.client.RuneLite;
 
 /** Owns the persistent local settings lock. Safety controls do not consult it. */
 public final class SettingsLockService
@@ -29,13 +29,11 @@ public final class SettingsLockService
 		new CopyOnWriteArrayList<>();
 	private volatile List<SettingsLockProposal> locks;
 
-	public SettingsLockService(Gson gson)
+	public SettingsLockService(Gson gson, HapticScapeStoragePaths storagePaths)
 	{
 		this(
 			gson,
-			RuneLite.RUNELITE_DIR.toPath()
-				.resolve("hapticscape")
-				.resolve("settings-lock.json")
+			Objects.requireNonNull(storagePaths, "storagePaths").getSettingsLockPath()
 		);
 	}
 

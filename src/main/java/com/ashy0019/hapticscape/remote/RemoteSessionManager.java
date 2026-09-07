@@ -1,5 +1,6 @@
 package com.ashy0019.hapticscape.remote;
 
+import com.ashy0019.hapticscape.storage.HapticScapeStoragePaths;
 import com.google.gson.Gson;
 import java.security.SecureRandom;
 import java.time.Clock;
@@ -61,7 +62,8 @@ public final class RemoteSessionManager implements AutoCloseable
 		Gson gson,
 		RemoteSettingsStore settingsStore,
 		EffectiveSettingsService effectiveSettings,
-		SettingsLockService settingsLockService)
+		SettingsLockService settingsLockService,
+		HapticScapeStoragePaths storagePaths)
 	{
 		this(
 			httpClient,
@@ -69,6 +71,7 @@ public final class RemoteSessionManager implements AutoCloseable
 			settingsStore,
 			effectiveSettings,
 			settingsLockService,
+			storagePaths,
 			new InMemoryRemotePermissionsStore(RemotePermissions.defaults()),
 			RemoteActionExecutor.NO_OP
 		);
@@ -80,6 +83,7 @@ public final class RemoteSessionManager implements AutoCloseable
 		RemoteSettingsStore settingsStore,
 		EffectiveSettingsService effectiveSettings,
 		SettingsLockService settingsLockService,
+		HapticScapeStoragePaths storagePaths,
 		RemotePermissionsStore permissionsStore,
 		RemoteActionExecutor remoteActionExecutor)
 	{
@@ -88,7 +92,7 @@ public final class RemoteSessionManager implements AutoCloseable
 			settingsStore,
 			effectiveSettings,
 			settingsLockService,
-			new SavedUnlockKeyStore(gson),
+			new SavedUnlockKeyStore(gson, storagePaths),
 			permissionsStore,
 			remoteActionExecutor,
 			Clock.systemUTC(),

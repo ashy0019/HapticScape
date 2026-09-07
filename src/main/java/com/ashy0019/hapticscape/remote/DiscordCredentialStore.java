@@ -1,5 +1,6 @@
 package com.ashy0019.hapticscape.remote;
 
+import com.ashy0019.hapticscape.storage.HapticScapeStoragePaths;
 import com.google.gson.Gson;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -13,7 +14,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import net.runelite.client.RuneLite;
 
 /** Stores one DPAPI-protected credential for the linked Discord account. */
 public final class DiscordCredentialStore
@@ -28,13 +28,11 @@ public final class DiscordCredentialStore
 	private DiscordDeviceCredential credential;
 	private String loadFailure;
 
-	public DiscordCredentialStore(Gson gson)
+	public DiscordCredentialStore(Gson gson, HapticScapeStoragePaths storagePaths)
 	{
 		this(
 			gson,
-			RuneLite.RUNELITE_DIR.toPath()
-				.resolve("hapticscape")
-				.resolve("discord-device.json"),
+			Objects.requireNonNull(storagePaths, "storagePaths").getDiscordCredentialPath(),
 			new WindowsDpapiDiscordCredentialProtector()
 		);
 	}
