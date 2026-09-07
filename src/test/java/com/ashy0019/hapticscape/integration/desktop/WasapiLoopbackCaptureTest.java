@@ -1,4 +1,4 @@
-package com.ashy0019.hapticscape.music;
+package com.ashy0019.hapticscape.integration.desktop;
 
 import com.sun.jna.Memory;
 import org.junit.Test;

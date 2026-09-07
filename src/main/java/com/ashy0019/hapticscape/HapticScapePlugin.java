@@ -12,7 +12,7 @@ import com.ashy0019.hapticscape.device.HapticRequest;
 import com.ashy0019.hapticscape.music.MusicResponse;
 import com.ashy0019.hapticscape.music.MusicSyncService;
 import com.ashy0019.hapticscape.music.MusicSyncSettings;
-import com.ashy0019.hapticscape.music.WasapiLoopbackCapture;
+import com.ashy0019.hapticscape.integration.desktop.DesktopAudioCaptureSources;
 import com.ashy0019.hapticscape.remote.DiscordCredentialStore;
 import com.ashy0019.hapticscape.integration.desktop.AwtExternalLinkOpener;
 import com.ashy0019.hapticscape.integration.desktop.AwtTextClipboard;
@@ -170,7 +170,7 @@ public class HapticScapePlugin extends Plugin
 		settingsLockService = new SettingsLockService(gson, storagePaths);
 		musicSyncService = new MusicSyncService(
 			intifaceService,
-			WasapiLoopbackCapture::new,
+			DesktopAudioCaptureSources::systemOutput,
 			musicSettingsFromConfig()
 		);
 		soundPlayer = new RuneLiteSoundPlayer(audioPlayer);

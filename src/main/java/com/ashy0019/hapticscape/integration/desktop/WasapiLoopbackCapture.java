@@ -1,4 +1,6 @@
-package com.ashy0019.hapticscape.music;
+package com.ashy0019.hapticscape.integration.desktop;
+
+import com.ashy0019.hapticscape.music.AudioCaptureSource;
 
 import com.sun.jna.Platform;
 import com.sun.jna.Pointer;
