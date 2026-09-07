@@ -9,6 +9,7 @@ import com.ashy0019.hapticscape.HapticPatternSelection;
 import com.ashy0019.hapticscape.HapticScapeConfig;
 import com.ashy0019.hapticscape.HapticScapeSettingKeys;
 import com.ashy0019.hapticscape.NotificationFeedbackSettings;
+import com.ashy0019.hapticscape.SkillCatalog;
 import com.ashy0019.hapticscape.SkillFeedbackProfiles;
 import com.ashy0019.hapticscape.SkillSelection;
 import com.ashy0019.hapticscape.XpFeedbackSettings;
@@ -78,7 +79,6 @@ import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
-import net.runelite.api.Skill;
 
 public final class HapticScapePanel extends JPanel
 	implements RemoteSessionListener, SettingsLockListener
@@ -192,6 +192,7 @@ public final class HapticScapePanel extends JPanel
 
 	public HapticScapePanel(
 		HapticScapeConfig config,
+		SkillCatalog skillCatalog,
 		SettingsStore settingsStore,
 		ExternalLinkOpener externalLinkOpener,
 		TextClipboard clipboard,
@@ -349,6 +350,7 @@ public final class HapticScapePanel extends JPanel
 		settingsPanel = createGlobalSettingsPanel();
 
 		skillsPanel = new SkillsPanel(
+			skillCatalog,
 			SkillSelection.fromConfigValue(config.disabledSkills()),
 			SkillSelection.fromConfigValue(config.clickerDisabledSkills()),
 			this::writeFeedbackSetting,
@@ -359,6 +361,7 @@ public final class HapticScapePanel extends JPanel
 			this::isLockSelectionEnabled
 		);
 		profilesPanel = new ProfilesPanel(
+			skillCatalog,
 			SkillFeedbackProfiles.fromConfigValue(config.skillFeedbackProfiles())
 				.replaceMissingCustomPatterns(customPatterns),
 			this::writeFeedbackSetting,
@@ -646,14 +649,14 @@ public final class HapticScapePanel extends JPanel
 		);
 	}
 
-	public XpFeedbackSettings getXpFeedbackSettings(Skill skill)
+	public XpFeedbackSettings getXpFeedbackSettings(String skillId)
 	{
-		return profilesPanel.getSettings(skill);
+		return profilesPanel.getSettings(skillId);
 	}
 
-	public Skill getSelectedProfileSkill()
+	public String getSelectedProfileSkillId()
 	{
-		return profilesPanel.getSelectedSkill();
+		return profilesPanel.getSelectedSkillId();
 	}
 
 	public HapticPatternSelection getLevelUpPatternPreset()
@@ -681,19 +684,19 @@ public final class HapticScapePanel extends JPanel
 		return level99Enabled;
 	}
 
-	public boolean isSkillEnabled(Skill skill)
+	public boolean isSkillEnabled(String skillId)
 	{
-		return isHapticSkillEnabled(skill);
+		return isHapticSkillEnabled(skillId);
 	}
 
-	public boolean isHapticSkillEnabled(Skill skill)
+	public boolean isHapticSkillEnabled(String skillId)
 	{
-		return skillsPanel.isHapticSkillEnabled(skill);
+		return skillsPanel.isHapticSkillEnabled(skillId);
 	}
 
-	public boolean isClickSkillEnabled(Skill skill)
+	public boolean isClickSkillEnabled(String skillId)
 	{
-		return skillsPanel.isClickSkillEnabled(skill);
+		return skillsPanel.isClickSkillEnabled(skillId);
 	}
 
 	public CustomPatternLibrary getCustomPatterns()

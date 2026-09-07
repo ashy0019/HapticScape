@@ -3,8 +3,9 @@ package com.ashy0019.hapticscape.ui;
 import com.ashy0019.hapticscape.CustomPatternLibrary;
 import com.ashy0019.hapticscape.HapticPatternSelection;
 import com.ashy0019.hapticscape.HapticScapeConfig;
+import com.ashy0019.hapticscape.SkillCatalog;
+import com.ashy0019.hapticscape.SkillDescriptor;
 import com.ashy0019.hapticscape.SkillFeedbackProfiles;
-import com.ashy0019.hapticscape.integration.runelite.RuneLiteSkillCatalog;
 import com.ashy0019.hapticscape.XpFeedbackSettings;
 import com.ashy0019.hapticscape.remote.RemoteSessionManager;
 import com.ashy0019.hapticscape.remote.SettingsLockCatalog;
@@ -27,14 +28,13 @@ import javax.swing.JPanel;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
 import javax.swing.SpinnerNumberModel;
-import net.runelite.api.Skill;
 
 final class ProfilesPanel extends JPanel
 {
 	private final SettingsChangeSink settingsSink;
 	private final Supplier<XpFeedbackSettings> globalSettingsSupplier;
 	private final Supplier<CustomPatternLibrary> customPatternsSupplier;
-	private final JComboBox<Skill> skillComboBox;
+	private final JComboBox<SkillDescriptor> skillComboBox;
 	private final JCheckBox useGlobalCheckBox = new JCheckBox("Use global XP settings");
 	private final JSpinner minimumXpSpinner;
 	private final JSlider intensitySlider;
@@ -46,7 +46,7 @@ final class ProfilesPanel extends JPanel
 	private final LockableSectionHeader profileBlockHeader;
 
 	private volatile SkillFeedbackProfiles profiles;
-	private volatile Skill selectedSkill;
+	private volatile SkillDescriptor selectedSkill;
 	private boolean updatingControls;
 	private boolean updatingPatternChoices;
 	private boolean connected;
@@ -54,6 +54,7 @@ final class ProfilesPanel extends JPanel
 	private boolean previewAllowed = true;
 
 	ProfilesPanel(
+		SkillCatalog skillCatalog,
 		SkillFeedbackProfiles profiles,
 		SettingsChangeSink settingsSink,
 		Supplier<XpFeedbackSettings> globalSettingsSupplier,
@@ -72,7 +73,7 @@ final class ProfilesPanel extends JPanel
 		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
 		setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
 
-		Skill[] skills = RuneLiteSkillCatalog.getSelectableSkills().toArray(new Skill[0]);
+		SkillDescriptor[] skills = skillCatalog.getSkills().toArray(new SkillDescriptor[0]);
 		skillComboBox = new JComboBox<>(skills);
 		skillComboBox.setRenderer(new DefaultListCellRenderer()
 		{
@@ -91,7 +92,9 @@ final class ProfilesPanel extends JPanel
 					isSelected,
 					cellHasFocus
 				);
-				setText(value instanceof Skill ? ((Skill) value).getName() : "");
+				setText(value instanceof SkillDescriptor
+					? ((SkillDescriptor) value).getDisplayName()
+					: "");
 				return this;
 			}
 		});
@@ -99,7 +102,7 @@ final class ProfilesPanel extends JPanel
 		selectedSkill = skills[0];
 		profileBlockHeader = new LockableSectionHeader(
 			"Selected skill settings",
-			() -> SettingsLockCatalog.profileBlock(selectedSkill),
+			() -> SettingsLockCatalog.profileBlock(selectedSkill.getId()),
 			lockDraft,
 			lockService,
 			sessionManager::getLockSnapshot,
@@ -166,7 +169,7 @@ final class ProfilesPanel extends JPanel
 
 		skillComboBox.addActionListener(event ->
 		{
-			Skill selected = (Skill) skillComboBox.getSelectedItem();
+			SkillDescriptor selected = (SkillDescriptor) skillComboBox.getSelectedItem();
 			if (selected != null)
 			{
 				selectedSkill = selected;
@@ -176,13 +179,13 @@ final class ProfilesPanel extends JPanel
 		});
 		useGlobalLockBinding = new LockableCheckBoxBinding(
 			useGlobalCheckBox,
-			() -> SettingsLockCatalog.profileUsesGlobal(selectedSkill),
+			() -> SettingsLockCatalog.profileUsesGlobal(selectedSkill.getId()),
 			lockDraft,
 			lockService,
 			sessionManager::getLockSnapshot,
 			editingRemoteSubject,
 			lockSelectionEnabled,
-			() -> !profiles.getOverride(RuneLiteSkillCatalog.skillId(selectedSkill)).isPresent()
+			() -> !profiles.getOverride(selectedSkill.getId()).isPresent()
 		);
 		useGlobalCheckBox.addActionListener(event ->
 		{
@@ -211,14 +214,14 @@ final class ProfilesPanel extends JPanel
 		setConnected(false);
 	}
 
-	XpFeedbackSettings getSettings(Skill skill)
+	XpFeedbackSettings getSettings(String skillId)
 	{
-		return profiles.resolve(RuneLiteSkillCatalog.skillId(skill), globalSettingsSupplier.get());
+		return profiles.resolve(skillId, globalSettingsSupplier.get());
 	}
 
-	Skill getSelectedSkill()
+	String getSelectedSkillId()
 	{
-		return selectedSkill;
+		return selectedSkill == null ? null : selectedSkill.getId();
 	}
 
 	void applyDisplayedSettings(
@@ -231,7 +234,7 @@ final class ProfilesPanel extends JPanel
 		{
 			PanelUi.setPatternChoices(
 				patternComboBox,
-				getSettings(selectedSkill).getPatternSelection(),
+				getSettings(selectedSkill.getId()).getPatternSelection(),
 				library
 			);
 		}
@@ -256,7 +259,7 @@ final class ProfilesPanel extends JPanel
 
 	void refreshInheritedProfile()
 	{
-		if (selectedSkill != null && !profiles.getOverride(RuneLiteSkillCatalog.skillId(selectedSkill)).isPresent())
+		if (selectedSkill != null && !profiles.getOverride(selectedSkill.getId()).isPresent())
 		{
 			loadSelectedProfile();
 		}
@@ -275,7 +278,7 @@ final class ProfilesPanel extends JPanel
 		{
 			PanelUi.setPatternChoices(
 				patternComboBox,
-				getSettings(selectedSkill).getPatternSelection(),
+				getSettings(selectedSkill.getId()).getPatternSelection(),
 				library
 			);
 		}
@@ -304,13 +307,13 @@ final class ProfilesPanel extends JPanel
 		}
 		if (useGlobalCheckBox.isSelected())
 		{
-			profiles = profiles.withoutOverride(RuneLiteSkillCatalog.skillId(selectedSkill));
+			profiles = profiles.withoutOverride(selectedSkill.getId());
 		}
 		else
 		{
-			profiles = profiles.withOverride(RuneLiteSkillCatalog.skillId(selectedSkill), globalSettingsSupplier.get());
+			profiles = profiles.withOverride(selectedSkill.getId(), globalSettingsSupplier.get());
 		}
-		persist(SettingsLockCatalog.profileUsesGlobal(selectedSkill));
+		persist(SettingsLockCatalog.profileUsesGlobal(selectedSkill.getId()));
 		loadSelectedProfile();
 	}
 
@@ -320,7 +323,7 @@ final class ProfilesPanel extends JPanel
 		{
 			return;
 		}
-		XpFeedbackSettings override = profiles.getOverride(RuneLiteSkillCatalog.skillId(selectedSkill)).orElse(null);
+		XpFeedbackSettings override = profiles.getOverride(selectedSkill.getId()).orElse(null);
 		XpFeedbackSettings displayed = override == null
 			? globalSettingsSupplier.get()
 			: override;
@@ -360,7 +363,7 @@ final class ProfilesPanel extends JPanel
 			return;
 		}
 		profiles = profiles.withOverride(
-			RuneLiteSkillCatalog.skillId(selectedSkill),
+			selectedSkill.getId(),
 			new XpFeedbackSettings(
 				((Number) minimumXpSpinner.getValue()).intValue(),
 				intensitySlider.getValue(),
@@ -368,7 +371,7 @@ final class ProfilesPanel extends JPanel
 				pattern
 			)
 		);
-		persist(SettingsLockCatalog.profileBlock(selectedSkill));
+		persist(SettingsLockCatalog.profileBlock(selectedSkill.getId()));
 	}
 
 	private void updateControlState()

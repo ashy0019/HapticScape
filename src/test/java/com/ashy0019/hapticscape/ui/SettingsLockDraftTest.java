@@ -14,7 +14,6 @@ import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.JCheckBox;
 import javax.swing.SwingUtilities;
-import net.runelite.api.Skill;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -37,7 +36,7 @@ public class SettingsLockDraftTest
 		AtomicReference<LockableCheckBoxBinding> binding = new AtomicReference<>();
 		SwingUtilities.invokeAndWait(() -> binding.set(new LockableCheckBoxBinding(
 			checkBox,
-			SettingsLockCatalog.skillHaptics(Skill.ATTACK),
+			SettingsLockCatalog.skillHaptics("attack"),
 			draft,
 			lockService,
 			RemoteLockSnapshot::inactive,
@@ -52,13 +51,13 @@ public class SettingsLockDraftTest
 			checkBox.setSelected(false);
 			assertTrue(binding.get().handleAction(shiftAction(checkBox)));
 			assertTrue(checkBox.isSelected());
-			assertTrue(draft.contains(SettingsLockCatalog.skillHaptics(Skill.ATTACK)));
+			assertTrue(draft.contains(SettingsLockCatalog.skillHaptics("attack")));
 			assertEquals(preferredSize, checkBox.getPreferredSize());
 
 			checkBox.setSelected(false);
 			assertTrue(binding.get().handleAction(shiftAction(checkBox)));
 			assertTrue(checkBox.isSelected());
-			assertFalse(draft.contains(SettingsLockCatalog.skillHaptics(Skill.ATTACK)));
+			assertFalse(draft.contains(SettingsLockCatalog.skillHaptics("attack")));
 			assertEquals(preferredSize, checkBox.getPreferredSize());
 		});
 	}
@@ -70,7 +69,7 @@ public class SettingsLockDraftTest
 		JCheckBox checkBox = new JCheckBox("Fishing", true);
 		SettingsLockService lockService = newLockService("dynamic-target.json");
 		AtomicReference<SettingsLockTarget> target = new AtomicReference<>(
-			SettingsLockCatalog.skillHaptics(Skill.FISHING)
+			SettingsLockCatalog.skillHaptics("fishing")
 		);
 		AtomicReference<LockableCheckBoxBinding> binding = new AtomicReference<>();
 		SwingUtilities.invokeAndWait(() -> binding.set(new LockableCheckBoxBinding(
@@ -87,12 +86,12 @@ public class SettingsLockDraftTest
 		SwingUtilities.invokeAndWait(() ->
 		{
 			assertTrue(binding.get().handleAction(shiftAction(checkBox)));
-			target.set(SettingsLockCatalog.skillClicks(Skill.FISHING));
+			target.set(SettingsLockCatalog.skillClicks("fishing"));
 			assertTrue(binding.get().handleAction(shiftAction(checkBox)));
 		});
 
-		assertTrue(draft.contains(SettingsLockCatalog.skillHaptics(Skill.FISHING)));
-		assertTrue(draft.contains(SettingsLockCatalog.skillClicks(Skill.FISHING)));
+		assertTrue(draft.contains(SettingsLockCatalog.skillHaptics("fishing")));
+		assertTrue(draft.contains(SettingsLockCatalog.skillClicks("fishing")));
 	}
 
 	@Test
@@ -104,7 +103,7 @@ public class SettingsLockDraftTest
 		AtomicReference<LockableCheckBoxBinding> binding = new AtomicReference<>();
 		SwingUtilities.invokeAndWait(() -> binding.set(new LockableCheckBoxBinding(
 			checkBox,
-			SettingsLockCatalog.skillHaptics(Skill.PRAYER),
+			SettingsLockCatalog.skillHaptics("prayer"),
 			draft,
 			lockService,
 			RemoteLockSnapshot::inactive,

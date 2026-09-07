@@ -245,22 +245,22 @@ public class RemoteSessionManagerTest
 			controller.proposeSettingsLock(
 				password,
 				Collections.singleton(SettingsLockCatalog.skillClicks(
-					net.runelite.api.Skill.FISHING
+					"fishing"
 				))
 			);
 
 			assertEquals(
 				Collections.singleton(SettingsLockCatalog.skillClicks(
-					net.runelite.api.Skill.FISHING
+					"fishing"
 				)),
 				participant.getLockSnapshot().getTargets()
 			);
 			participant.acceptPendingSettingsLock();
 			assertTrue(participantLock.isLocked(
-				SettingsLockCatalog.skillClicks(net.runelite.api.Skill.FISHING)
+				SettingsLockCatalog.skillClicks("fishing")
 			));
 			assertFalse(participantLock.isLocked(
-				SettingsLockCatalog.skillHaptics(net.runelite.api.Skill.FISHING)
+				SettingsLockCatalog.skillHaptics("fishing")
 			));
 			assertTrue(participantLock.unlock(password));
 		}

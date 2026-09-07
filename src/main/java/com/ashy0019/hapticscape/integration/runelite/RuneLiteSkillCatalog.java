@@ -1,5 +1,7 @@
 package com.ashy0019.hapticscape.integration.runelite;
 
+import com.ashy0019.hapticscape.SkillCatalog;
+import com.ashy0019.hapticscape.SkillDescriptor;
 import com.ashy0019.hapticscape.SkillIds;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -11,6 +13,7 @@ public final class RuneLiteSkillCatalog
 {
 	private static final List<Skill> SELECTABLE_SKILLS = createSelectableSkills();
 	private static final List<String> SKILL_IDS = createSkillIds();
+	private static final SkillCatalog NEUTRAL_CATALOG = createNeutralCatalog();
 
 	private RuneLiteSkillCatalog()
 	{
@@ -24,6 +27,11 @@ public final class RuneLiteSkillCatalog
 	public static List<String> getSkillIds()
 	{
 		return SKILL_IDS;
+	}
+
+	public static SkillCatalog getNeutralCatalog()
+	{
+		return NEUTRAL_CATALOG;
 	}
 
 	public static String skillId(Skill skill)
@@ -59,5 +67,15 @@ public final class RuneLiteSkillCatalog
 			skillIds.add(skillId(skill));
 		}
 		return Collections.unmodifiableList(skillIds);
+	}
+
+	private static SkillCatalog createNeutralCatalog()
+	{
+		List<SkillDescriptor> skills = new ArrayList<>();
+		for (Skill skill : SELECTABLE_SKILLS)
+		{
+			skills.add(new SkillDescriptor(skillId(skill), skill.getName()));
+		}
+		return new SkillCatalog(skills);
 	}
 }

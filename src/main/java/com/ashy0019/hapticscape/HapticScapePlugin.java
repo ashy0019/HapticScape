@@ -42,6 +42,7 @@ import com.ashy0019.hapticscape.remote.SavedUnlockKeyStore;
 import com.ashy0019.hapticscape.remote.SettingsBackedRemotePermissionsStore;
 import com.ashy0019.hapticscape.remote.SettingsBackedRemoteSettingsStore;
 import com.ashy0019.hapticscape.remote.SettingsStore;
+import com.ashy0019.hapticscape.remote.SettingsLockCatalog;
 import com.ashy0019.hapticscape.remote.SettingsLockService;
 import com.ashy0019.hapticscape.storage.HapticScapeStoragePaths;
 import com.ashy0019.hapticscape.ui.HapticScapePanel;
@@ -169,6 +170,8 @@ public class HapticScapePlugin extends Plugin
 			new DefaultIntifaceService(httpClient, gson)
 		);
 		effectiveSettingsService = new EffectiveSettingsService(config);
+		SkillCatalog skillCatalog = RuneLiteSkillCatalog.getNeutralCatalog();
+		SettingsLockCatalog.registerSkills(skillCatalog.getSkills());
 		HapticScapeStoragePaths storagePaths = RuneLiteStoragePaths.create();
 		settingsLockService = new SettingsLockService(gson, storagePaths);
 		musicSyncService = new MusicSyncService(
@@ -252,6 +255,7 @@ public class HapticScapePlugin extends Plugin
 		panelHost = new RuneLiteHapticScapePluginPanel();
 		panel = new HapticScapePanel(
 			config,
+			skillCatalog,
 			settingsStore,
 			new AwtExternalLinkOpener(),
 			new AwtTextClipboard(),
@@ -568,8 +572,11 @@ public class HapticScapePlugin extends Plugin
 	private void previewLevel99Ceremony()
 	{
 		HapticScapePanel currentPanel = panel;
-		Skill skill = currentPanel == null ? null : currentPanel.getSelectedProfileSkill();
-		startLevel99Ceremony(skill == null ? Skill.ATTACK : skill, false);
+		String skillId = currentPanel == null ? null : currentPanel.getSelectedProfileSkillId();
+		startLevel99CeremonyBySkillId(
+			skillId == null ? RuneLiteSkillCatalog.skillId(Skill.ATTACK) : skillId,
+			false
+		);
 	}
 
 	private void playLevel99Cheer()
@@ -618,18 +625,18 @@ public class HapticScapePlugin extends Plugin
 			return;
 		}
 
-		Skill skill = currentPanel.getSelectedProfileSkill();
-		if (skill == null)
+		String skillId = currentPanel.getSelectedProfileSkillId();
+		if (skillId == null)
 		{
 			return;
 		}
 
-		XpFeedbackSettings settings = currentPanel.getXpFeedbackSettings(skill);
-		log.debug("Sending test XP profile for {}", skill);
+		XpFeedbackSettings settings = currentPanel.getXpFeedbackSettings(skillId);
+		log.debug("Sending test XP profile for {}", skillId);
 		feedback.sendPattern(
 			HapticEventType.MANUAL_PREVIEW,
 			settings.getPatternSelection(),
-			"TEST_SKILL_" + skill.name(),
+			"TEST_SKILL_" + SkillIds.toConfigToken(skillId),
 			settings.getIntensityPercent(),
 			settings.getDurationMillis()
 		);

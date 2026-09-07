@@ -1,7 +1,8 @@
 package com.ashy0019.hapticscape.remote;
 
 import com.ashy0019.hapticscape.AlertCategory;
-import com.ashy0019.hapticscape.integration.runelite.RuneLiteSkillCatalog;
+import com.ashy0019.hapticscape.SkillDescriptor;
+import com.ashy0019.hapticscape.SkillIds;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -13,7 +14,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import net.runelite.api.Skill;
 
 /** Authoritative registry of setting identifiers allowed in lock proposals. */
 public final class SettingsLockCatalog
@@ -86,16 +86,16 @@ public final class SettingsLockCatalog
 	public static final SettingsLockTarget NOTIFICATION_RESPECT_FOCUS = register(
 		"notifications.respect-focus",
 		"Notifications",
-		"Respect RuneLite focus"
+		"Respect source focus"
 	);
 
-	private static final Map<Skill, SettingsLockTarget> HAPTIC_SKILLS =
+	private static final Map<String, SettingsLockTarget> HAPTIC_SKILLS =
 		new LinkedHashMap<>();
-	private static final Map<Skill, SettingsLockTarget> CLICK_SKILLS =
+	private static final Map<String, SettingsLockTarget> CLICK_SKILLS =
 		new LinkedHashMap<>();
-	private static final Map<Skill, SettingsLockTarget> PROFILE_OVERRIDES =
+	private static final Map<String, SettingsLockTarget> PROFILE_OVERRIDES =
 		new LinkedHashMap<>();
-	private static final Map<Skill, SettingsLockTarget> PROFILE_BLOCKS =
+	private static final Map<String, SettingsLockTarget> PROFILE_BLOCKS =
 		new LinkedHashMap<>();
 	private static final Map<AlertCategory, SettingsLockTarget> ALERT_CLICKS =
 		new LinkedHashMap<>();
@@ -104,32 +104,6 @@ public final class SettingsLockCatalog
 
 	static
 	{
-		for (Skill skill : RuneLiteSkillCatalog.getSelectableSkills())
-		{
-			String slug = skill.name().toLowerCase(Locale.ROOT).replace('_', '-');
-			SettingsLockTarget profileBlock = register(
-				"block.profile." + slug,
-				"Skill profiles",
-				skill.getName() + " XP settings"
-			);
-			PROFILE_BLOCKS.put(skill, profileBlock);
-			HAPTIC_SKILLS.put(skill, register(
-				"skill." + slug + ".haptics",
-				"Skill haptics",
-				skill.getName() + " haptics"
-			));
-			CLICK_SKILLS.put(skill, register(
-				"skill." + slug + ".clicks",
-				"Skill clicks",
-				skill.getName() + " clicks"
-			));
-			PROFILE_OVERRIDES.put(skill, registerChild(
-				"profile." + slug + ".use-global",
-				"Skill profiles",
-				skill.getName() + " uses global XP settings",
-				profileBlock
-			));
-		}
 		for (AlertCategory category : AlertCategory.values())
 		{
 			String slug = category.name().toLowerCase(Locale.ROOT).replace('_', '-');
@@ -162,24 +136,121 @@ public final class SettingsLockCatalog
 	{
 	}
 
-	public static SettingsLockTarget skillHaptics(Skill skill)
+	public static synchronized void registerSkills(Collection<SkillDescriptor> skills)
 	{
-		return Objects.requireNonNull(HAPTIC_SKILLS.get(skill), "Unsupported skill");
+		for (SkillDescriptor skill : Objects.requireNonNull(skills, "skills"))
+		{
+			registerSkill(Objects.requireNonNull(skill, "skill"));
+		}
 	}
 
-	public static SettingsLockTarget skillClicks(Skill skill)
+	public static SettingsLockTarget skillHaptics(String skillId)
 	{
-		return Objects.requireNonNull(CLICK_SKILLS.get(skill), "Unsupported skill");
+		return ensureSkill(skillId).haptics;
 	}
 
-	public static SettingsLockTarget profileUsesGlobal(Skill skill)
+	public static SettingsLockTarget skillClicks(String skillId)
 	{
-		return Objects.requireNonNull(PROFILE_OVERRIDES.get(skill), "Unsupported skill");
+		return ensureSkill(skillId).clicks;
 	}
 
-	public static SettingsLockTarget profileBlock(Skill skill)
+	public static SettingsLockTarget profileUsesGlobal(String skillId)
 	{
-		return Objects.requireNonNull(PROFILE_BLOCKS.get(skill), "Unsupported skill");
+		return ensureSkill(skillId).usesGlobal;
+	}
+
+	public static SettingsLockTarget profileBlock(String skillId)
+	{
+		return ensureSkill(skillId).profileBlock;
+	}
+
+	private static synchronized SkillTargets ensureSkill(String skillId)
+	{
+		String canonical = SkillIds.canonical(skillId);
+		SettingsLockTarget haptics = HAPTIC_SKILLS.get(canonical);
+		if (haptics == null)
+		{
+			registerSkill(new SkillDescriptor(canonical, displayName(canonical)));
+		}
+		return new SkillTargets(
+			HAPTIC_SKILLS.get(canonical),
+			CLICK_SKILLS.get(canonical),
+			PROFILE_OVERRIDES.get(canonical),
+			PROFILE_BLOCKS.get(canonical)
+		);
+	}
+
+	private static void registerSkill(SkillDescriptor skill)
+	{
+		String skillId = skill.getId();
+		if (HAPTIC_SKILLS.containsKey(skillId))
+		{
+			return;
+		}
+		String slug = skillId.replace('_', '-');
+		String displayName = skill.getDisplayName();
+		SettingsLockTarget profileBlock = register(
+			"block.profile." + slug,
+			"Skill profiles",
+			displayName + " XP settings"
+		);
+		PROFILE_BLOCKS.put(skillId, profileBlock);
+		HAPTIC_SKILLS.put(skillId, register(
+			"skill." + slug + ".haptics",
+			"Skill haptics",
+			displayName + " haptics"
+		));
+		CLICK_SKILLS.put(skillId, register(
+			"skill." + slug + ".clicks",
+			"Skill clicks",
+			displayName + " clicks"
+		));
+		PROFILE_OVERRIDES.put(skillId, registerChild(
+			"profile." + slug + ".use-global",
+			"Skill profiles",
+			displayName + " uses global XP settings",
+			profileBlock
+		));
+	}
+
+	private static String displayName(String skillId)
+	{
+		String[] words = skillId.replace('-', '_').split("_");
+		StringBuilder display = new StringBuilder();
+		for (String word : words)
+		{
+			if (word.isEmpty())
+			{
+				continue;
+			}
+			if (display.length() > 0)
+			{
+				display.append(' ');
+			}
+			display.append(Character.toUpperCase(word.charAt(0)));
+			display.append(word.substring(1));
+		}
+		return display.toString();
+	}
+
+	private static final class SkillTargets
+	{
+		private final SettingsLockTarget haptics;
+		private final SettingsLockTarget clicks;
+		private final SettingsLockTarget usesGlobal;
+		private final SettingsLockTarget profileBlock;
+
+		private SkillTargets(
+			SettingsLockTarget haptics,
+			SettingsLockTarget clicks,
+			SettingsLockTarget usesGlobal,
+			SettingsLockTarget profileBlock)
+		{
+			this.haptics = haptics;
+			this.clicks = clicks;
+			this.usesGlobal = usesGlobal;
+			this.profileBlock = profileBlock;
+		}
 	}
 
 	public static SettingsLockTarget alertClicks(AlertCategory category)

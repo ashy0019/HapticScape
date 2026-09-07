@@ -1,7 +1,6 @@
 package com.ashy0019.hapticscape.remote;
 
 import java.util.UUID;
-import net.runelite.api.Skill;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -18,16 +17,16 @@ public class SettingsLockCatalogTest
 			SettingsLockCatalog.LEVEL_UP_HAPTICS
 		));
 		assertTrue(SettingsLockCatalog.covers(
-			SettingsLockCatalog.profileBlock(Skill.ATTACK),
-			SettingsLockCatalog.profileUsesGlobal(Skill.ATTACK)
+			SettingsLockCatalog.profileBlock("attack"),
+			SettingsLockCatalog.profileUsesGlobal("attack")
 		));
 		assertFalse(SettingsLockCatalog.covers(
-			SettingsLockCatalog.profileBlock(Skill.ATTACK),
-			SettingsLockCatalog.profileUsesGlobal(Skill.DEFENCE)
+			SettingsLockCatalog.profileBlock("attack"),
+			SettingsLockCatalog.profileUsesGlobal("defence")
 		));
 		assertFalse(SettingsLockCatalog.covers(
 			SettingsLockCatalog.CLICK_SETTINGS_BLOCK,
-			SettingsLockCatalog.skillClicks(Skill.ATTACK)
+			SettingsLockCatalog.skillClicks("attack")
 		));
 	}
 

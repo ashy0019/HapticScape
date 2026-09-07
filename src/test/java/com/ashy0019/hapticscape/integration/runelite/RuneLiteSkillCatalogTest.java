@@ -14,4 +14,13 @@ public class RuneLiteSkillCatalogTest
 		assertEquals(Skill.COOKING, RuneLiteSkillCatalog.skill("COOKING"));
 		assertEquals(Skill.COOKING, RuneLiteSkillCatalog.skill("cooking"));
 	}
+
+	@Test
+	public void neutralCatalogUsesRuneLiteDisplayNames()
+	{
+		assertEquals(
+			Skill.ATTACK.getName(),
+			RuneLiteSkillCatalog.getNeutralCatalog().require("attack").getDisplayName()
+		);
+	}
 }
