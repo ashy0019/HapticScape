@@ -57,7 +57,7 @@ final class RemotePermissionsPanel extends JPanel
 			"Allow continuous haptic intensity control while the controller holds Live Forge"
 		);
 		clicks.setToolTipText("Allow the controller to play your local click sound");
-		notifications.setToolTipText("Allow local RuneLite desktop notifications");
+		notifications.setToolTipText("Allow local operating-system notifications");
 		chatbox.setToolTipText(
 			"Show a local-only HapticScape console line; nothing is sent to game chat"
 		);

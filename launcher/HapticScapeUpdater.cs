@@ -159,8 +159,9 @@ internal static class HapticScapeUpdater
 	private static void ValidateApplication(string directory)
 	{
 		if (!File.Exists(Path.Combine(directory, "HapticScape.exe"))
-			|| !File.Exists(Path.Combine(directory, "app", "hapticscape-client.jar"))
-			|| !File.Exists(Path.Combine(directory, "app", "release.json")))
+			|| !File.Exists(Path.Combine(directory, "app", "hapticscape-desktop.jar"))
+			|| !File.Exists(Path.Combine(directory, "app", "release.json"))
+			|| !File.Exists(Path.Combine(directory, "runtime", "bin", "javaw.exe")))
 		{
 			throw new InvalidDataException("A HapticScape application directory failed validation.");
 		}

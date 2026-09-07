@@ -26,7 +26,7 @@ import javax.swing.JPanel;
 import javax.swing.Timer;
 
 /**
- * Full-height Rogue's Den game canvas. The entire RuneLite plugin body is used
+ * Full-height Rogue's Den game canvas. The entire host panel body is used
  * as one illustrated blackjack surface: room art, future multiplayer/AI seats,
  * table, chips, controls, and an event log all scale together.
  */
@@ -195,7 +195,7 @@ public final class CasinoScenePanel extends JPanel
 			g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
 				RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
 			// Deliberately fill the entire available Rogue body. The logical scene
-			// matches RuneLite's narrow aspect ratio closely enough that the tiny
+			// matches the narrow host aspect ratio closely enough that the tiny
 			// amount of non-uniform scaling is preferable to giant black bars.
 			g.drawImage(frame, 0, 0, Math.max(1, getWidth()), Math.max(1, getHeight()), null);
 		}
@@ -508,7 +508,7 @@ public final class CasinoScenePanel extends JPanel
 	private static void drawDealer(Graphics2D g, int x, int y)
 	{
 		// Slim, flirtatious Rogue's Den waitress. Keep the shapes simple and
-		// readable at native RuneLite scale: long dirty-blonde hair does most of
+		// readable at native sidebar scale: long dirty-blonde hair does most of
 		// the silhouette work, while the face and draped blouse stay deliberately
 		// low-detail so she still belongs beside the blockier RSC-style patrons.
 		Color hairShadow = new Color(105, 74, 42);
@@ -787,7 +787,7 @@ public final class CasinoScenePanel extends JPanel
 
 		// Larger chair/portrait proportions. The previous 10 px head and 18 px
 		// torso read like an icon; this version fills most of the 46x70 frame and
-		// lets hair, hats, eyes and idle motions survive RuneLite scaling.
+		// lets hair, hats, eyes and idle motions survive narrow-panel scaling.
 		g.setColor(new Color(63, 42, 29));
 		g.fillRect(centerX - 15, topY + 17, 30, 36);
 		g.setColor(new Color(108, 70, 39));

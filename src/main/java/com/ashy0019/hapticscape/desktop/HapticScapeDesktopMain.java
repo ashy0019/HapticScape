@@ -53,7 +53,7 @@ public final class HapticScapeDesktopMain
 			message = failure.getClass().getSimpleName();
 		}
 		String finalMessage = "HapticScape could not start.\n\n" + message
-			+ "\n\nIf RuneLite-hosted HapticScape is currently running, close or disable it so port 41713 is free.";
+			+ "\n\nAnother HapticScape instance may already be running, or port 41713 may be unavailable.";
 		JOptionPane.showMessageDialog(
 			null,
 			finalMessage,

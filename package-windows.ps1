@@ -27,17 +27,17 @@ if (-not $cscPath)
 Push-Location $projectRoot
 try
 {
-	Write-Host 'Running tests and building the HapticScape client...'
-	& $gradleWrapper "-PappVersion=$Version" clean test verifyClientJar collectRuntimeLicenses
+	Write-Host 'Running tests and building the standalone HapticScape desktop app...'
+	& $gradleWrapper "-PappVersion=$Version" clean test verifyStandaloneJar collectRuntimeLicenses
 	if ($LASTEXITCODE -ne 0)
 	{
 		throw "Gradle failed with exit code $LASTEXITCODE."
 	}
 
-	$jarPath = Join-Path $projectRoot 'build\libs\hapticscape-client.jar'
+	$jarPath = Join-Path $projectRoot 'build\libs\hapticscape-desktop.jar'
 	if (-not (Test-Path $jarPath -PathType Leaf))
 	{
-		throw "The expected client JAR was not created: $jarPath"
+		throw "The expected standalone desktop JAR was not created: $jarPath"
 	}
 
 	$packageRoot = Join-Path $projectRoot 'build\windows-package'
@@ -46,6 +46,7 @@ try
 	$licensesDirectory = Join-Path $appFilesDirectory 'licenses'
 	$distributionDirectory = Join-Path $projectRoot 'build\distribution'
 	$nativeTestDirectory = Join-Path $projectRoot 'build\native-tests'
+	$runtimeDirectory = Join-Path $appDirectory 'runtime'
 
 	switch ($env:PROCESSOR_ARCHITECTURE)
 	{
@@ -63,11 +64,64 @@ try
 	New-Item -ItemType Directory -Force $distributionDirectory | Out-Null
 	New-Item -ItemType Directory -Force $nativeTestDirectory | Out-Null
 
+	Copy-Item $jarPath (Join-Path $appFilesDirectory 'hapticscape-desktop.jar')
+	# Transitional compatibility copy: HapticScape 2.4.x updaters validate this
+	# legacy filename before replacing themselves with the standalone launcher.
+	# The bytes are the RuneLite-free desktop JAR and this alias can be removed
+	# after the first standalone release has become the update baseline.
 	Copy-Item $jarPath (Join-Path $appFilesDirectory 'hapticscape-client.jar')
 	Copy-Item (Join-Path $projectRoot 'LICENSE') (Join-Path $licensesDirectory 'HapticScape.txt')
 	Copy-Item (Join-Path $projectRoot 'licenses\*') $licensesDirectory -Recurse
 	Copy-Item (Join-Path $projectRoot 'build\generated\runtime-licenses') (Join-Path $licensesDirectory 'resolved-artifacts') -Recurse
 	Copy-Item (Join-Path $projectRoot 'FRIEND-SETUP.md') (Join-Path $appDirectory 'README-FIRST.md')
+
+	$jlinkCandidates = @()
+	if (-not [string]::IsNullOrWhiteSpace($env:HAPTICSCAPE_JAVA_HOME))
+	{
+		$jlinkCandidates += (Join-Path $env:HAPTICSCAPE_JAVA_HOME 'bin\jlink.exe')
+	}
+	if (-not [string]::IsNullOrWhiteSpace($env:JAVA_HOME))
+	{
+		$jlinkCandidates += (Join-Path $env:JAVA_HOME 'bin\jlink.exe')
+	}
+	$jlinkCommand = Get-Command 'jlink.exe' -ErrorAction SilentlyContinue
+	if ($jlinkCommand)
+	{
+		$jlinkCandidates += $jlinkCommand.Source
+	}
+	$jlinkPath = $jlinkCandidates | Where-Object { $_ -and (Test-Path $_ -PathType Leaf) } | Select-Object -First 1
+	if (-not $jlinkPath)
+	{
+		throw 'A JDK with jlink is required to package HapticScape. Set HAPTICSCAPE_JAVA_HOME to a redistributable JDK 11+ and try again.'
+	}
+
+	$runtimeModules = @(
+		'java.base',
+		'java.desktop',
+		'java.logging',
+		'java.management',
+		'java.naming',
+		'java.sql',
+		'jdk.crypto.ec',
+		'jdk.unsupported'
+	)
+	Write-Host 'Creating the bundled HapticScape Java runtime...'
+	& $jlinkPath `
+		'--add-modules' ($runtimeModules -join ',') `
+		'--strip-debug' `
+		'--no-header-files' `
+		'--no-man-pages' `
+		'--compress=2' `
+		'--output' $runtimeDirectory
+	if ($LASTEXITCODE -ne 0)
+	{
+		throw "jlink failed with exit code $LASTEXITCODE."
+	}
+	$bundledJava = Join-Path $runtimeDirectory 'bin\javaw.exe'
+	if (-not (Test-Path $bundledJava -PathType Leaf))
+	{
+		throw "The bundled HapticScape Java runtime was not created correctly: $bundledJava"
+	}
 
 	$releaseManifest = @{
 		version = $Version

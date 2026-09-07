@@ -131,7 +131,7 @@ public final class AlertProfiles
 
 	/**
 	 * Resolves a specific semantic alert. Generic notification enablement only
-	 * controls catch-all RuneLite notifications; it does not disable profiles
+	 * controls catch-all source notifications; it does not disable profiles
 	 * which inherit the generic pattern settings.
 	 */
 	public Optional<AlertPlayback> resolve(

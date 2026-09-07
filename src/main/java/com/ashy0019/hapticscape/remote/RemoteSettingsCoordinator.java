@@ -270,7 +270,7 @@ final class RemoteSettingsCoordinator
 					controllerSettings = canonical;
 					// The controller UI already displays its optimistic draft. Reapplying
 					// an identical full snapshot rebuilds every Swing control and can move
-					// RuneLite's sidebar viewport. Publish only when the participant
+					// the host viewport. Publish only when the participant
 					// actually canonicalized the submitted values differently.
 					if (!canonical.equals(acknowledgedDraft))
 					{

@@ -17,6 +17,7 @@ internal static class UpdateCoreTests
 			TestPolicy();
 			TestReleaseParsing();
 			TestPreferences(root);
+			TestPreferenceMigration(root);
 			TestChecksum(root);
 			TestSafeExtraction(root);
 			TestTraversalRejection(root);
@@ -106,6 +107,24 @@ internal static class UpdateCoreTests
 		Assert(!loaded.UpdateNotifications, "notification choice should round-trip");
 		Assert(loaded.SkippedVersion == "1.6.2", "skipped version should round-trip");
 		Assert(loaded.ForceCheck, "manual check request should round-trip");
+	}
+
+	private static void TestPreferenceMigration(string root)
+	{
+		string legacy = Path.Combine(root, "legacy", "updater-settings.json");
+		string current = Path.Combine(root, "current", "updater-settings.json");
+		Directory.CreateDirectory(Path.GetDirectoryName(legacy));
+		File.WriteAllText(legacy, "{\"automaticUpdates\":true}");
+
+		UpdatePreferencesStore.TryMigrateLegacyPath(current, legacy);
+		Assert(File.Exists(current), "legacy updater preferences should migrate to HapticScape storage");
+		Assert(UpdatePreferencesStore.Load(current).AutomaticUpdates,
+			"migrated updater preferences should remain readable");
+
+		File.WriteAllText(current, "{\"automaticUpdates\":false}");
+		UpdatePreferencesStore.TryMigrateLegacyPath(current, legacy);
+		Assert(!UpdatePreferencesStore.Load(current).AutomaticUpdates,
+			"existing HapticScape preferences should win over legacy settings");
 	}
 
 	private static void TestChecksum(string root)

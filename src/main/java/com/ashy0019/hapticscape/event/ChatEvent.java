@@ -3,7 +3,7 @@ package com.ashy0019.hapticscape.event;
 import java.util.Objects;
 
 /**
- * Source-neutral chat observation. RuneLite-specific message types and text
+ * Source-neutral chat observation. Source-specific message types and text
  * escaping are translated before this event reaches HapticScape logic.
  *
  * <p>The original source text is retained so the bridge does not throw away

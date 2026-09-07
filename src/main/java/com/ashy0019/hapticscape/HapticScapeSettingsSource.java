@@ -6,8 +6,8 @@ import com.ashy0019.hapticscape.remote.RemoteSettingsSource;
 /**
  * Full source-neutral settings view used by the HapticScape runtime and UI.
  *
- * <p>RuneLite may implement this through its config system; a standalone host
- * can provide the same values from a file-backed or in-memory settings store.</p>
+ * <p>Each host can provide these values from its native configuration system,
+ * a file-backed store, or an in-memory settings implementation.</p>
  */
 public interface HapticScapeSettingsSource extends RemoteSettingsSource, RemotePermissionsSource
 {

@@ -116,7 +116,7 @@ public class XpOutputDecisionTest
 	private static XpEvent eventBetweenXp(int previousXp, int currentXp)
 	{
 		return new XpEvent(
-			XpEvent.SOURCE_RUNELITE,
+			"test-source",
 			"agility",
 			previousXp,
 			currentXp,
@@ -129,7 +129,7 @@ public class XpOutputDecisionTest
 	private static XpEvent eventBetweenLevels(int previousLevel, int currentLevel)
 	{
 		return new XpEvent(
-			XpEvent.SOURCE_RUNELITE,
+			"test-source",
 			"agility",
 			previousLevel * 1_000,
 			currentLevel * 1_000,

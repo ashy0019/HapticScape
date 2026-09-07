@@ -579,8 +579,7 @@ public final class HapticScapePanel extends JPanel
 		contentHost.add(roguePanel, ROGUE_CARD);
 		add(rogueLauncher, BorderLayout.NORTH);
 		add(contentHost, BorderLayout.CENTER);
-		// The host owns the page viewport. RuneLite currently supplies its sidebar
-		// scroll pane; the standalone desktop host can supply its own later.
+		// The host owns the page viewport and supplies the surrounding scroll pane.
 		pageScrollPane.getVerticalScrollBar().setUnitIncrement(16);
 		pageScrollRouting = globalUiHooks.installSidebarScrollRouting(pageScrollPane, this);
 		sidebarActionFocusGuard = SidebarActionFocusGuard.install(this);

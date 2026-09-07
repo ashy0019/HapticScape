@@ -3,7 +3,7 @@ package com.ashy0019.hapticscape.protocol;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 
-/** Stable loopback endpoint for the local RuneLite-to-HapticScape bridge. */
+/** Stable loopback endpoint for local gameplay-event sources. */
 public final class LocalhostTransportEndpoint
 {
 	public static final String HOST = "127.0.0.1";

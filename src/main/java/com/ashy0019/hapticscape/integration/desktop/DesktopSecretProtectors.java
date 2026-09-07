@@ -2,7 +2,7 @@ package com.ashy0019.hapticscape.integration.desktop;
 
 import com.ashy0019.hapticscape.remote.UnlockKeyProtector;
 
-/** Supplies desktop-specific secret protection to RuneLite-hosted HapticScape. */
+/** Supplies secret protection for the standalone desktop host. */
 public final class DesktopSecretProtectors
 {
 	private DesktopSecretProtectors()

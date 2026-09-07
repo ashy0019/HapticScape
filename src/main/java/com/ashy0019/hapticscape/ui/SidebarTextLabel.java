@@ -5,10 +5,10 @@ import javax.swing.border.Border;
 import javax.swing.JTextArea;
 import javax.swing.UIManager;
 
-/** Plain-text label that wraps predictably inside RuneLite's narrow sidebar. */
+/** Plain-text label that wraps predictably inside a narrow host sidebar. */
 final class SidebarTextLabel extends JTextArea
 {
-	// Leave room for card borders and RuneLite scrollbar gutters at the
+	// Leave room for card borders and host scrollbar gutters at the
 	// narrowest supported sidebar width.
 	private static final int TEXT_WIDTH = 180;
 	private boolean initialized;

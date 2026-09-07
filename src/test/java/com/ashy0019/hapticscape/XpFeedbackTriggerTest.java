@@ -132,7 +132,7 @@ public class XpFeedbackTriggerTest
 	private static XpEvent eventBetweenXp(int previousXp, int currentXp)
 	{
 		return new XpEvent(
-			XpEvent.SOURCE_RUNELITE,
+			"test-source",
 			"agility",
 			previousXp,
 			currentXp,
@@ -153,7 +153,7 @@ public class XpFeedbackTriggerTest
 		int currentLevel)
 	{
 		return new XpEvent(
-			XpEvent.SOURCE_RUNELITE,
+			"test-source",
 			skillId,
 			previousLevel * 1_000,
 			currentLevel * 1_000,
