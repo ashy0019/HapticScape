@@ -20,6 +20,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import net.runelite.api.Skill;
@@ -272,6 +273,11 @@ public final class RemoteSettingsSnapshot
 		return getSkillFeedbackProfiles().resolve(skill, getGlobalXpFeedbackSettings());
 	}
 
+	public XpFeedbackSettings getXpFeedbackSettings(String skillId)
+	{
+		return getXpFeedbackSettings(runeLiteSkill(skillId));
+	}
+
 	public SkillFeedbackProfiles getSkillFeedbackProfiles()
 	{
 		return SkillFeedbackProfiles.fromConfigValue(skillFeedbackProfiles)
@@ -293,9 +299,19 @@ public final class RemoteSettingsSnapshot
 		return getHapticSkillSelection().isEnabled(skill);
 	}
 
+	public boolean isHapticSkillEnabled(String skillId)
+	{
+		return isHapticSkillEnabled(runeLiteSkill(skillId));
+	}
+
 	public boolean isClickSkillEnabled(Skill skill)
 	{
 		return getClickSkillSelection().isEnabled(skill);
+	}
+
+	public boolean isClickSkillEnabled(String skillId)
+	{
+		return isClickSkillEnabled(runeLiteSkill(skillId));
 	}
 
 	public boolean isLevelUpFeedbackEnabled()
@@ -503,6 +519,19 @@ public final class RemoteSettingsSnapshot
 			clickerAlertSettings,
 			clickerPhraseRules
 		);
+	}
+
+	// Temporary compatibility seam until skill/profile storage is keyed by neutral IDs.
+	private static Skill runeLiteSkill(String skillId)
+	{
+		String normalized = Objects.requireNonNull(skillId, "skillId")
+			.trim()
+			.toUpperCase(Locale.ROOT);
+		if (normalized.isEmpty())
+		{
+			throw new IllegalArgumentException("skillId must not be empty");
+		}
+		return Skill.valueOf(normalized);
 	}
 
 	private static int clamp(int value, int minimum, int maximum)

@@ -23,7 +23,7 @@ import com.ashy0019.hapticscape.remote.RemotePairingService;
 import com.ashy0019.hapticscape.remote.RemoteSessionListener;
 import com.ashy0019.hapticscape.remote.RemoteSessionManager;
 import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
-import com.ashy0019.hapticscape.integration.runelite.RuneLiteNotificationEventAdapter;
+import com.ashy0019.hapticscape.integration.runelite.RuneLiteGameplayBridge;
 import com.ashy0019.hapticscape.remote.RemoteSettingsSnapshot;
 import com.ashy0019.hapticscape.remote.SettingsLockService;
 import com.ashy0019.hapticscape.ui.HapticScapePanel;
@@ -85,9 +85,8 @@ public class HapticScapePlugin extends Plugin
 	private static final float ROGUE_UNLOCK_STING_GAIN_DB = -4.0f;
 	private final Level99CelebrationController level99CelebrationController =
 		new Level99CelebrationController();
-	private final RuneLiteNotificationEventAdapter notificationEventAdapter =
-		new RuneLiteNotificationEventAdapter();
 	private GameplayEventCoordinator gameplayEvents;
+	private RuneLiteGameplayBridge gameplayBridge;
 	private FeedbackCoordinator feedbackCoordinator;
 	private GatedIntifaceService intifaceService;
 	private EffectiveSettingsService effectiveSettingsService;
@@ -202,12 +201,12 @@ public class HapticScapePlugin extends Plugin
 			}
 		});
 		gameplayEvents = new GameplayEventCoordinator(
-			client,
-			itemManager,
 			this::effectiveSettings,
 			feedbackCoordinator
 		);
 		gameplayEvents.start();
+		gameplayBridge = new RuneLiteGameplayBridge(client, itemManager, gameplayEvents);
+		gameplayBridge.start();
 		updatePreferencesStore = new UpdatePreferencesStore(gson);
 		updateCheckService = new UpdateCheckService(httpClient, gson);
 		RemotePairingService remotePairingService = new RemotePairingService(httpClient);
@@ -300,6 +299,7 @@ public class HapticScapePlugin extends Plugin
 	protected void shutDown()
 	{
 		DiscordDeepLinkInbox.getInstance().setHandler(null);
+		gameplayBridge = null;
 		if (gameplayEvents != null)
 		{
 			gameplayEvents.close();
@@ -383,10 +383,10 @@ public class HapticScapePlugin extends Plugin
 	@Subscribe
 	public void onGameStateChanged(GameStateChanged event)
 	{
-		GameplayEventCoordinator events = gameplayEvents;
-		if (events != null)
+		RuneLiteGameplayBridge bridge = gameplayBridge;
+		if (bridge != null)
 		{
-			events.onGameStateChanged(event.getGameState());
+			bridge.onGameStateChanged(event.getGameState());
 		}
 		if (event.getGameState() == GameState.LOGIN_SCREEN
 			|| event.getGameState() == GameState.HOPPING
@@ -399,82 +399,80 @@ public class HapticScapePlugin extends Plugin
 	@Subscribe
 	public void onStatChanged(StatChanged event)
 	{
-		GameplayEventCoordinator events = gameplayEvents;
-		if (events != null)
+		RuneLiteGameplayBridge bridge = gameplayBridge;
+		if (bridge != null)
 		{
-			events.onStatChanged(event);
+			bridge.onStatChanged(event);
 		}
 	}
 
 	@Subscribe
 	public void onChatMessage(ChatMessage event)
 	{
-		GameplayEventCoordinator events = gameplayEvents;
-		if (events != null)
+		RuneLiteGameplayBridge bridge = gameplayBridge;
+		if (bridge != null)
 		{
-			events.onChatMessage(event);
+			bridge.onChatMessage(event);
 		}
 	}
 
 	@Subscribe
 	public void onItemContainerChanged(ItemContainerChanged event)
 	{
-		GameplayEventCoordinator events = gameplayEvents;
-		if (events != null)
+		RuneLiteGameplayBridge bridge = gameplayBridge;
+		if (bridge != null)
 		{
-			events.onItemContainerChanged(event);
+			bridge.onItemContainerChanged(event);
 		}
 	}
 
 	@Subscribe
 	public void onVarbitChanged(VarbitChanged event)
 	{
-		GameplayEventCoordinator events = gameplayEvents;
-		if (events != null)
+		RuneLiteGameplayBridge bridge = gameplayBridge;
+		if (bridge != null)
 		{
-			events.onVarbitChanged(event);
+			bridge.onVarbitChanged(event);
 		}
 	}
 
 	@Subscribe
 	public void onNpcLootReceived(NpcLootReceived event)
 	{
-		GameplayEventCoordinator events = gameplayEvents;
-		if (events != null)
+		RuneLiteGameplayBridge bridge = gameplayBridge;
+		if (bridge != null)
 		{
-			events.onLootReceived(event.getItems());
+			bridge.onLootReceived(event.getItems());
 		}
 	}
 
 	@Subscribe
 	public void onPlayerLootReceived(PlayerLootReceived event)
 	{
-		GameplayEventCoordinator events = gameplayEvents;
-		if (events != null)
+		RuneLiteGameplayBridge bridge = gameplayBridge;
+		if (bridge != null)
 		{
-			events.onLootReceived(event.getItems());
+			bridge.onLootReceived(event.getItems());
 		}
 	}
 
 	@Subscribe
 	public void onActorDeath(ActorDeath event)
 	{
-		GameplayEventCoordinator events = gameplayEvents;
-		if (events != null)
+		RuneLiteGameplayBridge bridge = gameplayBridge;
+		if (bridge != null)
 		{
-			events.onActorDeath(event);
+			bridge.onActorDeath(event);
 		}
 	}
 
 	@Subscribe
 	public void onNotificationFired(NotificationFired event)
 	{
-		GameplayEventCoordinator events = gameplayEvents;
-		if (events != null)
+		RuneLiteGameplayBridge bridge = gameplayBridge;
+		if (bridge != null)
 		{
-			events.onNotificationEvent(
-				notificationEventAdapter.adapt(event, clientUI.isFocused())
-			);
+			bridge.onNotificationFired(event, clientUI.isFocused());
 		}
 	}
 
