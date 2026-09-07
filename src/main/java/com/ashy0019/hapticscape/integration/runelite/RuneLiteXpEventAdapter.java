@@ -47,19 +47,4 @@ public final class RuneLiteXpEventAdapter
 		return Math.min(99, Experience.getLevelForXp(Math.max(0, xp)));
 	}
 
-	/**
-	 * Temporary compatibility seam for code that still requires RuneLite Skill.
-	 * Delete this direction once the remaining RuneLite-owned consumers move out.
-	 */
-	public Skill toSkill(XpEvent event)
-	{
-		Objects.requireNonNull(event, "event");
-		if (!XpEvent.SOURCE_RUNELITE.equals(event.getSource()))
-		{
-			throw new IllegalArgumentException(
-				"Cannot convert non-RuneLite XP event to RuneLite Skill"
-			);
-		}
-		return Skill.valueOf(SkillIds.toConfigToken(event.getSkillId()));
-	}
 }

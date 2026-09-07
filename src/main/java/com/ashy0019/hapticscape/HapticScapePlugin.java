@@ -26,7 +26,12 @@ import com.ashy0019.hapticscape.remote.RemotePairingService;
 import com.ashy0019.hapticscape.remote.RemoteSessionListener;
 import com.ashy0019.hapticscape.remote.RemoteSessionManager;
 import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
+import com.ashy0019.hapticscape.host.DesktopNotificationService;
+import com.ashy0019.hapticscape.host.SourceMessageService;
+import com.ashy0019.hapticscape.integration.runelite.RuneLiteDesktopNotificationService;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteGameplayBridge;
+import com.ashy0019.hapticscape.integration.runelite.RuneLiteSkillCatalog;
+import com.ashy0019.hapticscape.integration.runelite.RuneLiteSourceMessageService;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteStoragePaths;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteSettingsWriter;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteSoundPlayer;
@@ -43,7 +48,6 @@ import com.ashy0019.hapticscape.update.UpdateCheckService;
 import com.ashy0019.hapticscape.update.UpdatePreferencesStore;
 import com.google.gson.Gson;
 import com.google.inject.Provides;
-import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -52,7 +56,6 @@ import javax.inject.Inject;
 import javax.swing.SwingUtilities;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
-import net.runelite.api.ChatMessageType;
 import net.runelite.api.GameState;
 import net.runelite.api.Skill;
 import net.runelite.api.events.ActorDeath;
@@ -65,7 +68,6 @@ import net.runelite.client.audio.AudioPlayer;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.config.RuneLiteConfig;
 import net.runelite.client.chat.ChatMessageManager;
-import net.runelite.client.chat.QueuedMessage;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.NotificationFired;
 import net.runelite.client.events.NpcLootReceived;
@@ -78,7 +80,6 @@ import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.ClientUI;
 import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.ui.overlay.OverlayManager;
-import net.runelite.client.util.ColorUtil;
 import net.runelite.client.util.ImageUtil;
 import okhttp3.OkHttpClient;
 
@@ -105,6 +106,7 @@ public class HapticScapePlugin extends Plugin
 	private MusicSyncService musicSyncService;
 	private ClickerService clickerService;
 	private SoundPlayer soundPlayer;
+	private SourceMessageService sourceMessages;
 	private HapticScapePanel panel;
 	private NavigationButton navigationButton;
 	private Level99CelebrationOverlay level99CelebrationOverlay;
@@ -176,15 +178,17 @@ public class HapticScapePlugin extends Plugin
 			new SoundPlayerClickPlayback(soundPlayer),
 			clickerSettingsFromConfig()
 		);
+		DesktopNotificationService desktopNotifications =
+			new RuneLiteDesktopNotificationService(notifier, runeLiteConfig);
+		sourceMessages = new RuneLiteSourceMessageService(chatMessageManager);
 		feedbackCoordinator = new FeedbackCoordinator(
 			intifaceService,
 			clickerService,
 			musicSyncService,
 			this::effectiveSettings,
-			this::startLevel99Ceremony,
-			notifier,
-			runeLiteConfig,
-			chatMessageManager
+			this::startLevel99CeremonyBySkillId,
+			desktopNotifications,
+			sourceMessages
 		);
 		SettingsStore settingsStore =
 			new RuneLiteSettingsWriter(configManager, HapticScapeConfig.GROUP);
@@ -356,6 +360,7 @@ public class HapticScapePlugin extends Plugin
 			remoteSessionManager = null;
 		}
 		feedbackCoordinator = null;
+		sourceMessages = null;
 		if (musicSyncService != null)
 		{
 			musicSyncService.setListener(snapshot -> { });
@@ -574,20 +579,18 @@ public class HapticScapePlugin extends Plugin
 		}
 	}
 
+	private void startLevel99CeremonyBySkillId(String skillId, boolean announceInChat)
+	{
+		startLevel99Ceremony(RuneLiteSkillCatalog.skill(skillId), announceInChat);
+	}
+
 	private void startLevel99Ceremony(Skill skill, boolean announceInChat)
 	{
 		level99CelebrationController.start(skill);
 		CompletableFuture.runAsync(this::playLevel99Cheer);
-		if (announceInChat)
+		if (announceInChat && sourceMessages != null)
 		{
-			String coloredMessage = ColorUtil.wrapWithColorTag(
-				Level99Ceremony.CHAT_MESSAGE,
-				new Color(255, 174, 0)
-			);
-			chatMessageManager.queue(QueuedMessage.builder()
-				.type(ChatMessageType.CONSOLE)
-				.runeLiteFormattedMessage(coloredMessage)
-				.build());
+			sourceMessages.postColored(Level99Ceremony.CHAT_MESSAGE, 0xFFAE00);
 		}
 		if (intifaceService != null)
 		{
