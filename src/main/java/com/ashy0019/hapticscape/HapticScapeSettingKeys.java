@@ -10,6 +10,7 @@ public final class HapticScapeSettingKeys
 	{
 	}
 
+	public static final String INTIFACE_SERVER = "intifaceServer";
 	public static final String MINIMUM_XP_GAIN = "minimumXpGain";
 	public static final String INTENSITY_PERCENT = "intensityPercent";
 	public static final String PULSE_DURATION_MILLIS = "pulseDurationMillis";

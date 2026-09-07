@@ -1,6 +1,7 @@
 package com.ashy0019.hapticscape.ui;
 
-import com.ashy0019.hapticscape.HapticScapeConfig;
+import com.ashy0019.hapticscape.HapticScapeSettingKeys;
+import com.ashy0019.hapticscape.HapticScapeSettingsSource;
 import com.ashy0019.hapticscape.music.MusicResponse;
 import com.ashy0019.hapticscape.music.MusicSyncSettings;
 import com.ashy0019.hapticscape.music.MusicSyncSnapshot;
@@ -35,7 +36,7 @@ final class MusicPanel extends JPanel
 	private boolean remoteReadOnly;
 
 	MusicPanel(
-		HapticScapeConfig config,
+		HapticScapeSettingsSource config,
 		SettingsChangeSink settingsSink,
 		Consumer<MusicSyncSettings> settingsListener)
 	{
@@ -117,7 +118,7 @@ final class MusicPanel extends JPanel
 			return;
 		}
 		enabledCheckBox.setSelected(false);
-		persist(HapticScapeConfig.MUSIC_SYNC_ENABLED_KEY, false);
+		persist(HapticScapeSettingKeys.MUSIC_SYNC_ENABLED, false);
 		refreshEnabledState();
 		settingsListener.accept(getSettings());
 	}
@@ -142,7 +143,7 @@ final class MusicPanel extends JPanel
 			{
 				return;
 			}
-			persist(HapticScapeConfig.MUSIC_SYNC_ENABLED_KEY, enabledCheckBox.isSelected());
+			persist(HapticScapeSettingKeys.MUSIC_SYNC_ENABLED, enabledCheckBox.isSelected());
 			refreshEnabledState();
 			fireSettings();
 		});
@@ -153,7 +154,7 @@ final class MusicPanel extends JPanel
 				return;
 			}
 			MusicResponse response = (MusicResponse) responseComboBox.getSelectedItem();
-			persist(HapticScapeConfig.MUSIC_RESPONSE_KEY, response.name());
+			persist(HapticScapeSettingKeys.MUSIC_RESPONSE, response.name());
 			fireSettings();
 		});
 		sensitivitySlider.addChangeListener(event ->
@@ -165,7 +166,7 @@ final class MusicPanel extends JPanel
 			}
 			if (!sensitivitySlider.getValueIsAdjusting())
 			{
-				persist(HapticScapeConfig.MUSIC_SENSITIVITY_PERCENT_KEY,
+				persist(HapticScapeSettingKeys.MUSIC_SENSITIVITY_PERCENT,
 					sensitivitySlider.getValue());
 				fireSettings();
 			}
@@ -185,9 +186,9 @@ final class MusicPanel extends JPanel
 			refreshLabels();
 			if (!minimumSlider.getValueIsAdjusting())
 			{
-				persist(HapticScapeConfig.MUSIC_MINIMUM_INTENSITY_PERCENT_KEY,
+				persist(HapticScapeSettingKeys.MUSIC_MINIMUM_INTENSITY_PERCENT,
 					minimumSlider.getValue());
-				persist(HapticScapeConfig.MUSIC_MAXIMUM_INTENSITY_PERCENT_KEY,
+				persist(HapticScapeSettingKeys.MUSIC_MAXIMUM_INTENSITY_PERCENT,
 					maximumSlider.getValue());
 				fireSettings();
 			}
@@ -207,9 +208,9 @@ final class MusicPanel extends JPanel
 			refreshLabels();
 			if (!maximumSlider.getValueIsAdjusting())
 			{
-				persist(HapticScapeConfig.MUSIC_MINIMUM_INTENSITY_PERCENT_KEY,
+				persist(HapticScapeSettingKeys.MUSIC_MINIMUM_INTENSITY_PERCENT,
 					minimumSlider.getValue());
-				persist(HapticScapeConfig.MUSIC_MAXIMUM_INTENSITY_PERCENT_KEY,
+				persist(HapticScapeSettingKeys.MUSIC_MAXIMUM_INTENSITY_PERCENT,
 					maximumSlider.getValue());
 				fireSettings();
 			}

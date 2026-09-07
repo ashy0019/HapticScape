@@ -8,7 +8,8 @@ import com.ashy0019.hapticscape.AlertTriggerParameter;
 import com.ashy0019.hapticscape.AlertTriggerSettings;
 import com.ashy0019.hapticscape.CustomPatternLibrary;
 import com.ashy0019.hapticscape.HapticPatternSelection;
-import com.ashy0019.hapticscape.HapticScapeConfig;
+import com.ashy0019.hapticscape.HapticScapeSettingKeys;
+import com.ashy0019.hapticscape.HapticScapeSettingsSource;
 import com.ashy0019.hapticscape.NotificationFeedbackSettings;
 import com.ashy0019.hapticscape.clicker.ClickerAlertSettings;
 import com.ashy0019.hapticscape.remote.RemoteSessionManager;
@@ -86,7 +87,7 @@ final class AlertsPanel extends JPanel
 	private boolean previewAllowed = true;
 
 	AlertsPanel(
-		HapticScapeConfig config,
+		HapticScapeSettingsSource config,
 		SettingsChangeSink settingsSink,
 		Supplier<CustomPatternLibrary> customPatternsSupplier,
 		Runnable testGenericAction,
@@ -475,7 +476,7 @@ final class AlertsPanel extends JPanel
 			genericEnabled = genericEnabledCheckBox.isSelected();
 			settingsSink.set(
 				SettingsLockCatalog.GENERIC_NOTIFICATION_HAPTICS,
-				HapticScapeConfig.NOTIFICATION_FEEDBACK_ENABLED_KEY,
+				HapticScapeSettingKeys.NOTIFICATION_FEEDBACK_ENABLED,
 				genericEnabled
 			);
 			updateGenericControlState();
@@ -493,7 +494,7 @@ final class AlertsPanel extends JPanel
 			genericClickEnabled = genericClickEnabledCheckBox.isSelected();
 			settingsSink.set(
 				SettingsLockCatalog.GENERIC_NOTIFICATION_CLICKS,
-				HapticScapeConfig.CLICKER_GENERIC_NOTIFICATION_ENABLED_KEY,
+				HapticScapeSettingKeys.CLICKER_GENERIC_NOTIFICATION_ENABLED,
 				genericClickEnabled
 			);
 			updateGenericControlState();
@@ -511,7 +512,7 @@ final class AlertsPanel extends JPanel
 			respectFocus = respectFocusCheckBox.isSelected();
 			settingsSink.set(
 				SettingsLockCatalog.NOTIFICATION_RESPECT_FOCUS,
-				HapticScapeConfig.NOTIFICATION_RESPECT_FOCUS_KEY,
+				HapticScapeSettingKeys.NOTIFICATION_RESPECT_FOCUS,
 				respectFocus
 			);
 		});
@@ -525,7 +526,7 @@ final class AlertsPanel extends JPanel
 				genericIntensityPercent = genericIntensitySlider.getValue();
 				settingsSink.set(
 					SettingsLockCatalog.GENERIC_ALERTS_BLOCK,
-					HapticScapeConfig.NOTIFICATION_INTENSITY_PERCENT_KEY,
+					HapticScapeSettingKeys.NOTIFICATION_INTENSITY_PERCENT,
 					genericIntensityPercent
 				);
 			}
@@ -552,7 +553,7 @@ final class AlertsPanel extends JPanel
 				genericDurationMillis = ((Number) genericDurationSpinner.getValue()).intValue();
 				settingsSink.set(
 					SettingsLockCatalog.GENERIC_ALERTS_BLOCK,
-					HapticScapeConfig.NOTIFICATION_DURATION_MILLIS_KEY,
+					HapticScapeSettingKeys.NOTIFICATION_DURATION_MILLIS,
 					genericDurationMillis
 				);
 			}
@@ -762,7 +763,7 @@ final class AlertsPanel extends JPanel
 	{
 		settingsSink.set(
 			SettingsLockCatalog.GENERIC_ALERTS_BLOCK,
-			HapticScapeConfig.NOTIFICATION_PATTERN_PRESET_KEY,
+			HapticScapeSettingKeys.NOTIFICATION_PATTERN_PRESET,
 			genericPattern.toConfigValue()
 		);
 	}
@@ -770,7 +771,7 @@ final class AlertsPanel extends JPanel
 	private void persistProfiles()
 	{
 		settingsSink.set(
-			HapticScapeConfig.ALERT_PROFILES_KEY,
+			HapticScapeSettingKeys.ALERT_PROFILES,
 			alertProfiles.toConfigValue()
 		);
 	}
@@ -779,7 +780,7 @@ final class AlertsPanel extends JPanel
 	{
 		settingsSink.set(
 			target,
-			HapticScapeConfig.ALERT_PROFILES_KEY,
+			HapticScapeSettingKeys.ALERT_PROFILES,
 			alertProfiles.toConfigValue()
 		);
 	}
@@ -787,7 +788,7 @@ final class AlertsPanel extends JPanel
 	private void persistTriggerSettings()
 	{
 		settingsSink.set(
-			HapticScapeConfig.ALERT_TRIGGER_SETTINGS_KEY,
+			HapticScapeSettingKeys.ALERT_TRIGGER_SETTINGS,
 			triggerSettings.toConfigValue()
 		);
 	}
@@ -796,7 +797,7 @@ final class AlertsPanel extends JPanel
 	{
 		settingsSink.set(
 			target,
-			HapticScapeConfig.ALERT_TRIGGER_SETTINGS_KEY,
+			HapticScapeSettingKeys.ALERT_TRIGGER_SETTINGS,
 			triggerSettings.toConfigValue()
 		);
 	}
@@ -815,7 +816,7 @@ final class AlertsPanel extends JPanel
 	{
 		settingsSink.set(
 			target,
-			HapticScapeConfig.CLICKER_ALERT_SETTINGS_KEY,
+			HapticScapeSettingKeys.CLICKER_ALERT_SETTINGS,
 			clickerAlertSettings.toConfigValue()
 		);
 	}

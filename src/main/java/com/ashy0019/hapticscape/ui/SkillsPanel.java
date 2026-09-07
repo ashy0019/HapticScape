@@ -1,6 +1,6 @@
 package com.ashy0019.hapticscape.ui;
 
-import com.ashy0019.hapticscape.HapticScapeConfig;
+import com.ashy0019.hapticscape.HapticScapeSettingKeys;
 import com.ashy0019.hapticscape.SkillCatalog;
 import com.ashy0019.hapticscape.SkillDescriptor;
 import com.ashy0019.hapticscape.SkillSelection;
@@ -240,8 +240,8 @@ final class SkillsPanel extends JPanel
 		settingsSink.set(
 			target,
 			output == SkillOutput.HAPTICS
-				? HapticScapeConfig.DISABLED_SKILLS_KEY
-				: HapticScapeConfig.CLICKER_DISABLED_SKILLS_KEY,
+				? HapticScapeSettingKeys.DISABLED_SKILLS
+				: HapticScapeSettingKeys.CLICKER_DISABLED_SKILLS,
 			selection.toConfigValue()
 		);
 	}

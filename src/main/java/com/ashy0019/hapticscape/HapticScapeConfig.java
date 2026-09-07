@@ -1,17 +1,16 @@
 package com.ashy0019.hapticscape;
 
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteSkillCatalog;
-import com.ashy0019.hapticscape.remote.RemotePermissionsSource;
-import com.ashy0019.hapticscape.remote.RemoteSettingsSource;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.Range;
 
 @ConfigGroup(HapticScapeConfig.GROUP)
-public interface HapticScapeConfig extends Config, RemoteSettingsSource, RemotePermissionsSource
+public interface HapticScapeConfig extends Config, HapticScapeSettingsSource
 {
 	String GROUP = "hapticscape";
+	String INTIFACE_SERVER_KEY = HapticScapeSettingKeys.INTIFACE_SERVER;
 	String MINIMUM_XP_GAIN_KEY = HapticScapeSettingKeys.MINIMUM_XP_GAIN;
 	String INTENSITY_PERCENT_KEY = HapticScapeSettingKeys.INTENSITY_PERCENT;
 	String PULSE_DURATION_MILLIS_KEY = HapticScapeSettingKeys.PULSE_DURATION_MILLIS;
@@ -47,8 +46,7 @@ public interface HapticScapeConfig extends Config, RemoteSettingsSource, RemoteP
 	String CLICKER_ALERT_SETTINGS_KEY = HapticScapeSettingKeys.CLICKER_ALERT_SETTINGS;
 	String CLICKER_PHRASE_RULES_KEY = HapticScapeSettingKeys.CLICKER_PHRASE_RULES;
 	String REMOTE_RELAY_URL_KEY = HapticScapeSettingKeys.REMOTE_RELAY_URL;
-	String DEFAULT_REMOTE_RELAY_URL =
-		"wss://hapticscape-remote-relay.hapticscape.workers.dev/relay";
+	String DEFAULT_REMOTE_RELAY_URL = HapticScapeSettingsSource.DEFAULT_REMOTE_RELAY_URL;
 	String REMOTE_SETTINGS_ALLOWED_KEY = HapticScapeSettingKeys.REMOTE_SETTINGS_ALLOWED;
 	String REMOTE_HAPTICS_ALLOWED_KEY = HapticScapeSettingKeys.REMOTE_HAPTICS_ALLOWED;
 	String REMOTE_LIVE_HAPTICS_ALLOWED_KEY = HapticScapeSettingKeys.REMOTE_LIVE_HAPTICS_ALLOWED;
@@ -60,7 +58,7 @@ public interface HapticScapeConfig extends Config, RemoteSettingsSource, RemoteP
 	String REMOTE_MAXIMUM_LIVE_DURATION_MILLIS_KEY = HapticScapeSettingKeys.REMOTE_MAXIMUM_LIVE_DURATION_MILLIS;
 
 	@ConfigItem(
-		keyName = "intifaceServer",
+		keyName = INTIFACE_SERVER_KEY,
 		name = "Intiface server",
 		description = "WebSocket URI for the Intiface server",
 		position = 0,
@@ -506,11 +504,7 @@ public interface HapticScapeConfig extends Config, RemoteSettingsSource, RemoteP
 
 	static String resolveRemoteRelayUrl(String configuredValue)
 	{
-		if (configuredValue == null || configuredValue.trim().isEmpty())
-		{
-			return DEFAULT_REMOTE_RELAY_URL;
-		}
-		return configuredValue.trim();
+		return HapticScapeSettingsSource.resolveRemoteRelayUrl(configuredValue);
 	}
 
 	@ConfigItem(

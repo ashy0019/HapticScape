@@ -3,7 +3,7 @@ package com.ashy0019.hapticscape.ui;
 import com.ashy0019.hapticscape.CustomPattern;
 import com.ashy0019.hapticscape.CustomPatternEntry;
 import com.ashy0019.hapticscape.CustomPatternLibrary;
-import com.ashy0019.hapticscape.HapticScapeConfig;
+import com.ashy0019.hapticscape.HapticScapeSettingKeys;
 import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -485,7 +485,7 @@ final class PatternForgePanel extends JPanel
 	private void persistLibrary()
 	{
 		settingsSink.set(
-			HapticScapeConfig.CUSTOM_PATTERNS_KEY,
+			HapticScapeSettingKeys.CUSTOM_PATTERNS,
 			library.toConfigValue()
 		);
 		patternComboBox.repaint();

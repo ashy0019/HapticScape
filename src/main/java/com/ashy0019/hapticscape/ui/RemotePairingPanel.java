@@ -1,6 +1,7 @@
 package com.ashy0019.hapticscape.ui;
 
-import com.ashy0019.hapticscape.HapticScapeConfig;
+import com.ashy0019.hapticscape.HapticScapeSettingKeys;
+import com.ashy0019.hapticscape.HapticScapeSettingsSource;
 import com.ashy0019.hapticscape.HapticScapeSettingKeys;
 import com.ashy0019.hapticscape.host.ExternalLinkOpener;
 import com.ashy0019.hapticscape.host.TextClipboard;
@@ -35,7 +36,7 @@ import javax.swing.SwingUtilities;
 /** Owns invitation abstraction, temporary pairing codes, and direct-code fallback UI. */
 final class RemotePairingPanel extends JPanel
 {
-	private final HapticScapeConfig config;
+	private final HapticScapeSettingsSource config;
 	private final SettingsStore settingsStore;
 	private final ExternalLinkOpener externalLinkOpener;
 	private final TextClipboard clipboard;
@@ -72,7 +73,7 @@ final class RemotePairingPanel extends JPanel
 	private String activePairingRelayUrl;
 
 	RemotePairingPanel(
-		HapticScapeConfig config,
+		HapticScapeSettingsSource config,
 		SettingsStore settingsStore,
 		ExternalLinkOpener externalLinkOpener,
 		TextClipboard clipboard,
@@ -179,14 +180,14 @@ final class RemotePairingPanel extends JPanel
 
 	private void configureRelaySettings()
 	{
-		String configuredRelay = HapticScapeConfig.resolveRemoteRelayUrl(
+		String configuredRelay = HapticScapeSettingsSource.resolveRemoteRelayUrl(
 			config.remoteRelayUrl()
 		);
 		relayUrlField.setText(configuredRelay);
 		relayUrlField.setToolTipText(
 			"Hosted HapticScape relay by default; replace this URL to use a self-hosted relay"
 		);
-		connectionSettingsExpanded = !HapticScapeConfig.DEFAULT_REMOTE_RELAY_URL.equals(
+		connectionSettingsExpanded = !HapticScapeSettingsSource.DEFAULT_REMOTE_RELAY_URL.equals(
 			configuredRelay
 		);
 		configureCompactButton(connectionSettingsButton);

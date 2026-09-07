@@ -1,6 +1,7 @@
 package com.ashy0019.hapticscape.ui;
 
-import com.ashy0019.hapticscape.HapticScapeConfig;
+import com.ashy0019.hapticscape.HapticScapeSettingKeys;
+import com.ashy0019.hapticscape.HapticScapeSettingsSource;
 import com.ashy0019.hapticscape.clicker.ClickerSettings;
 import com.ashy0019.hapticscape.clicker.ClickerXpSettings;
 import com.ashy0019.hapticscape.clicker.ClickerPhraseRules;
@@ -54,7 +55,7 @@ final class ClickerPanel extends JPanel
 	private boolean previewAllowed = true;
 
 	ClickerPanel(
-		HapticScapeConfig config,
+		HapticScapeSettingsSource config,
 		SettingsChangeSink settingsSink,
 		Consumer<ClickerSettings> settingsListener,
 		Runnable testAction,
@@ -268,7 +269,7 @@ final class ClickerPanel extends JPanel
 			}
 			persist(
 				SettingsLockCatalog.CLICKER_ENABLED,
-				HapticScapeConfig.CLICKER_ENABLED_KEY,
+				HapticScapeSettingKeys.CLICKER_ENABLED,
 				enabledCheckBox.isSelected()
 			);
 			refreshEnabledState();
@@ -285,7 +286,7 @@ final class ClickerPanel extends JPanel
 			{
 				persist(
 					SettingsLockCatalog.CLICK_SETTINGS_BLOCK,
-					HapticScapeConfig.CLICKER_VOLUME_PERCENT_KEY,
+					HapticScapeSettingKeys.CLICKER_VOLUME_PERCENT,
 					volumeSlider.getValue()
 				);
 				fireSettings();
@@ -299,7 +300,7 @@ final class ClickerPanel extends JPanel
 			}
 			persist(
 				SettingsLockCatalog.CLICK_SETTINGS_BLOCK,
-				HapticScapeConfig.CLICKER_MINIMUM_XP_GAIN_KEY,
+				HapticScapeSettingKeys.CLICKER_MINIMUM_XP_GAIN,
 				((Number) minimumXpSpinner.getValue()).intValue()
 			);
 			refreshXpSettings();
@@ -316,7 +317,7 @@ final class ClickerPanel extends JPanel
 			}
 			persist(
 				SettingsLockCatalog.CLICKER_LEVEL_UP,
-				HapticScapeConfig.CLICKER_LEVEL_UP_ENABLED_KEY,
+				HapticScapeSettingKeys.CLICKER_LEVEL_UP_ENABLED,
 				levelUpCheckBox.isSelected()
 			);
 			refreshXpSettings();
@@ -333,7 +334,7 @@ final class ClickerPanel extends JPanel
 			}
 			persist(
 				SettingsLockCatalog.CLICKER_MILESTONE,
-				HapticScapeConfig.CLICKER_MILESTONE_ENABLED_KEY,
+				HapticScapeSettingKeys.CLICKER_MILESTONE_ENABLED,
 				milestoneCheckBox.isSelected()
 			);
 			refreshXpSettings();
@@ -350,7 +351,7 @@ final class ClickerPanel extends JPanel
 			}
 			persist(
 				SettingsLockCatalog.CLICKER_LEVEL_99,
-				HapticScapeConfig.CLICKER_LEVEL_99_ENABLED_KEY,
+				HapticScapeSettingKeys.CLICKER_LEVEL_99_ENABLED,
 				level99CheckBox.isSelected()
 			);
 			refreshXpSettings();

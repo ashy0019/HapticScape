@@ -1,6 +1,7 @@
 package com.ashy0019.hapticscape.ui;
 
-import com.ashy0019.hapticscape.HapticScapeConfig;
+import com.ashy0019.hapticscape.HapticScapeSettingKeys;
+import com.ashy0019.hapticscape.HapticScapeSettingsSource;
 import com.ashy0019.hapticscape.clicker.ClickerPhraseRule;
 import com.ashy0019.hapticscape.clicker.ClickerPhraseRules;
 import com.ashy0019.hapticscape.host.ExternalLinkOpener;
@@ -48,7 +49,7 @@ import javax.swing.SwingUtilities;
 
 final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 {
-	private final HapticScapeConfig config;
+	private final HapticScapeSettingsSource config;
 	private final RemoteSessionManager sessionManager;
 	private final TextClipboard clipboard;
 	private final SidebarTextLabel statusText = new SidebarTextLabel("Local control");
@@ -73,7 +74,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 	private boolean wasLocal = true;
 
 	RemoteControlPanel(
-		HapticScapeConfig config,
+		HapticScapeSettingsSource config,
 		SettingsStore settingsStore,
 		ExternalLinkOpener externalLinkOpener,
 		TextClipboard clipboard,

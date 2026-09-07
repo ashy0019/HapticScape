@@ -6,7 +6,8 @@ import com.ashy0019.hapticscape.AlertTriggerSettings;
 import com.ashy0019.hapticscape.CustomPatternEntry;
 import com.ashy0019.hapticscape.CustomPatternLibrary;
 import com.ashy0019.hapticscape.HapticPatternSelection;
-import com.ashy0019.hapticscape.HapticScapeConfig;
+import com.ashy0019.hapticscape.HapticScapeSettingKeys;
+import com.ashy0019.hapticscape.HapticScapeSettingsSource;
 import com.ashy0019.hapticscape.HapticScapeSettingKeys;
 import com.ashy0019.hapticscape.NotificationFeedbackSettings;
 import com.ashy0019.hapticscape.SkillCatalog;
@@ -97,7 +98,7 @@ public final class HapticScapePanel extends JPanel
 	private static final String POST_SESSION_LOCK_MESSAGE =
 		"<html><b>Post-session lock</b><br>armed after session</html>";
 
-	private final HapticScapeConfig config;
+	private final HapticScapeSettingsSource config;
 	private final SettingsStore settingsStore;
 	private final Consumer<RogueFeedbackEvent> rogueFeedbackAction;
 	private final Runnable rogueUnlockSoundAction;
@@ -191,7 +192,7 @@ public final class HapticScapePanel extends JPanel
 	private RemoteSessionSnapshot appliedRemoteSessionSnapshot = RemoteSessionSnapshot.local();
 
 	public HapticScapePanel(
-		HapticScapeConfig config,
+		HapticScapeSettingsSource config,
 		SkillCatalog skillCatalog,
 		SettingsStore settingsStore,
 		ExternalLinkOpener externalLinkOpener,
@@ -770,7 +771,7 @@ public final class HapticScapePanel extends JPanel
 			{
 				writeFeedbackSetting(
 					SettingsLockCatalog.FEEDBACK_BLOCK,
-					HapticScapeConfig.INTENSITY_PERCENT_KEY,
+					HapticScapeSettingKeys.INTENSITY_PERCENT,
 					intensityPercent
 				);
 			}
@@ -784,7 +785,7 @@ public final class HapticScapePanel extends JPanel
 			minimumXpGain = ((Number) minimumXpSpinner.getValue()).intValue();
 			writeFeedbackSetting(
 				SettingsLockCatalog.FEEDBACK_BLOCK,
-				HapticScapeConfig.MINIMUM_XP_GAIN_KEY,
+				HapticScapeSettingKeys.MINIMUM_XP_GAIN,
 				minimumXpGain
 			);
 			refreshInheritedProfileIfReady();
@@ -798,7 +799,7 @@ public final class HapticScapePanel extends JPanel
 			durationMillis = ((Number) durationSpinner.getValue()).intValue();
 			writeFeedbackSetting(
 				SettingsLockCatalog.FEEDBACK_BLOCK,
-				HapticScapeConfig.PULSE_DURATION_MILLIS_KEY,
+				HapticScapeSettingKeys.PULSE_DURATION_MILLIS,
 				durationMillis
 			);
 			refreshInheritedProfileIfReady();
@@ -820,7 +821,7 @@ public final class HapticScapePanel extends JPanel
 				patternSelection = selected;
 				writeFeedbackSetting(
 					SettingsLockCatalog.FEEDBACK_BLOCK,
-					HapticScapeConfig.PATTERN_PRESET_KEY,
+					HapticScapeSettingKeys.PATTERN_PRESET,
 					selected.toConfigValue()
 				);
 				refreshInheritedProfileIfReady();
@@ -841,7 +842,7 @@ public final class HapticScapePanel extends JPanel
 					levelUpPatternSelection = selected;
 					writeFeedbackSetting(
 						SettingsLockCatalog.FEEDBACK_BLOCK,
-						HapticScapeConfig.LEVEL_UP_PATTERN_PRESET_KEY,
+						HapticScapeSettingKeys.LEVEL_UP_PATTERN_PRESET,
 						selected.toConfigValue()
 					);
 				}
@@ -862,7 +863,7 @@ public final class HapticScapePanel extends JPanel
 					milestonePatternSelection = selected;
 					writeFeedbackSetting(
 						SettingsLockCatalog.FEEDBACK_BLOCK,
-						HapticScapeConfig.MILESTONE_PATTERN_PRESET_KEY,
+						HapticScapeSettingKeys.MILESTONE_PATTERN_PRESET,
 						selected.toConfigValue()
 					);
 				}
@@ -881,7 +882,7 @@ public final class HapticScapePanel extends JPanel
 			levelUpEnabled = levelUpCheckBox.isSelected();
 			writeFeedbackSetting(
 				SettingsLockCatalog.LEVEL_UP_HAPTICS,
-				HapticScapeConfig.LEVEL_UP_FEEDBACK_ENABLED_KEY,
+				HapticScapeSettingKeys.LEVEL_UP_FEEDBACK_ENABLED,
 				levelUpEnabled
 			);
 		});
@@ -898,7 +899,7 @@ public final class HapticScapePanel extends JPanel
 			milestoneEnabled = milestoneCheckBox.isSelected();
 			writeFeedbackSetting(
 				SettingsLockCatalog.MILESTONE_HAPTICS,
-				HapticScapeConfig.MILESTONE_FEEDBACK_ENABLED_KEY,
+				HapticScapeSettingKeys.MILESTONE_FEEDBACK_ENABLED,
 				milestoneEnabled
 			);
 		});
@@ -915,7 +916,7 @@ public final class HapticScapePanel extends JPanel
 			level99Enabled = level99CheckBox.isSelected();
 			writeFeedbackSetting(
 				SettingsLockCatalog.LEVEL_99_HAPTICS,
-				HapticScapeConfig.LEVEL_99_CELEBRATION_ENABLED_KEY,
+				HapticScapeSettingKeys.LEVEL_99_CELEBRATION_ENABLED,
 				level99Enabled
 			);
 		});
@@ -1016,15 +1017,15 @@ public final class HapticScapePanel extends JPanel
 		customPatterns = updatedLibrary;
 		patternSelection = resolveAndPersist(
 			patternSelection,
-			HapticScapeConfig.PATTERN_PRESET_KEY
+			HapticScapeSettingKeys.PATTERN_PRESET
 		);
 		levelUpPatternSelection = resolveAndPersist(
 			levelUpPatternSelection,
-			HapticScapeConfig.LEVEL_UP_PATTERN_PRESET_KEY
+			HapticScapeSettingKeys.LEVEL_UP_PATTERN_PRESET
 		);
 		milestonePatternSelection = resolveAndPersist(
 			milestonePatternSelection,
-			HapticScapeConfig.MILESTONE_PATTERN_PRESET_KEY
+			HapticScapeSettingKeys.MILESTONE_PATTERN_PRESET
 		);
 		profilesPanel.applyCustomPatternLibrary(updatedLibrary);
 		alertsPanel.applyCustomPatternLibrary(updatedLibrary);

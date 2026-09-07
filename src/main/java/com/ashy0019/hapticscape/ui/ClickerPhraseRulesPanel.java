@@ -1,6 +1,7 @@
 package com.ashy0019.hapticscape.ui;
 
-import com.ashy0019.hapticscape.HapticScapeConfig;
+import com.ashy0019.hapticscape.HapticScapeSettingKeys;
+import com.ashy0019.hapticscape.HapticScapeSettingsSource;
 import com.ashy0019.hapticscape.clicker.ClickerPhraseMatchMode;
 import com.ashy0019.hapticscape.clicker.ClickerPhraseRule;
 import com.ashy0019.hapticscape.clicker.ClickerPhraseRules;
@@ -57,7 +58,7 @@ final class ClickerPhraseRulesPanel extends JPanel
 	private boolean remoteReadOnly;
 
 	ClickerPhraseRulesPanel(
-		HapticScapeConfig config,
+		HapticScapeSettingsSource config,
 		SettingsChangeSink settingsSink,
 		RemoteSessionManager sessionManager,
 		SettingsLockService lockService,
@@ -76,7 +77,7 @@ final class ClickerPhraseRulesPanel extends JPanel
 		if (ClickerPhraseRules.requiresMigration(configuredRules))
 		{
 			settingsSink.set(
-				HapticScapeConfig.CLICKER_PHRASE_RULES_KEY,
+				HapticScapeSettingKeys.CLICKER_PHRASE_RULES,
 				rules.toConfigValue()
 			);
 		}
@@ -360,7 +361,7 @@ final class ClickerPhraseRulesPanel extends JPanel
 	{
 		settingsSink.set(
 			target,
-			HapticScapeConfig.CLICKER_PHRASE_RULES_KEY,
+			HapticScapeSettingKeys.CLICKER_PHRASE_RULES,
 			rules.toConfigValue()
 		);
 	}

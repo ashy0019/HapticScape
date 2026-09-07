@@ -2,7 +2,7 @@ package com.ashy0019.hapticscape.ui;
 
 import com.ashy0019.hapticscape.CustomPatternLibrary;
 import com.ashy0019.hapticscape.HapticPatternSelection;
-import com.ashy0019.hapticscape.HapticScapeConfig;
+import com.ashy0019.hapticscape.HapticScapeSettingKeys;
 import com.ashy0019.hapticscape.SkillCatalog;
 import com.ashy0019.hapticscape.SkillDescriptor;
 import com.ashy0019.hapticscape.SkillFeedbackProfiles;
@@ -398,7 +398,7 @@ final class ProfilesPanel extends JPanel
 	private void persist()
 	{
 		settingsSink.set(
-			HapticScapeConfig.SKILL_FEEDBACK_PROFILES_KEY,
+			HapticScapeSettingKeys.SKILL_FEEDBACK_PROFILES,
 			profiles.toConfigValue()
 		);
 	}
@@ -407,7 +407,7 @@ final class ProfilesPanel extends JPanel
 	{
 		settingsSink.set(
 			target,
-			HapticScapeConfig.SKILL_FEEDBACK_PROFILES_KEY,
+			HapticScapeSettingKeys.SKILL_FEEDBACK_PROFILES,
 			profiles.toConfigValue()
 		);
 	}
