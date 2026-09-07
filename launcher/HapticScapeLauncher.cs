@@ -175,17 +175,17 @@ internal static class HapticScapeLauncher
 
 	private static int LaunchClient(string applicationDirectory)
 	{
-		string clientJar = Path.Combine(applicationDirectory, "app", "hapticscape-client.jar");
+		string clientJar = Path.Combine(applicationDirectory, "app", "hapticscape-desktop.jar");
 		if (!File.Exists(clientJar))
 		{
-			throw new FileNotFoundException("The HapticScape client JAR is missing.", clientJar);
+			throw new FileNotFoundException("The HapticScape desktop JAR is missing.", clientJar);
 		}
 
-		string javaExecutable = FindJavaExecutable(applicationDirectory);
+		string javaExecutable = FindBundledJavaExecutable(applicationDirectory);
 		if (javaExecutable == null)
 		{
 			MessageBox.Show(
-				"The official RuneLite Java runtime was not found. Install RuneLite from runelite.net and try again.",
+				"The bundled HapticScape Java runtime is missing or incomplete. Reinstall HapticScape and try again.",
 				"HapticScape", MessageBoxButtons.OK, MessageBoxIcon.Error);
 			return 1;
 		}
@@ -288,51 +288,20 @@ internal static class HapticScapeLauncher
 		}
 	}
 
-	private static string FindJavaExecutable(string applicationDirectory)
+	private static string FindBundledJavaExecutable(string applicationDirectory)
 	{
-		string localApplicationData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-		string javaHome = Environment.GetEnvironmentVariable("JAVA_HOME");
+		string runtimeBin = Path.Combine(applicationDirectory, "runtime", "bin");
 		string[] candidates =
 		{
-			Path.Combine(applicationDirectory, "runtime", "bin", "javaw.exe"),
-			Path.Combine(localApplicationData, "RuneLite", "jre", "bin", "javaw.exe"),
-			Path.Combine(localApplicationData, "RuneLite", "jre", "bin", "java.exe"),
-			string.IsNullOrEmpty(javaHome) ? null : Path.Combine(javaHome, "bin", "javaw.exe"),
-			string.IsNullOrEmpty(javaHome) ? null : Path.Combine(javaHome, "bin", "java.exe"),
-			FindOnPath("javaw.exe"),
-			FindOnPath("java.exe")
+			Path.Combine(runtimeBin, "javaw.exe"),
+			Path.Combine(runtimeBin, "java.exe")
 		};
 
 		foreach (string candidate in candidates)
 		{
-			if (!string.IsNullOrEmpty(candidate) && File.Exists(candidate))
+			if (File.Exists(candidate))
 			{
 				return candidate;
-			}
-		}
-		return null;
-	}
-
-	private static string FindOnPath(string fileName)
-	{
-		string path = Environment.GetEnvironmentVariable("PATH");
-		if (string.IsNullOrEmpty(path))
-		{
-			return null;
-		}
-		foreach (string directory in path.Split(Path.PathSeparator))
-		{
-			try
-			{
-				string candidate = Path.Combine(directory.Trim(), fileName);
-				if (File.Exists(candidate))
-				{
-					return candidate;
-				}
-			}
-			catch (Exception)
-			{
-				// Ignore malformed PATH entries and continue searching.
 			}
 		}
 		return null;

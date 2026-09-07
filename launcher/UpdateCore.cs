@@ -77,11 +77,38 @@ internal static class UpdatePreferencesStore
 {
 	internal static string GetDefaultPath()
 	{
-		return Path.Combine(
+		string currentPath = Path.Combine(
+			Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+			"HapticScape",
+			"updater-settings.json");
+		string legacyPath = Path.Combine(
 			Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
 			".runelite",
 			"hapticscape",
 			"updater-settings.json");
+		TryMigrateLegacyPath(currentPath, legacyPath);
+		return currentPath;
+	}
+
+	internal static void TryMigrateLegacyPath(string currentPath, string legacyPath)
+	{
+		try
+		{
+			if (File.Exists(currentPath) || !File.Exists(legacyPath))
+			{
+				return;
+			}
+			string directory = Path.GetDirectoryName(currentPath);
+			if (!string.IsNullOrEmpty(directory))
+			{
+				Directory.CreateDirectory(directory);
+			}
+			File.Copy(legacyPath, currentPath, false);
+		}
+		catch (Exception)
+		{
+			// Migration is best-effort; update preferences must never block launch.
+		}
 	}
 
 	internal static UpdatePreferences Load(string path)
@@ -416,10 +443,12 @@ internal static class UpdatePackagePreparer
 		string expectedArchitecture)
 	{
 		string launcher = Path.Combine(stagedApplication, "HapticScape.exe");
-		string jar = Path.Combine(stagedApplication, "app", "hapticscape-client.jar");
+		string jar = Path.Combine(stagedApplication, "app", "hapticscape-desktop.jar");
 		string updater = Path.Combine(stagedApplication, "app", "HapticScapeUpdater.exe");
+		string runtime = Path.Combine(stagedApplication, "runtime", "bin", "javaw.exe");
 		string manifestPath = Path.Combine(stagedApplication, "app", "release.json");
-		if (!File.Exists(launcher) || !File.Exists(jar) || !File.Exists(updater))
+		if (!File.Exists(launcher) || !File.Exists(jar) || !File.Exists(updater)
+			|| !File.Exists(runtime))
 		{
 			throw new InvalidDataException("The update package is missing required HapticScape files.");
 		}
