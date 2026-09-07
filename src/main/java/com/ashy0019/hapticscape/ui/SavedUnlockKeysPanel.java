@@ -1,5 +1,6 @@
 package com.ashy0019.hapticscape.ui;
 
+import com.ashy0019.hapticscape.host.TextClipboard;
 import com.ashy0019.hapticscape.remote.RemoteSessionManager;
 import com.ashy0019.hapticscape.remote.SavedUnlockKey;
 import java.awt.BorderLayout;
@@ -10,8 +11,6 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
-import java.awt.Toolkit;
-import java.awt.datatransfer.StringSelection;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
@@ -31,15 +30,17 @@ import javax.swing.JTextField;
 final class SavedUnlockKeysPanel extends JPanel
 {
 	private final RemoteSessionManager sessionManager;
+	private final TextClipboard clipboard;
 	private final JPanel entriesPanel = new JPanel();
 	private final SidebarTextLabel statusText = new SidebarTextLabel("");
 	private final DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern(
 		"MMM d, yyyy h:mm a"
 	).withZone(ZoneId.systemDefault());
 
-	SavedUnlockKeysPanel(RemoteSessionManager sessionManager)
+	SavedUnlockKeysPanel(RemoteSessionManager sessionManager, TextClipboard clipboard)
 	{
 		this.sessionManager = sessionManager;
+		this.clipboard = clipboard;
 		setLayout(new BorderLayout(0, 0));
 		setBorder(BorderFactory.createTitledBorder("Saved Unlock Keys"));
 		JPanel header = new JPanel();
@@ -151,10 +152,7 @@ final class SavedUnlockKeysPanel extends JPanel
 		try
 		{
 			key = sessionManager.revealSavedUnlockKey(entry.getId());
-			Toolkit.getDefaultToolkit().getSystemClipboard().setContents(
-				new StringSelection(new String(key)),
-				null
-			);
+			clipboard.copyText(new String(key));
 			refresh();
 			statusText.setPlainText("Unlock key copied");
 		}

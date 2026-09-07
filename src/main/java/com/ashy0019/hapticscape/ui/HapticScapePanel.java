@@ -18,6 +18,8 @@ import com.ashy0019.hapticscape.clicker.ClickerPhraseRules;
 import com.ashy0019.hapticscape.device.ConnectionSnapshot;
 import com.ashy0019.hapticscape.device.ConnectionState;
 import com.ashy0019.hapticscape.device.DeviceInfo;
+import com.ashy0019.hapticscape.host.ExternalLinkOpener;
+import com.ashy0019.hapticscape.host.TextClipboard;
 import com.ashy0019.hapticscape.music.MusicSyncSettings;
 import com.ashy0019.hapticscape.music.MusicSyncSnapshot;
 import com.ashy0019.hapticscape.rogue.KonamiCodeDetector;
@@ -195,6 +197,8 @@ public final class HapticScapePanel extends PluginPanel
 	public HapticScapePanel(
 		HapticScapeConfig config,
 		SettingsStore settingsStore,
+		ExternalLinkOpener externalLinkOpener,
+		TextClipboard clipboard,
 		Runnable connectAction,
 		Runnable disconnectAction,
 		Runnable testAction,
@@ -415,6 +419,8 @@ public final class HapticScapePanel extends PluginPanel
 		remoteControlPanel = new RemoteControlPanel(
 			config,
 			settingsStore,
+			externalLinkOpener,
+			clipboard,
 			remoteSessionManager,
 			remotePairingService,
 			discordPairingBridge,

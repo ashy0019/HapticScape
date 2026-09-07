@@ -2,6 +2,8 @@ package com.ashy0019.hapticscape.ui;
 
 import com.ashy0019.hapticscape.HapticScapeConfig;
 import com.ashy0019.hapticscape.HapticScapeSettingKeys;
+import com.ashy0019.hapticscape.host.ExternalLinkOpener;
+import com.ashy0019.hapticscape.host.TextClipboard;
 import com.ashy0019.hapticscape.remote.DiscordLinkListener;
 import com.ashy0019.hapticscape.remote.DiscordLinkSnapshot;
 import com.ashy0019.hapticscape.remote.DiscordLinkState;
@@ -16,14 +18,8 @@ import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteSessionState;
 import com.ashy0019.hapticscape.remote.SettingsStore;
 import java.awt.BorderLayout;
-import java.awt.Desktop;
 import java.awt.Dimension;
 import java.awt.GridLayout;
-import java.awt.Toolkit;
-import java.awt.datatransfer.DataFlavor;
-import java.awt.datatransfer.StringSelection;
-import java.io.IOException;
-import java.net.URI;
 import java.util.Objects;
 import java.util.function.Consumer;
 import javax.swing.BorderFactory;
@@ -41,6 +37,8 @@ final class RemotePairingPanel extends JPanel
 {
 	private final HapticScapeConfig config;
 	private final SettingsStore settingsStore;
+	private final ExternalLinkOpener externalLinkOpener;
+	private final TextClipboard clipboard;
 	private final RemoteSessionManager sessionManager;
 	private final RemotePairingService pairingService;
 	private final DiscordPairingBridge discordPairingBridge;
@@ -76,6 +74,8 @@ final class RemotePairingPanel extends JPanel
 	RemotePairingPanel(
 		HapticScapeConfig config,
 		SettingsStore settingsStore,
+		ExternalLinkOpener externalLinkOpener,
+		TextClipboard clipboard,
 		RemoteSessionManager sessionManager,
 		RemotePairingService pairingService,
 		DiscordPairingBridge discordPairingBridge,
@@ -84,6 +84,8 @@ final class RemotePairingPanel extends JPanel
 	{
 		this.config = Objects.requireNonNull(config, "config");
 		this.settingsStore = Objects.requireNonNull(settingsStore, "settingsStore");
+		this.externalLinkOpener = Objects.requireNonNull(externalLinkOpener, "externalLinkOpener");
+		this.clipboard = Objects.requireNonNull(clipboard, "clipboard");
 		this.sessionManager = Objects.requireNonNull(sessionManager, "sessionManager");
 		this.pairingService = Objects.requireNonNull(pairingService, "pairingService");
 		this.discordPairingBridge = Objects.requireNonNull(
@@ -270,16 +272,11 @@ final class RemotePairingPanel extends JPanel
 	{
 		try
 		{
-			if (!Desktop.isDesktopSupported()
-				|| !Desktop.getDesktop().isSupported(Desktop.Action.BROWSE))
-			{
-				throw new IllegalStateException("This computer cannot open web links");
-			}
-			Desktop.getDesktop().browse(URI.create(
+			externalLinkOpener.open(
 				RemotePairingService.discordInstallEndpoint(relayUrlField.getText().trim())
-			));
+			);
 		}
-		catch (IOException | RuntimeException exception)
+		catch (RuntimeException exception)
 		{
 			errorSink.accept("Could not open the Discord installation page.");
 		}
@@ -605,16 +602,15 @@ final class RemotePairingPanel extends JPanel
 	{
 		try
 		{
-			Object value = Toolkit.getDefaultToolkit().getSystemClipboard()
-				.getData(DataFlavor.stringFlavor);
-			if (value instanceof String)
+			String value = clipboard.readText();
+			if (value != null)
 			{
-				connectionCodeInput.setText(((String) value).trim());
+				connectionCodeInput.setText(value.trim());
 				connectionCodeInput.setCaretPosition(0);
 				joinConnection();
 			}
 		}
-		catch (Exception exception)
+		catch (RuntimeException exception)
 		{
 			errorSink.accept("Could not paste a connection code from the clipboard.");
 		}
@@ -630,10 +626,7 @@ final class RemotePairingPanel extends JPanel
 	{
 		try
 		{
-			Toolkit.getDefaultToolkit().getSystemClipboard().setContents(
-				new StringSelection(value),
-				null
-			);
+			clipboard.copyText(value);
 			return true;
 		}
 		catch (RuntimeException exception)

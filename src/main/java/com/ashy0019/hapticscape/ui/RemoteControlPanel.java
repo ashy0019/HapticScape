@@ -3,6 +3,8 @@ package com.ashy0019.hapticscape.ui;
 import com.ashy0019.hapticscape.HapticScapeConfig;
 import com.ashy0019.hapticscape.clicker.ClickerPhraseRule;
 import com.ashy0019.hapticscape.clicker.ClickerPhraseRules;
+import com.ashy0019.hapticscape.host.ExternalLinkOpener;
+import com.ashy0019.hapticscape.host.TextClipboard;
 import com.ashy0019.hapticscape.remote.RemoteActionAcknowledgement;
 import com.ashy0019.hapticscape.remote.DiscordPairingBridge;
 import com.ashy0019.hapticscape.remote.DiscordJoinRequest;
@@ -26,8 +28,6 @@ import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
-import java.awt.Toolkit;
-import java.awt.datatransfer.StringSelection;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -49,6 +49,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 {
 	private final HapticScapeConfig config;
 	private final RemoteSessionManager sessionManager;
+	private final TextClipboard clipboard;
 	private final SidebarTextLabel statusText = new SidebarTextLabel("Local control");
 	private final JButton emergencyButton = new JButton("EMERGENCY OFF");
 	private final JButton resumeButton = new JButton("Resume");
@@ -73,22 +74,27 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 	RemoteControlPanel(
 		HapticScapeConfig config,
 		SettingsStore settingsStore,
+		ExternalLinkOpener externalLinkOpener,
+		TextClipboard clipboard,
 		RemoteSessionManager sessionManager,
 		RemotePairingService pairingService,
 		DiscordPairingBridge discordPairingBridge,
 		SettingsLockDraft settingsLockDraft)
 	{
 		this.config = config;
+		this.clipboard = clipboard;
 		this.sessionManager = sessionManager;
 		this.settingsLockDraft = settingsLockDraft;
 		this.settingsLockDraftListener = this::handleSettingsLockDraftChanged;
-		this.savedUnlockKeysPanel = new SavedUnlockKeysPanel(sessionManager);
+		this.savedUnlockKeysPanel = new SavedUnlockKeysPanel(sessionManager, clipboard);
 		this.permissionsPanel = new RemotePermissionsPanel(sessionManager);
 		this.actionsPanel = new RemoteActionsPanel(sessionManager);
 		this.liveForgePanel = new RemoteLiveForgePanel(sessionManager);
 		this.pairingPanel = new RemotePairingPanel(
 			config,
 			settingsStore,
+			externalLinkOpener,
+			clipboard,
 			sessionManager,
 			pairingService,
 			discordPairingBridge,
@@ -281,10 +287,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 			{
 				return;
 			}
-			Toolkit.getDefaultToolkit().getSystemClipboard().setContents(
-				new StringSelection(keyField.getText()),
-				null
-			);
+			clipboard.copyText(keyField.getText());
 			sessionManager.proposeSettingsLock(unlockKey, targets);
 		}
 		catch (RuntimeException e)
