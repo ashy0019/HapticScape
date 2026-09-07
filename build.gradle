@@ -104,6 +104,15 @@ tasks.register('run', JavaExec) {
 	args "--developer-mode", "--debug"
 }
 
+// Standalone desktop prototype. It intentionally uses the current test runtime
+// classpath until the standalone and RuneLite artifacts are split in the next phase.
+tasks.register('runStandalone', JavaExec) {
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'com.ashy0019.hapticscape.desktop.HapticScapeDesktopMain'
+
+	jvmArgs "-ea"
+}
+
 tasks.register('shadowJar', Jar) {
 	dependsOn configurations.testRuntimeClasspath
 	manifest {
@@ -136,6 +145,7 @@ tasks.register('verifyClientJar') {
 		def clientJar = tasks.named('shadowJar').get().archiveFile.get().asFile
 		def forbiddenEntries = []
 		def hasLauncher = false
+		def hasStandaloneLauncher = false
 		def hasVersionResource = false
 
 		zipTree(clientJar).visit { details ->
@@ -146,6 +156,9 @@ tasks.register('verifyClientJar') {
 			def path = details.relativePath.pathString
 			if (path == 'com/ashy0019/hapticscape/HapticScapeClient.class') {
 				hasLauncher = true
+			}
+			if (path == 'com/ashy0019/hapticscape/desktop/HapticScapeDesktopMain.class') {
+				hasStandaloneLauncher = true
 			}
 			if (path == 'hapticscape-version.properties') {
 				hasVersionResource = true
@@ -159,6 +172,9 @@ tasks.register('verifyClientJar') {
 
 		if (!hasLauncher) {
 			throw new GradleException('The packaged client launcher class is missing.')
+		}
+		if (!hasStandaloneLauncher) {
+			throw new GradleException('The standalone desktop launcher class is missing.')
 		}
 		if (!hasVersionResource) {
 			throw new GradleException('The packaged client version metadata is missing.')

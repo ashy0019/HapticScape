@@ -13,6 +13,12 @@ import static org.junit.Assert.assertNull;
 public class Level99CelebrationRendererTest
 {
 	@Test
+	public void exposesStandaloneRenderSize()
+	{
+		assertEquals(new Dimension(520, 250), Level99CelebrationRenderer.getRenderSize());
+	}
+
+	@Test
 	public void inactiveCelebrationDoesNotRender()
 	{
 		Level99CelebrationController controller = new Level99CelebrationController();

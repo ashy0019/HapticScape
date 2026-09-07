@@ -56,6 +56,11 @@ private static final int MARQUEE_SPACING = 22;
 		this.controller = controller;
 	}
 
+	public static Dimension getRenderSize()
+	{
+		return new Dimension(WIDTH, HEIGHT);
+	}
+
 	public Dimension render(Graphics2D graphics)
 	{
 		Level99CelebrationController.Snapshot snapshot = controller.snapshot();
