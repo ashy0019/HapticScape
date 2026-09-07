@@ -2,7 +2,6 @@ package com.ashy0019.hapticscape;
 
 import java.util.Objects;
 import java.util.function.LongSupplier;
-import net.runelite.api.Skill;
 
 /**
  * Holds the small amount of time-based state consumed by the Level 99 overlay.
@@ -22,7 +21,7 @@ public final class Level99CelebrationController
 		this.nanoTime = Objects.requireNonNull(nanoTime, "nanoTime");
 	}
 
-	public void start(Skill skill)
+	public void start(SkillDescriptor skill)
 	{
 		activeCelebration = new ActiveCelebration(
 			Objects.requireNonNull(skill, "skill"),
@@ -63,10 +62,10 @@ public final class Level99CelebrationController
 
 	private static final class ActiveCelebration
 	{
-		private final Skill skill;
+		private final SkillDescriptor skill;
 		private final long startedAtNanos;
 
-		private ActiveCelebration(Skill skill, long startedAtNanos)
+		private ActiveCelebration(SkillDescriptor skill, long startedAtNanos)
 		{
 			this.skill = skill;
 			this.startedAtNanos = startedAtNanos;
@@ -78,14 +77,14 @@ public final class Level99CelebrationController
 		private static final Snapshot INACTIVE = new Snapshot(false, null, 0L, 0.0, 0.0);
 
 		private final boolean active;
-		private final Skill skill;
+		private final SkillDescriptor skill;
 		private final long elapsedNanos;
 		private final double pulseIntensity;
 		private final double progress;
 
 		private Snapshot(
 			boolean active,
-			Skill skill,
+			SkillDescriptor skill,
 			long elapsedNanos,
 			double pulseIntensity,
 			double progress)
@@ -103,7 +102,7 @@ public final class Level99CelebrationController
 		}
 
 		private static Snapshot active(
-			Skill skill,
+			SkillDescriptor skill,
 			long elapsedNanos,
 			double pulseIntensity,
 			double progress)
@@ -116,7 +115,7 @@ public final class Level99CelebrationController
 			return active;
 		}
 
-		public Skill getSkill()
+		public SkillDescriptor getSkill()
 		{
 			return skill;
 		}

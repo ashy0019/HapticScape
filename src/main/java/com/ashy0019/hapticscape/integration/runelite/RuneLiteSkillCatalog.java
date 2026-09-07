@@ -39,19 +39,6 @@ public final class RuneLiteSkillCatalog
 		return SkillIds.canonical(skill.name());
 	}
 
-	public static Skill skill(String skillId)
-	{
-		String canonical = SkillIds.canonical(skillId);
-		for (Skill skill : SELECTABLE_SKILLS)
-		{
-			if (skillId(skill).equals(canonical))
-			{
-				return skill;
-			}
-		}
-		throw new IllegalArgumentException("Unknown RuneLite skill id: " + skillId);
-	}
-
 	private static List<Skill> createSelectableSkills()
 	{
 		List<Skill> skills = new ArrayList<>();

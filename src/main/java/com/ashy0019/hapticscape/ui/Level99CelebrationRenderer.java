@@ -1,6 +1,5 @@
 package com.ashy0019.hapticscape.ui;
 
-import com.ashy0019.hapticscape.HapticScapePlugin;
 import com.ashy0019.hapticscape.Level99CelebrationController;
 import com.ashy0019.hapticscape.Level99Ceremony;
 import java.awt.AlphaComposite;
@@ -12,11 +11,8 @@ import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.util.Random;
-import net.runelite.client.ui.overlay.Overlay;
-import net.runelite.client.ui.overlay.OverlayLayer;
-import net.runelite.client.ui.overlay.OverlayPosition;
 
-public final class Level99CelebrationOverlay extends Overlay
+public final class Level99CelebrationRenderer
 {
 	private static final int WIDTH = 520;
 	private static final int HEIGHT = 250;
@@ -55,21 +51,11 @@ private static final int MARQUEE_SPACING = 22;
 
 	private final Level99CelebrationController controller;
 
-	public Level99CelebrationOverlay(
-		HapticScapePlugin plugin,
-		Level99CelebrationController controller)
+	public Level99CelebrationRenderer(Level99CelebrationController controller)
 	{
-		super(plugin);
 		this.controller = controller;
-		setPosition(OverlayPosition.TOP_CENTER);
-		setLayer(OverlayLayer.ALWAYS_ON_TOP);
-		setPriority(PRIORITY_HIGHEST);
-		setMovable(false);
-		setSnappable(false);
-		setResettable(false);
 	}
 
-	@Override
 	public Dimension render(Graphics2D graphics)
 	{
 		Level99CelebrationController.Snapshot snapshot = controller.snapshot();
@@ -113,7 +99,7 @@ private static final int MARQUEE_SPACING = 22;
 			drawCentered(g, "LEVEL 99", base.deriveFont(Font.BOLD, 32f), LIGHT_GOLD, 60);
 			drawCentered(
 				g,
-				snapshot.getSkill().getName().toUpperCase(),
+				snapshot.getSkill().getDisplayName().toUpperCase(),
 				base.deriveFont(Font.BOLD, 24f),
 				Color.WHITE,
 				94

@@ -32,6 +32,7 @@ import com.ashy0019.hapticscape.host.SourceMessageService;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteDesktopNotificationService;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteGameplayBridge;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteHapticScapePluginPanel;
+import com.ashy0019.hapticscape.integration.runelite.RuneLiteLevel99CelebrationOverlay;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteSkillCatalog;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteSourceMessageService;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteStoragePaths;
@@ -46,7 +47,6 @@ import com.ashy0019.hapticscape.remote.SettingsLockCatalog;
 import com.ashy0019.hapticscape.remote.SettingsLockService;
 import com.ashy0019.hapticscape.storage.HapticScapeStoragePaths;
 import com.ashy0019.hapticscape.ui.HapticScapePanel;
-import com.ashy0019.hapticscape.ui.Level99CelebrationOverlay;
 import com.ashy0019.hapticscape.update.UpdateCheckService;
 import com.ashy0019.hapticscape.update.UpdatePreferencesStore;
 import com.google.gson.Gson;
@@ -60,7 +60,6 @@ import javax.swing.SwingUtilities;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
-import net.runelite.api.Skill;
 import net.runelite.api.events.ActorDeath;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
@@ -113,7 +112,7 @@ public class HapticScapePlugin extends Plugin
 	private HapticScapePanel panel;
 	private RuneLiteHapticScapePluginPanel panelHost;
 	private NavigationButton navigationButton;
-	private Level99CelebrationOverlay level99CelebrationOverlay;
+	private RuneLiteLevel99CelebrationOverlay level99CelebrationOverlay;
 	private UpdatePreferencesStore updatePreferencesStore;
 	private UpdateCheckService updateCheckService;
 
@@ -160,7 +159,7 @@ public class HapticScapePlugin extends Plugin
 	protected void startUp()
 	{
 		level99CelebrationController.reset();
-		level99CelebrationOverlay = new Level99CelebrationOverlay(
+		level99CelebrationOverlay = new RuneLiteLevel99CelebrationOverlay(
 			this,
 			level99CelebrationController
 		);
@@ -574,7 +573,7 @@ public class HapticScapePlugin extends Plugin
 		HapticScapePanel currentPanel = panel;
 		String skillId = currentPanel == null ? null : currentPanel.getSelectedProfileSkillId();
 		startLevel99CeremonyBySkillId(
-			skillId == null ? RuneLiteSkillCatalog.skillId(Skill.ATTACK) : skillId,
+			skillId == null ? "attack" : skillId,
 			false
 		);
 	}
@@ -596,12 +595,9 @@ public class HapticScapePlugin extends Plugin
 
 	private void startLevel99CeremonyBySkillId(String skillId, boolean announceInChat)
 	{
-		startLevel99Ceremony(RuneLiteSkillCatalog.skill(skillId), announceInChat);
-	}
-
-	private void startLevel99Ceremony(Skill skill, boolean announceInChat)
-	{
-		level99CelebrationController.start(skill);
+		level99CelebrationController.start(
+			RuneLiteSkillCatalog.getNeutralCatalog().require(skillId)
+		);
 		CompletableFuture.runAsync(this::playLevel99Cheer);
 		if (announceInChat && sourceMessages != null)
 		{

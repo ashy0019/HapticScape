@@ -8,11 +8,9 @@ import static org.junit.Assert.assertEquals;
 public class RuneLiteSkillCatalogTest
 {
 	@Test
-	public void roundTripsNeutralSkillIdsAtTheRuneLiteEdge()
+	public void translatesRuneLiteSkillsToNeutralIds()
 	{
 		assertEquals("cooking", RuneLiteSkillCatalog.skillId(Skill.COOKING));
-		assertEquals(Skill.COOKING, RuneLiteSkillCatalog.skill("COOKING"));
-		assertEquals(Skill.COOKING, RuneLiteSkillCatalog.skill("cooking"));
 	}
 
 	@Test
