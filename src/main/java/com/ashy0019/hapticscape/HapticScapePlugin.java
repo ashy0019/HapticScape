@@ -11,8 +11,6 @@ import com.ashy0019.hapticscape.music.MusicResponse;
 import com.ashy0019.hapticscape.music.MusicSyncService;
 import com.ashy0019.hapticscape.music.MusicSyncSettings;
 import com.ashy0019.hapticscape.music.WasapiLoopbackCapture;
-import com.ashy0019.hapticscape.remote.ConfigBackedRemoteSettingsStore;
-import com.ashy0019.hapticscape.remote.ConfigBackedRemotePermissionsStore;
 import com.ashy0019.hapticscape.remote.DiscordCredentialStore;
 import com.ashy0019.hapticscape.remote.DiscordDeepLinkInbox;
 import com.ashy0019.hapticscape.remote.DiscordJoinConsentHandler;
@@ -24,7 +22,11 @@ import com.ashy0019.hapticscape.remote.RemoteSessionListener;
 import com.ashy0019.hapticscape.remote.RemoteSessionManager;
 import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteGameplayBridge;
+import com.ashy0019.hapticscape.integration.runelite.RuneLiteSettingsWriter;
 import com.ashy0019.hapticscape.remote.RemoteSettingsSnapshot;
+import com.ashy0019.hapticscape.remote.SettingsBackedRemotePermissionsStore;
+import com.ashy0019.hapticscape.remote.SettingsBackedRemoteSettingsStore;
+import com.ashy0019.hapticscape.remote.SettingsWriter;
 import com.ashy0019.hapticscape.remote.SettingsLockService;
 import com.ashy0019.hapticscape.ui.HapticScapePanel;
 import com.ashy0019.hapticscape.ui.Level99CelebrationOverlay;
@@ -174,13 +176,15 @@ public class HapticScapePlugin extends Plugin
 			runeLiteConfig,
 			chatMessageManager
 		);
+		SettingsWriter settingsWriter =
+			new RuneLiteSettingsWriter(configManager, HapticScapeConfig.GROUP);
 		remoteSessionManager = new RemoteSessionManager(
 			httpClient,
 			gson,
-			new ConfigBackedRemoteSettingsStore(config, configManager),
+			new SettingsBackedRemoteSettingsStore(config, settingsWriter),
 			effectiveSettingsService,
 			settingsLockService,
-			new ConfigBackedRemotePermissionsStore(config, configManager),
+			new SettingsBackedRemotePermissionsStore(config, settingsWriter),
 			feedbackCoordinator.createRemoteActionExecutor()
 		);
 		remoteSessionManager.addListener(new RemoteSessionListener()

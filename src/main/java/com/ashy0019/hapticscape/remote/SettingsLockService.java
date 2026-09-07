@@ -1,6 +1,6 @@
 package com.ashy0019.hapticscape.remote;
 
-import com.ashy0019.hapticscape.HapticScapeConfig;
+import com.ashy0019.hapticscape.HapticScapeSettingKeys;
 import com.google.gson.Gson;
 import java.nio.file.Path;
 import java.security.SecureRandom;
@@ -80,12 +80,12 @@ public final class SettingsLockService
 	public boolean canEditLocally(String configKey)
 	{
 		return !getSnapshot().isLegacyFullLock()
-			|| HapticScapeConfig.CUSTOM_PATTERNS_KEY.equals(configKey)
-			|| HapticScapeConfig.MUSIC_SYNC_ENABLED_KEY.equals(configKey)
-			|| HapticScapeConfig.MUSIC_RESPONSE_KEY.equals(configKey)
-			|| HapticScapeConfig.MUSIC_SENSITIVITY_PERCENT_KEY.equals(configKey)
-			|| HapticScapeConfig.MUSIC_MINIMUM_INTENSITY_PERCENT_KEY.equals(configKey)
-			|| HapticScapeConfig.MUSIC_MAXIMUM_INTENSITY_PERCENT_KEY.equals(configKey);
+			|| HapticScapeSettingKeys.CUSTOM_PATTERNS.equals(configKey)
+			|| HapticScapeSettingKeys.MUSIC_SYNC_ENABLED.equals(configKey)
+			|| HapticScapeSettingKeys.MUSIC_RESPONSE.equals(configKey)
+			|| HapticScapeSettingKeys.MUSIC_SENSITIVITY_PERCENT.equals(configKey)
+			|| HapticScapeSettingKeys.MUSIC_MINIMUM_INTENSITY_PERCENT.equals(configKey)
+			|| HapticScapeSettingKeys.MUSIC_MAXIMUM_INTENSITY_PERCENT.equals(configKey);
 	}
 
 	public boolean canEditLocally(SettingsLockTarget target, String configKey)

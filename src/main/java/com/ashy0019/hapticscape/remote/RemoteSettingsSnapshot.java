@@ -1,11 +1,11 @@
 package com.ashy0019.hapticscape.remote;
 
+import com.ashy0019.hapticscape.HapticScapeSettingKeys;
 import com.ashy0019.hapticscape.AlertCategory;
 import com.ashy0019.hapticscape.AlertProfiles;
 import com.ashy0019.hapticscape.AlertTriggerSettings;
 import com.ashy0019.hapticscape.CustomPatternLibrary;
 import com.ashy0019.hapticscape.HapticPatternSelection;
-import com.ashy0019.hapticscape.HapticScapeConfig;
 import com.ashy0019.hapticscape.NotificationFeedbackSettings;
 import com.ashy0019.hapticscape.SkillFeedbackProfiles;
 import com.ashy0019.hapticscape.SkillSelection;
@@ -70,7 +70,7 @@ public final class RemoteSettingsSnapshot
 	private final String clickerAlertSettings;
 	private final String clickerPhraseRules;
 
-	private RemoteSettingsSnapshot(HapticScapeConfig config)
+	private RemoteSettingsSnapshot(RemoteSettingsSource config)
 	{
 		schemaVersion = SCHEMA_VERSION;
 		minimumXpGain = config.minimumXpGain();
@@ -109,7 +109,7 @@ public final class RemoteSettingsSnapshot
 		clickerPhraseRules = config.clickerPhraseRules();
 	}
 
-	public static RemoteSettingsSnapshot capture(HapticScapeConfig config)
+	public static RemoteSettingsSnapshot capture(RemoteSettingsSource config)
 	{
 		return new RemoteSettingsSnapshot(Objects.requireNonNull(config, "config"));
 	}
@@ -137,92 +137,92 @@ public final class RemoteSettingsSnapshot
 		ClickerSettings clicker = getClickerSettings();
 		ClickerXpSettings clickerXp = getClickerXpSettings();
 		Map<String, Object> values = new LinkedHashMap<>();
-		values.put(HapticScapeConfig.MINIMUM_XP_GAIN_KEY, globalXp.getMinimumXpGain());
-		values.put(HapticScapeConfig.INTENSITY_PERCENT_KEY, globalXp.getIntensityPercent());
-		values.put(HapticScapeConfig.PULSE_DURATION_MILLIS_KEY, globalXp.getDurationMillis());
+		values.put(HapticScapeSettingKeys.MINIMUM_XP_GAIN, globalXp.getMinimumXpGain());
+		values.put(HapticScapeSettingKeys.INTENSITY_PERCENT, globalXp.getIntensityPercent());
+		values.put(HapticScapeSettingKeys.PULSE_DURATION_MILLIS, globalXp.getDurationMillis());
 		values.put(
-			HapticScapeConfig.PATTERN_PRESET_KEY,
+			HapticScapeSettingKeys.PATTERN_PRESET,
 			globalXp.getPatternSelection().toConfigValue()
 		);
 		values.put(
-			HapticScapeConfig.DISABLED_SKILLS_KEY,
+			HapticScapeSettingKeys.DISABLED_SKILLS,
 			getHapticSkillSelection().toConfigValue()
 		);
-		values.put(HapticScapeConfig.LEVEL_UP_FEEDBACK_ENABLED_KEY, levelUpFeedbackEnabled);
+		values.put(HapticScapeSettingKeys.LEVEL_UP_FEEDBACK_ENABLED, levelUpFeedbackEnabled);
 		values.put(
-			HapticScapeConfig.LEVEL_UP_PATTERN_PRESET_KEY,
+			HapticScapeSettingKeys.LEVEL_UP_PATTERN_PRESET,
 			getLevelUpPatternPreset().toConfigValue()
 		);
-		values.put(HapticScapeConfig.MILESTONE_FEEDBACK_ENABLED_KEY, milestoneFeedbackEnabled);
+		values.put(HapticScapeSettingKeys.MILESTONE_FEEDBACK_ENABLED, milestoneFeedbackEnabled);
 		values.put(
-			HapticScapeConfig.MILESTONE_PATTERN_PRESET_KEY,
+			HapticScapeSettingKeys.MILESTONE_PATTERN_PRESET,
 			getMilestonePatternPreset().toConfigValue()
 		);
-		values.put(HapticScapeConfig.LEVEL_99_CELEBRATION_ENABLED_KEY, level99CelebrationEnabled);
+		values.put(HapticScapeSettingKeys.LEVEL_99_CELEBRATION_ENABLED, level99CelebrationEnabled);
 		values.put(
-			HapticScapeConfig.SKILL_FEEDBACK_PROFILES_KEY,
+			HapticScapeSettingKeys.SKILL_FEEDBACK_PROFILES,
 			getSkillFeedbackProfiles().toConfigValue()
 		);
-		values.put(HapticScapeConfig.NOTIFICATION_FEEDBACK_ENABLED_KEY, notifications.isEnabled());
+		values.put(HapticScapeSettingKeys.NOTIFICATION_FEEDBACK_ENABLED, notifications.isEnabled());
 		values.put(
-			HapticScapeConfig.NOTIFICATION_INTENSITY_PERCENT_KEY,
+			HapticScapeSettingKeys.NOTIFICATION_INTENSITY_PERCENT,
 			notifications.getIntensityPercent()
 		);
 		values.put(
-			HapticScapeConfig.NOTIFICATION_PATTERN_PRESET_KEY,
+			HapticScapeSettingKeys.NOTIFICATION_PATTERN_PRESET,
 			notifications.getPatternSelection().toConfigValue()
 		);
 		values.put(
-			HapticScapeConfig.NOTIFICATION_DURATION_MILLIS_KEY,
+			HapticScapeSettingKeys.NOTIFICATION_DURATION_MILLIS,
 			notifications.getDurationMillis()
 		);
 		values.put(
-			HapticScapeConfig.NOTIFICATION_RESPECT_FOCUS_KEY,
+			HapticScapeSettingKeys.NOTIFICATION_RESPECT_FOCUS,
 			notifications.isRespectSourceFocus()
 		);
-		values.put(HapticScapeConfig.ALERT_PROFILES_KEY, getAlertProfiles().toConfigValue());
+		values.put(HapticScapeSettingKeys.ALERT_PROFILES, getAlertProfiles().toConfigValue());
 		values.put(
-			HapticScapeConfig.ALERT_TRIGGER_SETTINGS_KEY,
+			HapticScapeSettingKeys.ALERT_TRIGGER_SETTINGS,
 			getAlertTriggerSettings().toConfigValue()
 		);
-		values.put(HapticScapeConfig.CUSTOM_PATTERNS_KEY, patterns.toConfigValue());
-		values.put(HapticScapeConfig.MUSIC_SYNC_ENABLED_KEY, music.isEnabled());
-		values.put(HapticScapeConfig.MUSIC_RESPONSE_KEY, music.getResponse().name());
+		values.put(HapticScapeSettingKeys.CUSTOM_PATTERNS, patterns.toConfigValue());
+		values.put(HapticScapeSettingKeys.MUSIC_SYNC_ENABLED, music.isEnabled());
+		values.put(HapticScapeSettingKeys.MUSIC_RESPONSE, music.getResponse().name());
 		values.put(
-			HapticScapeConfig.MUSIC_SENSITIVITY_PERCENT_KEY,
+			HapticScapeSettingKeys.MUSIC_SENSITIVITY_PERCENT,
 			music.getSensitivityPercent()
 		);
 		values.put(
-			HapticScapeConfig.MUSIC_MINIMUM_INTENSITY_PERCENT_KEY,
+			HapticScapeSettingKeys.MUSIC_MINIMUM_INTENSITY_PERCENT,
 			music.getMinimumIntensityPercent()
 		);
 		values.put(
-			HapticScapeConfig.MUSIC_MAXIMUM_INTENSITY_PERCENT_KEY,
+			HapticScapeSettingKeys.MUSIC_MAXIMUM_INTENSITY_PERCENT,
 			music.getMaximumIntensityPercent()
 		);
-		values.put(HapticScapeConfig.CLICKER_ENABLED_KEY, clicker.isEnabled());
-		values.put(HapticScapeConfig.CLICKER_VOLUME_PERCENT_KEY, clicker.getVolumePercent());
+		values.put(HapticScapeSettingKeys.CLICKER_ENABLED, clicker.isEnabled());
+		values.put(HapticScapeSettingKeys.CLICKER_VOLUME_PERCENT, clicker.getVolumePercent());
 		values.put(
-			HapticScapeConfig.CLICKER_MINIMUM_XP_GAIN_KEY,
+			HapticScapeSettingKeys.CLICKER_MINIMUM_XP_GAIN,
 			clickerXp.getMinimumXpGain()
 		);
 		values.put(
-			HapticScapeConfig.CLICKER_DISABLED_SKILLS_KEY,
+			HapticScapeSettingKeys.CLICKER_DISABLED_SKILLS,
 			getClickSkillSelection().toConfigValue()
 		);
-		values.put(HapticScapeConfig.CLICKER_LEVEL_UP_ENABLED_KEY, clickerXp.isLevelUpEnabled());
+		values.put(HapticScapeSettingKeys.CLICKER_LEVEL_UP_ENABLED, clickerXp.isLevelUpEnabled());
 		values.put(
-			HapticScapeConfig.CLICKER_MILESTONE_ENABLED_KEY,
+			HapticScapeSettingKeys.CLICKER_MILESTONE_ENABLED,
 			clickerXp.isMilestoneEnabled()
 		);
-		values.put(HapticScapeConfig.CLICKER_LEVEL_99_ENABLED_KEY, clickerXp.isLevel99Enabled());
-		values.put(HapticScapeConfig.CLICKER_GENERIC_NOTIFICATION_ENABLED_KEY, clickerGenericNotificationEnabled);
+		values.put(HapticScapeSettingKeys.CLICKER_LEVEL_99_ENABLED, clickerXp.isLevel99Enabled());
+		values.put(HapticScapeSettingKeys.CLICKER_GENERIC_NOTIFICATION_ENABLED, clickerGenericNotificationEnabled);
 		values.put(
-			HapticScapeConfig.CLICKER_ALERT_SETTINGS_KEY,
+			HapticScapeSettingKeys.CLICKER_ALERT_SETTINGS,
 			getClickerAlertSettings().toConfigValue()
 		);
 		values.put(
-			HapticScapeConfig.CLICKER_PHRASE_RULES_KEY,
+			HapticScapeSettingKeys.CLICKER_PHRASE_RULES,
 			getClickerPhraseRules().toConfigValue()
 		);
 		return Collections.unmodifiableMap(values);

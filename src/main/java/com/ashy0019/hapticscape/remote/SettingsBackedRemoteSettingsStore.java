@@ -1,30 +1,28 @@
 package com.ashy0019.hapticscape.remote;
 
-import com.ashy0019.hapticscape.HapticScapeConfig;
 import java.util.Map;
 import java.util.Objects;
-import net.runelite.client.config.ConfigManager;
 
 /**
  * Persists only the explicitly remote-controllable HapticScape settings.
  */
-public final class ConfigBackedRemoteSettingsStore implements RemoteSettingsStore
+public final class SettingsBackedRemoteSettingsStore implements RemoteSettingsStore
 {
-	private final HapticScapeConfig config;
-	private final ConfigManager configManager;
+	private final RemoteSettingsSource settingsSource;
+	private final SettingsWriter settingsWriter;
 
-	public ConfigBackedRemoteSettingsStore(
-		HapticScapeConfig config,
-		ConfigManager configManager)
+	public SettingsBackedRemoteSettingsStore(
+		RemoteSettingsSource settingsSource,
+		SettingsWriter settingsWriter)
 	{
-		this.config = Objects.requireNonNull(config, "config");
-		this.configManager = Objects.requireNonNull(configManager, "configManager");
+		this.settingsSource = Objects.requireNonNull(settingsSource, "settingsSource");
+		this.settingsWriter = Objects.requireNonNull(settingsWriter, "settingsWriter");
 	}
 
 	@Override
 	public RemoteSettingsSnapshot capture()
 	{
-		return RemoteSettingsSnapshot.capture(config);
+		return RemoteSettingsSnapshot.capture(settingsSource);
 	}
 
 	@Override
@@ -58,11 +56,7 @@ public final class ConfigBackedRemoteSettingsStore implements RemoteSettingsStor
 	{
 		for (Map.Entry<String, Object> entry : settings.toConfigurationMap().entrySet())
 		{
-			configManager.setConfiguration(
-				HapticScapeConfig.GROUP,
-				entry.getKey(),
-				entry.getValue()
-			);
+			settingsWriter.set(entry.getKey(), entry.getValue());
 		}
 	}
 }

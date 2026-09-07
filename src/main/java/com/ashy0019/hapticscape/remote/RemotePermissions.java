@@ -1,6 +1,5 @@
 package com.ashy0019.hapticscape.remote;
 
-import com.ashy0019.hapticscape.HapticScapeConfig;
 import java.util.Objects;
 
 /**
@@ -118,7 +117,7 @@ public final class RemotePermissions
 		);
 	}
 
-	public static RemotePermissions capture(HapticScapeConfig config)
+	public static RemotePermissions capture(RemotePermissionsSource config)
 	{
 		Objects.requireNonNull(config, "config");
 		return new RemotePermissions(

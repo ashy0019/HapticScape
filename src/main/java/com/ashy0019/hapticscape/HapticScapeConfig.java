@@ -1,61 +1,63 @@
 package com.ashy0019.hapticscape;
 
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteSkillCatalog;
+import com.ashy0019.hapticscape.remote.RemotePermissionsSource;
+import com.ashy0019.hapticscape.remote.RemoteSettingsSource;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.Range;
 
 @ConfigGroup(HapticScapeConfig.GROUP)
-public interface HapticScapeConfig extends Config
+public interface HapticScapeConfig extends Config, RemoteSettingsSource, RemotePermissionsSource
 {
 	String GROUP = "hapticscape";
-	String MINIMUM_XP_GAIN_KEY = "minimumXpGain";
-	String INTENSITY_PERCENT_KEY = "intensityPercent";
-	String PULSE_DURATION_MILLIS_KEY = "pulseDurationMillis";
-	String PATTERN_PRESET_KEY = "patternPreset";
-	String DISABLED_SKILLS_KEY = "disabledSkills";
-	String LEVEL_UP_FEEDBACK_ENABLED_KEY = "levelUpFeedbackEnabled";
-	String LEVEL_UP_PATTERN_PRESET_KEY = "levelUpPatternPreset";
-	String MILESTONE_FEEDBACK_ENABLED_KEY = "milestoneFeedbackEnabled";
-	String MILESTONE_PATTERN_PRESET_KEY = "milestonePatternPreset";
-	String LEVEL_99_CELEBRATION_ENABLED_KEY = "level99CelebrationEnabled";
-	String SKILL_FEEDBACK_PROFILES_KEY = "skillFeedbackProfiles";
-	String NOTIFICATION_FEEDBACK_ENABLED_KEY = "notificationFeedbackEnabled";
-	String NOTIFICATION_INTENSITY_PERCENT_KEY = "notificationIntensityPercent";
-	String NOTIFICATION_PATTERN_PRESET_KEY = "notificationPatternPreset";
-	String NOTIFICATION_DURATION_MILLIS_KEY = "notificationDurationMillis";
-	String NOTIFICATION_RESPECT_FOCUS_KEY = "notificationRespectFocus";
-	String ALERT_PROFILES_KEY = "alertProfiles";
-	String ALERT_TRIGGER_SETTINGS_KEY = "alertTriggerSettings";
-	String CUSTOM_PATTERNS_KEY = "customPatterns";
-	String MUSIC_SYNC_ENABLED_KEY = "musicSyncEnabled";
-	String MUSIC_RESPONSE_KEY = "musicResponse";
-	String MUSIC_SENSITIVITY_PERCENT_KEY = "musicSensitivityPercent";
-	String MUSIC_MINIMUM_INTENSITY_PERCENT_KEY = "musicMinimumIntensityPercent";
-	String MUSIC_MAXIMUM_INTENSITY_PERCENT_KEY = "musicMaximumIntensityPercent";
-	String CLICKER_ENABLED_KEY = "clickerEnabled";
-	String CLICKER_VOLUME_PERCENT_KEY = "clickerVolumePercent";
-	String CLICKER_MINIMUM_XP_GAIN_KEY = "clickerMinimumXpGain";
-	String CLICKER_DISABLED_SKILLS_KEY = "clickerDisabledSkills";
-	String CLICKER_LEVEL_UP_ENABLED_KEY = "clickerLevelUpEnabled";
-	String CLICKER_MILESTONE_ENABLED_KEY = "clickerMilestoneEnabled";
-	String CLICKER_LEVEL_99_ENABLED_KEY = "clickerLevel99Enabled";
-	String CLICKER_GENERIC_NOTIFICATION_ENABLED_KEY = "clickerGenericNotificationEnabled";
-	String CLICKER_ALERT_SETTINGS_KEY = "clickerAlertSettings";
-	String CLICKER_PHRASE_RULES_KEY = "clickerPhraseRules";
+	String MINIMUM_XP_GAIN_KEY = HapticScapeSettingKeys.MINIMUM_XP_GAIN;
+	String INTENSITY_PERCENT_KEY = HapticScapeSettingKeys.INTENSITY_PERCENT;
+	String PULSE_DURATION_MILLIS_KEY = HapticScapeSettingKeys.PULSE_DURATION_MILLIS;
+	String PATTERN_PRESET_KEY = HapticScapeSettingKeys.PATTERN_PRESET;
+	String DISABLED_SKILLS_KEY = HapticScapeSettingKeys.DISABLED_SKILLS;
+	String LEVEL_UP_FEEDBACK_ENABLED_KEY = HapticScapeSettingKeys.LEVEL_UP_FEEDBACK_ENABLED;
+	String LEVEL_UP_PATTERN_PRESET_KEY = HapticScapeSettingKeys.LEVEL_UP_PATTERN_PRESET;
+	String MILESTONE_FEEDBACK_ENABLED_KEY = HapticScapeSettingKeys.MILESTONE_FEEDBACK_ENABLED;
+	String MILESTONE_PATTERN_PRESET_KEY = HapticScapeSettingKeys.MILESTONE_PATTERN_PRESET;
+	String LEVEL_99_CELEBRATION_ENABLED_KEY = HapticScapeSettingKeys.LEVEL_99_CELEBRATION_ENABLED;
+	String SKILL_FEEDBACK_PROFILES_KEY = HapticScapeSettingKeys.SKILL_FEEDBACK_PROFILES;
+	String NOTIFICATION_FEEDBACK_ENABLED_KEY = HapticScapeSettingKeys.NOTIFICATION_FEEDBACK_ENABLED;
+	String NOTIFICATION_INTENSITY_PERCENT_KEY = HapticScapeSettingKeys.NOTIFICATION_INTENSITY_PERCENT;
+	String NOTIFICATION_PATTERN_PRESET_KEY = HapticScapeSettingKeys.NOTIFICATION_PATTERN_PRESET;
+	String NOTIFICATION_DURATION_MILLIS_KEY = HapticScapeSettingKeys.NOTIFICATION_DURATION_MILLIS;
+	String NOTIFICATION_RESPECT_FOCUS_KEY = HapticScapeSettingKeys.NOTIFICATION_RESPECT_FOCUS;
+	String ALERT_PROFILES_KEY = HapticScapeSettingKeys.ALERT_PROFILES;
+	String ALERT_TRIGGER_SETTINGS_KEY = HapticScapeSettingKeys.ALERT_TRIGGER_SETTINGS;
+	String CUSTOM_PATTERNS_KEY = HapticScapeSettingKeys.CUSTOM_PATTERNS;
+	String MUSIC_SYNC_ENABLED_KEY = HapticScapeSettingKeys.MUSIC_SYNC_ENABLED;
+	String MUSIC_RESPONSE_KEY = HapticScapeSettingKeys.MUSIC_RESPONSE;
+	String MUSIC_SENSITIVITY_PERCENT_KEY = HapticScapeSettingKeys.MUSIC_SENSITIVITY_PERCENT;
+	String MUSIC_MINIMUM_INTENSITY_PERCENT_KEY = HapticScapeSettingKeys.MUSIC_MINIMUM_INTENSITY_PERCENT;
+	String MUSIC_MAXIMUM_INTENSITY_PERCENT_KEY = HapticScapeSettingKeys.MUSIC_MAXIMUM_INTENSITY_PERCENT;
+	String CLICKER_ENABLED_KEY = HapticScapeSettingKeys.CLICKER_ENABLED;
+	String CLICKER_VOLUME_PERCENT_KEY = HapticScapeSettingKeys.CLICKER_VOLUME_PERCENT;
+	String CLICKER_MINIMUM_XP_GAIN_KEY = HapticScapeSettingKeys.CLICKER_MINIMUM_XP_GAIN;
+	String CLICKER_DISABLED_SKILLS_KEY = HapticScapeSettingKeys.CLICKER_DISABLED_SKILLS;
+	String CLICKER_LEVEL_UP_ENABLED_KEY = HapticScapeSettingKeys.CLICKER_LEVEL_UP_ENABLED;
+	String CLICKER_MILESTONE_ENABLED_KEY = HapticScapeSettingKeys.CLICKER_MILESTONE_ENABLED;
+	String CLICKER_LEVEL_99_ENABLED_KEY = HapticScapeSettingKeys.CLICKER_LEVEL_99_ENABLED;
+	String CLICKER_GENERIC_NOTIFICATION_ENABLED_KEY = HapticScapeSettingKeys.CLICKER_GENERIC_NOTIFICATION_ENABLED;
+	String CLICKER_ALERT_SETTINGS_KEY = HapticScapeSettingKeys.CLICKER_ALERT_SETTINGS;
+	String CLICKER_PHRASE_RULES_KEY = HapticScapeSettingKeys.CLICKER_PHRASE_RULES;
 	String REMOTE_RELAY_URL_KEY = "remoteRelayUrl";
 	String DEFAULT_REMOTE_RELAY_URL =
 		"wss://hapticscape-remote-relay.hapticscape.workers.dev/relay";
-	String REMOTE_SETTINGS_ALLOWED_KEY = "remoteSettingsAllowed";
-	String REMOTE_HAPTICS_ALLOWED_KEY = "remoteHapticsAllowed";
-	String REMOTE_LIVE_HAPTICS_ALLOWED_KEY = "remoteLiveHapticsAllowed";
-	String REMOTE_CLICKS_ALLOWED_KEY = "remoteClicksAllowed";
-	String REMOTE_DESKTOP_NOTIFICATIONS_ALLOWED_KEY = "remoteDesktopNotificationsAllowed";
-	String REMOTE_LOCAL_CHATBOX_MESSAGES_ALLOWED_KEY = "remoteLocalChatboxMessagesAllowed";
-	String REMOTE_MAXIMUM_INTENSITY_PERCENT_KEY = "remoteMaximumIntensityPercent";
-	String REMOTE_MAXIMUM_DURATION_MILLIS_KEY = "remoteMaximumDurationMillis";
-	String REMOTE_MAXIMUM_LIVE_DURATION_MILLIS_KEY = "remoteMaximumLiveDurationMillis";
+	String REMOTE_SETTINGS_ALLOWED_KEY = HapticScapeSettingKeys.REMOTE_SETTINGS_ALLOWED;
+	String REMOTE_HAPTICS_ALLOWED_KEY = HapticScapeSettingKeys.REMOTE_HAPTICS_ALLOWED;
+	String REMOTE_LIVE_HAPTICS_ALLOWED_KEY = HapticScapeSettingKeys.REMOTE_LIVE_HAPTICS_ALLOWED;
+	String REMOTE_CLICKS_ALLOWED_KEY = HapticScapeSettingKeys.REMOTE_CLICKS_ALLOWED;
+	String REMOTE_DESKTOP_NOTIFICATIONS_ALLOWED_KEY = HapticScapeSettingKeys.REMOTE_DESKTOP_NOTIFICATIONS_ALLOWED;
+	String REMOTE_LOCAL_CHATBOX_MESSAGES_ALLOWED_KEY = HapticScapeSettingKeys.REMOTE_LOCAL_CHATBOX_MESSAGES_ALLOWED;
+	String REMOTE_MAXIMUM_INTENSITY_PERCENT_KEY = HapticScapeSettingKeys.REMOTE_MAXIMUM_INTENSITY_PERCENT;
+	String REMOTE_MAXIMUM_DURATION_MILLIS_KEY = HapticScapeSettingKeys.REMOTE_MAXIMUM_DURATION_MILLIS;
+	String REMOTE_MAXIMUM_LIVE_DURATION_MILLIS_KEY = HapticScapeSettingKeys.REMOTE_MAXIMUM_LIVE_DURATION_MILLIS;
 
 	@ConfigItem(
 		keyName = "intifaceServer",
