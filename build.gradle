@@ -55,10 +55,9 @@ def approvedRuntimeModules = [
 	'org.slf4j:slf4j-api'
 ] as Set
 
-// The standalone desktop artifact intentionally carries only the dependencies
-// used by the RuneLite-free HapticScape runtime. These are currently resolved
-// through the existing RuneLite test host so we can split artifacts without
-// changing dependency versions in the same phase.
+// The standalone desktop artifact intentionally carries only dependencies
+// owned by the RuneLite-free HapticScape runtime. Keep this allowlist narrow:
+// verifyStandaloneDependencies fails if the runtime graph grows unexpectedly.
 def standaloneRuntimeModules = [
 	'ch.qos.logback:logback-classic',
 	'ch.qos.logback:logback-core',
@@ -71,6 +70,17 @@ def standaloneRuntimeModules = [
 ] as Set
 
 dependencies {
+	// Desktop/runtime dependencies are owned by HapticScape directly. Keep these
+	// versions aligned with the previously packaged standalone artifact so this
+	// phase changes the dependency boundary without changing runtime libraries.
+	implementation 'com.google.code.gson:gson:2.8.5'
+	implementation 'com.squareup.okhttp3:okhttp:3.14.9'
+	implementation 'net.java.dev.jna:jna:5.9.0'
+	implementation 'net.java.dev.jna:jna-platform:5.9.0'
+	runtimeOnly 'ch.qos.logback:logback-classic:1.2.9'
+
+	// RuneLite remains compile-only for the temporary in-repo bridge. It is not
+	// part of the standalone runtime dependency graph.
 	compileOnly group: 'net.runelite', name:'client', version: runeLiteVersion
 
 	compileOnly 'org.projectlombok:lombok:1.18.30'
@@ -100,9 +110,9 @@ def packagedRuntimeFiles = {
 }
 
 def standaloneRuntimeArtifacts = {
-	configurations.testRuntimeClasspath.resolvedConfiguration.resolvedArtifacts.findAll { artifact ->
+	configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts.findAll { artifact ->
 		def module = "${artifact.moduleVersion.id.group}:${artifact.name}".toString()
-		!isTestOnlyRuntimeArtifact(artifact) && standaloneRuntimeModules.contains(module)
+		standaloneRuntimeModules.contains(module)
 	}
 }
 
@@ -159,7 +169,7 @@ tasks.register('run', JavaExec) {
 
 tasks.register('standaloneJar', Jar) {
 	dependsOn tasks.named('classes')
-	dependsOn configurations.testRuntimeClasspath
+	dependsOn configurations.runtimeClasspath
 	manifest {
 		attributes(
 			'Main-Class': desktopMainClass,
@@ -222,8 +232,33 @@ tasks.register('runStandalone', JavaExec) {
 	jvmArgs "-ea"
 }
 
+tasks.register('verifyStandaloneDependencies') {
+	dependsOn configurations.runtimeClasspath
+
+	doLast {
+		def runtimeArtifacts = configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts
+		def runtimeModules = runtimeArtifacts.collect { artifact ->
+			"${artifact.moduleVersion.id.group}:${artifact.name}".toString()
+		}.toSet()
+		def runeLiteModules = runtimeModules.findAll { it.startsWith('net.runelite:') }
+		def unexpectedModules = runtimeModules.findAll { !standaloneRuntimeModules.contains(it) }
+
+		if (!runeLiteModules.isEmpty()) {
+			throw new GradleException(
+				"RuneLite leaked into the standalone runtime dependency graph: ${runeLiteModules.sort().join(', ')}"
+			)
+		}
+		if (!unexpectedModules.isEmpty()) {
+			throw new GradleException(
+				"Standalone runtime contains unreviewed dependencies: ${unexpectedModules.sort().join(', ')}"
+			)
+		}
+	}
+}
+
 tasks.register('verifyStandaloneJar') {
 	dependsOn tasks.named('standaloneJar')
+	dependsOn tasks.named('verifyStandaloneDependencies')
 
 	doLast {
 		def jarFile = tasks.named('standaloneJar').get().archiveFile.get().asFile
