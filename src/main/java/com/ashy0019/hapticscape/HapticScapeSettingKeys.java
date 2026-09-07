@@ -1,8 +1,7 @@
 package com.ashy0019.hapticscape;
 
 /**
- * Stable persisted keys shared by the current RuneLite host and future
- * standalone settings backends.
+ * Stable persisted keys used by HapticScape settings backends.
  */
 public final class HapticScapeSettingKeys
 {

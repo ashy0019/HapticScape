@@ -96,6 +96,7 @@ tasks.named('processResources') {
 	}
 }
 
+// RuneLite bridge development host. Start runStandalone first.
 tasks.register('run', JavaExec) {
 	classpath = sourceSets.test.runtimeClasspath
 	mainClass = pluginMainClass
@@ -111,17 +112,6 @@ tasks.register('runStandalone', JavaExec) {
 	mainClass = 'com.ashy0019.hapticscape.desktop.HapticScapeDesktopMain'
 
 	jvmArgs "-ea"
-}
-
-// Transitional two-process development mode. Start runStandalone first,
-// then runExternalBridge in a second terminal. The RuneLite process only
-// publishes neutral gameplay events to the standalone runtime in this mode.
-tasks.register('runExternalBridge', JavaExec) {
-	classpath = sourceSets.test.runtimeClasspath
-	mainClass = pluginMainClass
-
-	jvmArgs "-ea", "-Dhapticscape.externalRuntime=true"
-	args "--developer-mode", "--debug"
 }
 
 tasks.register('shadowJar', Jar) {

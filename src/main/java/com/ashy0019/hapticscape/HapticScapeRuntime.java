@@ -38,10 +38,10 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * Owns the source-neutral HapticScape runtime graph.
  *
- * <p>The current RuneLite host and the future standalone desktop host both
- * compose the same runtime by supplying host services through
- * {@link HapticScapeRuntimeDependencies}. Gameplay enters through the local
- * transport server rather than through RuneLite-specific calls.</p>
+ * <p>The standalone desktop host composes the runtime by supplying platform
+ * services through {@link HapticScapeRuntimeDependencies}. Gameplay enters
+ * through the local transport server rather than through source-specific
+ * calls.</p>
  */
 @Slf4j
 public final class HapticScapeRuntime implements AutoCloseable

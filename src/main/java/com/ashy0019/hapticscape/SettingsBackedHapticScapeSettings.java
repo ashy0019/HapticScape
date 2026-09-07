@@ -8,9 +8,8 @@ import java.util.Objects;
 /**
  * Host-neutral HapticScape settings view backed by the generic SettingsStore.
  *
- * <p>This is the settings facade used by a standalone runtime. The current
- * RuneLite host may continue to provide HapticScapeConfig directly because it
- * implements the same HapticScapeSettingsSource interface.</p>
+ * <p>This is the settings facade used by the standalone runtime. Host-specific
+ * settings APIs remain outside the runtime boundary.</p>
  */
 public final class SettingsBackedHapticScapeSettings implements HapticScapeSettingsSource
 {
