@@ -12,7 +12,9 @@ import com.ashy0019.hapticscape.device.HapticRequest;
 import com.ashy0019.hapticscape.music.MusicResponse;
 import com.ashy0019.hapticscape.music.MusicSyncService;
 import com.ashy0019.hapticscape.music.MusicSyncSettings;
-import com.ashy0019.hapticscape.protocol.InProcessWireGameplayEventTransport;
+import com.ashy0019.hapticscape.protocol.LocalhostGameplayEventServer;
+import com.ashy0019.hapticscape.protocol.LocalhostGameplayEventTransport;
+import com.ashy0019.hapticscape.protocol.LocalhostTransportEndpoint;
 import com.ashy0019.hapticscape.protocol.TransportWireCodec;
 import com.ashy0019.hapticscape.integration.desktop.DesktopAudioCaptureSources;
 import com.ashy0019.hapticscape.remote.DiscordCredentialStore;
@@ -101,6 +103,8 @@ public class HapticScapePlugin extends Plugin
 		new Level99CelebrationController();
 	private GameplayEventCoordinator gameplayEvents;
 	private RuneLiteGameplayBridge gameplayBridge;
+	private LocalhostGameplayEventServer gameplayTransportServer;
+	private LocalhostGameplayEventTransport gameplayTransport;
 	private FeedbackCoordinator feedbackCoordinator;
 	private GatedIntifaceService intifaceService;
 	private EffectiveSettingsService effectiveSettingsService;
@@ -236,10 +240,16 @@ public class HapticScapePlugin extends Plugin
 			feedbackCoordinator
 		);
 		gameplayEvents.start();
-		GameplayEventSink gameplayTransport = new InProcessWireGameplayEventTransport(
+		TransportWireCodec gameplayTransportCodec = new TransportWireCodec(gson);
+		gameplayTransportServer = new LocalhostGameplayEventServer(
+			gameplayTransportCodec,
+			gameplayEvents,
+			LocalhostTransportEndpoint.DEFAULT_PORT
+		);
+		gameplayTransport = new LocalhostGameplayEventTransport(
 			"runelite",
-			new TransportWireCodec(gson),
-			gameplayEvents
+			gameplayTransportCodec,
+			gameplayTransportServer.getPort()
 		);
 		gameplayBridge = new RuneLiteGameplayBridge(client, itemManager, gameplayTransport);
 		gameplayBridge.start();
@@ -347,6 +357,16 @@ public class HapticScapePlugin extends Plugin
 	{
 		DesktopDiscordDeepLinkInbox.getInstance().setHandler(null);
 		gameplayBridge = null;
+		if (gameplayTransport != null)
+		{
+			gameplayTransport.close();
+			gameplayTransport = null;
+		}
+		if (gameplayTransportServer != null)
+		{
+			gameplayTransportServer.close();
+			gameplayTransportServer = null;
+		}
 		if (gameplayEvents != null)
 		{
 			gameplayEvents.close();
