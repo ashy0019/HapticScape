@@ -1,5 +1,6 @@
 package com.ashy0019.hapticscape.event;
 
+import com.ashy0019.hapticscape.SkillIds;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -80,7 +81,7 @@ public final class XpEventTracker
 		private Key(String source, String skillId)
 		{
 			this.source = normalizeIdentifier(source, "source");
-			this.skillId = normalizeIdentifier(skillId, "skillId");
+			this.skillId = SkillIds.canonical(skillId);
 		}
 
 		@Override

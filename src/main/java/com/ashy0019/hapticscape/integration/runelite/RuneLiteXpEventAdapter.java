@@ -1,8 +1,8 @@
 package com.ashy0019.hapticscape.integration.runelite;
 
+import com.ashy0019.hapticscape.SkillIds;
 import com.ashy0019.hapticscape.event.XpEvent;
 import com.ashy0019.hapticscape.event.XpEventTracker;
-import java.util.Locale;
 import java.util.Objects;
 import net.runelite.api.Experience;
 import net.runelite.api.Skill;
@@ -39,7 +39,7 @@ public final class RuneLiteXpEventAdapter
 
 	private static String skillId(Skill skill)
 	{
-		return skill.name().toLowerCase(Locale.ROOT);
+		return SkillIds.canonical(skill.name());
 	}
 
 	private static int realLevelForXp(int xp)
@@ -60,6 +60,6 @@ public final class RuneLiteXpEventAdapter
 				"Cannot convert non-RuneLite XP event to RuneLite Skill"
 			);
 		}
-		return Skill.valueOf(event.getSkillId().toUpperCase(Locale.ROOT));
+		return Skill.valueOf(SkillIds.toConfigToken(event.getSkillId()));
 	}
 }

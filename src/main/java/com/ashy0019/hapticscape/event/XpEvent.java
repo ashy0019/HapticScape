@@ -1,5 +1,6 @@
 package com.ashy0019.hapticscape.event;
 
+import com.ashy0019.hapticscape.SkillIds;
 import java.util.Objects;
 
 /**
@@ -29,7 +30,7 @@ public final class XpEvent implements HapticScapeEvent
 		int currentLevel)
 	{
 		this.source = requireIdentifier(source, "source");
-		this.skillId = requireIdentifier(skillId, "skillId");
+		this.skillId = SkillIds.canonical(skillId);
 		this.previousXp = previousXp;
 		this.currentXp = currentXp;
 		this.gainedXp = Math.max(0, gainedXp);

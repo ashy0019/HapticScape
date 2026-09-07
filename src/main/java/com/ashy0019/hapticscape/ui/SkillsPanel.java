@@ -2,6 +2,7 @@ package com.ashy0019.hapticscape.ui;
 
 import com.ashy0019.hapticscape.HapticScapeConfig;
 import com.ashy0019.hapticscape.SkillSelection;
+import com.ashy0019.hapticscape.integration.runelite.RuneLiteSkillCatalog;
 import com.ashy0019.hapticscape.remote.RemoteSessionManager;
 import com.ashy0019.hapticscape.remote.SettingsLockCatalog;
 import com.ashy0019.hapticscape.remote.SettingsLockService;
@@ -108,11 +109,11 @@ final class SkillsPanel extends JPanel
 		add(header, BorderLayout.NORTH);
 
 		JPanel skillGrid = new JPanel(new GridLayout(0, 2, 4, 2));
-		for (Skill skill : SkillSelection.getSelectableSkills())
+		for (Skill skill : RuneLiteSkillCatalog.getSelectableSkills())
 		{
 			JCheckBox checkBox = new JCheckBox(
 				skill.getName(),
-				hapticSkillSelection.isEnabled(skill)
+				hapticSkillSelection.isEnabled(RuneLiteSkillCatalog.skillId(skill))
 			);
 			LockableCheckBoxBinding binding = new LockableCheckBoxBinding(
 				checkBox,
@@ -122,7 +123,7 @@ final class SkillsPanel extends JPanel
 				sessionManager::getLockSnapshot,
 				editingRemoteSubject,
 				lockSelectionEnabled,
-				() -> selectionFor(selectedOutput()).isEnabled(skill)
+				() -> selectionFor(selectedOutput()).isEnabled(RuneLiteSkillCatalog.skillId(skill))
 			);
 			checkBox.addActionListener(event ->
 			{
@@ -156,12 +157,12 @@ final class SkillsPanel extends JPanel
 
 	boolean isHapticSkillEnabled(Skill skill)
 	{
-		return hapticSkillSelection.isEnabled(skill);
+		return hapticSkillSelection.isEnabled(RuneLiteSkillCatalog.skillId(skill));
 	}
 
 	boolean isClickSkillEnabled(Skill skill)
 	{
-		return clickSkillSelection.isEnabled(skill);
+		return clickSkillSelection.isEnabled(RuneLiteSkillCatalog.skillId(skill));
 	}
 
 	boolean isSkillEnabled(Skill skill)
@@ -176,7 +177,7 @@ final class SkillsPanel extends JPanel
 			return;
 		}
 		SkillOutput output = selectedOutput();
-		SkillSelection updated = selectionFor(output).withEnabled(skill, enabled);
+		SkillSelection updated = selectionFor(output).withEnabled(RuneLiteSkillCatalog.skillId(skill), enabled);
 		setSelection(output, updated);
 		persist(output, skill, updated);
 		updateEnabledSkillsLabel();
@@ -190,12 +191,12 @@ final class SkillsPanel extends JPanel
 		}
 		SkillOutput output = selectedOutput();
 		SkillSelection updated = selectionFor(output);
-		for (Skill skill : SkillSelection.getSelectableSkills())
+		for (Skill skill : RuneLiteSkillCatalog.getSelectableSkills())
 		{
 			LockableCheckBoxBinding binding = lockBindings.get(skill);
 			if (editingRemoteSubject.getAsBoolean() || !binding.isEditLocked())
 			{
-				updated = updated.withEnabled(skill, enabled);
+				updated = updated.withEnabled(RuneLiteSkillCatalog.skillId(skill), enabled);
 			}
 		}
 		setSelection(output, updated);
@@ -204,7 +205,7 @@ final class SkillsPanel extends JPanel
 		{
 			for (Map.Entry<Skill, JCheckBox> entry : skillCheckBoxes.entrySet())
 			{
-				entry.getValue().setSelected(updated.isEnabled(entry.getKey()));
+				entry.getValue().setSelected(updated.isEnabled(RuneLiteSkillCatalog.skillId(entry.getKey())));
 			}
 		}
 		finally
@@ -219,7 +220,7 @@ final class SkillsPanel extends JPanel
 	{
 		Set<SettingsLockTarget> targets = new LinkedHashSet<>();
 		SkillOutput output = selectedOutput();
-		for (Skill skill : SkillSelection.getSelectableSkills())
+		for (Skill skill : RuneLiteSkillCatalog.getSelectableSkills())
 		{
 			targets.add(targetFor(output, skill));
 		}
@@ -245,8 +246,8 @@ final class SkillsPanel extends JPanel
 	private void updateEnabledSkillsLabel()
 	{
 		SkillOutput output = selectedOutput();
-		int enabledCount = selectionFor(output).getEnabledCount();
-		int skillCount = SkillSelection.getSelectableSkills().size();
+		int enabledCount = selectionFor(output).getEnabledCount(RuneLiteSkillCatalog.getSkillIds());
+		int skillCount = RuneLiteSkillCatalog.getSelectableSkills().size();
 		enabledSkillsValueLabel.setText(enabledCount + "/" + skillCount);
 		enabledSkillsValueLabel.setToolTipText(
 			enabledCount + " of " + skillCount + " skills enabled for " + output
@@ -261,7 +262,7 @@ final class SkillsPanel extends JPanel
 		{
 			for (Map.Entry<Skill, JCheckBox> entry : skillCheckBoxes.entrySet())
 			{
-				entry.getValue().setSelected(selection.isEnabled(entry.getKey()));
+				entry.getValue().setSelected(selection.isEnabled(RuneLiteSkillCatalog.skillId(entry.getKey())));
 			}
 		}
 		finally

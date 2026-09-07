@@ -1,7 +1,7 @@
 package com.ashy0019.hapticscape.remote;
 
 import com.ashy0019.hapticscape.AlertCategory;
-import com.ashy0019.hapticscape.SkillSelection;
+import com.ashy0019.hapticscape.integration.runelite.RuneLiteSkillCatalog;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -104,7 +104,7 @@ public final class SettingsLockCatalog
 
 	static
 	{
-		for (Skill skill : SkillSelection.getSelectableSkills())
+		for (Skill skill : RuneLiteSkillCatalog.getSelectableSkills())
 		{
 			String slug = skill.name().toLowerCase(Locale.ROOT).replace('_', '-');
 			SettingsLockTarget profileBlock = register(

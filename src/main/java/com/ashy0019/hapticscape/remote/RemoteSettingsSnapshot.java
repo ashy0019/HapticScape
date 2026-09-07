@@ -20,10 +20,8 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import net.runelite.api.Skill;
 
 /**
  * Versioned, remote-controllable HapticScape settings.
@@ -268,14 +266,9 @@ public final class RemoteSettingsSnapshot
 		);
 	}
 
-	public XpFeedbackSettings getXpFeedbackSettings(Skill skill)
-	{
-		return getSkillFeedbackProfiles().resolve(skill, getGlobalXpFeedbackSettings());
-	}
-
 	public XpFeedbackSettings getXpFeedbackSettings(String skillId)
 	{
-		return getXpFeedbackSettings(runeLiteSkill(skillId));
+		return getSkillFeedbackProfiles().resolve(skillId, getGlobalXpFeedbackSettings());
 	}
 
 	public SkillFeedbackProfiles getSkillFeedbackProfiles()
@@ -294,24 +287,14 @@ public final class RemoteSettingsSnapshot
 		return SkillSelection.fromConfigValue(clickerDisabledSkills);
 	}
 
-	public boolean isHapticSkillEnabled(Skill skill)
-	{
-		return getHapticSkillSelection().isEnabled(skill);
-	}
-
 	public boolean isHapticSkillEnabled(String skillId)
 	{
-		return isHapticSkillEnabled(runeLiteSkill(skillId));
-	}
-
-	public boolean isClickSkillEnabled(Skill skill)
-	{
-		return getClickSkillSelection().isEnabled(skill);
+		return getHapticSkillSelection().isEnabled(skillId);
 	}
 
 	public boolean isClickSkillEnabled(String skillId)
 	{
-		return isClickSkillEnabled(runeLiteSkill(skillId));
+		return getClickSkillSelection().isEnabled(skillId);
 	}
 
 	public boolean isLevelUpFeedbackEnabled()
@@ -519,19 +502,6 @@ public final class RemoteSettingsSnapshot
 			clickerAlertSettings,
 			clickerPhraseRules
 		);
-	}
-
-	// Temporary compatibility seam until skill/profile storage is keyed by neutral IDs.
-	private static Skill runeLiteSkill(String skillId)
-	{
-		String normalized = Objects.requireNonNull(skillId, "skillId")
-			.trim()
-			.toUpperCase(Locale.ROOT);
-		if (normalized.isEmpty())
-		{
-			throw new IllegalArgumentException("skillId must not be empty");
-		}
-		return Skill.valueOf(normalized);
 	}
 
 	private static int clamp(int value, int minimum, int maximum)

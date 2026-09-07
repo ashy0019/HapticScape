@@ -54,6 +54,17 @@ public class XpEventTrackerTest
 	}
 
 	@Test
+	public void skillIdentifiersAreCanonicalizedAcrossObservations()
+	{
+		tracker.seed("test", "AGILITY", 1_000, 9);
+
+		XpEvent event = tracker.update("test", "agility", 1_025, 9);
+
+		assertEquals("agility", event.getSkillId());
+		assertEquals(25, event.getGainedXp());
+	}
+
+	@Test
 	public void resetMakesNextObservationAnInitialization()
 	{
 		tracker.seed("test", "agility", 1_000, 9);

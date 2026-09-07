@@ -1,5 +1,6 @@
 package com.ashy0019.hapticscape;
 
+import com.ashy0019.hapticscape.integration.runelite.RuneLiteSkillCatalog;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
@@ -411,7 +412,9 @@ public interface HapticScapeConfig extends Config
 	)
 	default String clickerDisabledSkills()
 	{
-		return SkillSelection.allEnabled().withAllEnabled(false).toConfigValue();
+		return SkillSelection.allEnabled()
+			.withAllEnabled(RuneLiteSkillCatalog.getSkillIds(), false)
+			.toConfigValue();
 	}
 
 	@ConfigItem(

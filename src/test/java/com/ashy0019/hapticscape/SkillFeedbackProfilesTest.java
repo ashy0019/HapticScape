@@ -1,6 +1,5 @@
 package com.ashy0019.hapticscape;
 
-import net.runelite.api.Skill;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -21,7 +20,7 @@ public class SkillFeedbackProfilesTest
 	{
 		SkillFeedbackProfiles profiles = SkillFeedbackProfiles.empty();
 
-		assertEquals(GLOBAL, profiles.resolve(Skill.AGILITY, GLOBAL));
+		assertEquals(GLOBAL, profiles.resolve("agility", GLOBAL));
 	}
 
 	@Test
@@ -34,10 +33,10 @@ public class SkillFeedbackProfilesTest
 			HapticPatternSelection.TRIPLE
 		);
 		SkillFeedbackProfiles profiles = SkillFeedbackProfiles.empty()
-			.withOverride(Skill.AGILITY, agility);
+			.withOverride("agility", agility);
 
-		assertEquals(agility, profiles.resolve(Skill.AGILITY, GLOBAL));
-		assertEquals(GLOBAL, profiles.resolve(Skill.COOKING, GLOBAL));
+		assertEquals(agility, profiles.resolve("AGILITY", GLOBAL));
+		assertEquals(GLOBAL, profiles.resolve("cooking", GLOBAL));
 	}
 
 	@Test
@@ -56,15 +55,15 @@ public class SkillFeedbackProfilesTest
 			HapticPatternSelection.DOUBLE
 		);
 		SkillFeedbackProfiles original = SkillFeedbackProfiles.empty()
-			.withOverride(Skill.AGILITY, agility)
-			.withOverride(Skill.COOKING, cooking);
+			.withOverride("agility", agility)
+			.withOverride("cooking", cooking);
 
 		SkillFeedbackProfiles restored = SkillFeedbackProfiles.fromConfigValue(
 			original.toConfigValue()
 		);
 
-		assertEquals(agility, restored.getOverride(Skill.AGILITY).orElse(null));
-		assertEquals(cooking, restored.getOverride(Skill.COOKING).orElse(null));
+		assertEquals(agility, restored.getOverride("agility").orElse(null));
+		assertEquals(cooking, restored.getOverride("cooking").orElse(null));
 	}
 
 	@Test
@@ -78,11 +77,11 @@ public class SkillFeedbackProfilesTest
 		);
 		SkillFeedbackProfiles restored = SkillFeedbackProfiles.fromConfigValue(
 			SkillFeedbackProfiles.empty()
-				.withOverride(Skill.AGILITY, custom)
+				.withOverride("agility", custom)
 				.toConfigValue()
 		);
 
-		assertEquals(custom, restored.getOverride(Skill.AGILITY).orElse(null));
+		assertEquals(custom, restored.getOverride("agility").orElse(null));
 	}
 
 	@Test
@@ -90,7 +89,7 @@ public class SkillFeedbackProfilesTest
 	{
 		SkillFeedbackProfiles profiles = SkillFeedbackProfiles.empty()
 			.withOverride(
-				Skill.AGILITY,
+				"agility",
 				new XpFeedbackSettings(
 					100,
 					75,
@@ -102,22 +101,23 @@ public class SkillFeedbackProfilesTest
 
 		assertEquals(
 			HapticPatternSelection.SINGLE,
-			profiles.getOverride(Skill.AGILITY).get().getPatternSelection()
+			profiles.getOverride("agility").get().getPatternSelection()
 		);
 	}
 
 	@Test
-	public void malformedAndUnknownEntriesAreIgnoredIndependently()
+	public void malformedEntriesAreIgnoredIndependentlyAndUnknownIdsSurvive()
 	{
 		SkillFeedbackProfiles profiles = SkillFeedbackProfiles.fromConfigValue(
 			"v1|AGILITY,100,75,900,TRIPLE"
 				+ ";COOKING,not-a-number,40,350,DOUBLE"
-				+ ";UNKNOWN_SKILL,10,50,500,SINGLE"
+				+ ";FUTURE_SKILL,10,50,500,SINGLE"
 				+ ";COOKING,10,101,500,SINGLE"
 		);
 
-		assertTrue(profiles.getOverride(Skill.AGILITY).isPresent());
-		assertFalse(profiles.getOverride(Skill.COOKING).isPresent());
+		assertTrue(profiles.getOverride("agility").isPresent());
+		assertTrue(profiles.getOverride("future_skill").isPresent());
+		assertFalse(profiles.getOverride("cooking").isPresent());
 	}
 
 	@Test
@@ -128,7 +128,7 @@ public class SkillFeedbackProfilesTest
 		);
 
 		assertTrue(profiles.isEmpty());
-		assertEquals(GLOBAL, profiles.resolve(Skill.AGILITY, GLOBAL));
+		assertEquals(GLOBAL, profiles.resolve("agility", GLOBAL));
 	}
 
 	@Test
@@ -136,13 +136,13 @@ public class SkillFeedbackProfilesTest
 	{
 		SkillFeedbackProfiles profiles = SkillFeedbackProfiles.empty()
 			.withOverride(
-				Skill.AGILITY,
+				"agility",
 				new XpFeedbackSettings(100, 75, 900, HapticPatternSelection.TRIPLE)
 			)
-			.withoutOverride(Skill.AGILITY);
+			.withoutOverride("agility");
 
 		assertTrue(profiles.isEmpty());
 		assertEquals("", profiles.toConfigValue());
-		assertEquals(GLOBAL, profiles.resolve(Skill.AGILITY, GLOBAL));
+		assertEquals(GLOBAL, profiles.resolve("agility", GLOBAL));
 	}
 }
