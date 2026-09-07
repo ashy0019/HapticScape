@@ -1,23 +1,10 @@
 package com.ashy0019.hapticscape;
 
-import com.ashy0019.hapticscape.audio.HapticScapeSound;
-import com.ashy0019.hapticscape.audio.SoundPlayer;
-import com.ashy0019.hapticscape.clicker.SoundPlayerClickPlayback;
-import com.ashy0019.hapticscape.clicker.ClickerService;
-import com.ashy0019.hapticscape.clicker.ClickerSettings;
-import com.ashy0019.hapticscape.device.DefaultIntifaceService;
-import com.ashy0019.hapticscape.device.GatedIntifaceService;
 import com.ashy0019.hapticscape.device.HapticEventType;
-import com.ashy0019.hapticscape.device.HapticRequest;
-import com.ashy0019.hapticscape.music.MusicResponse;
-import com.ashy0019.hapticscape.music.MusicSyncService;
-import com.ashy0019.hapticscape.music.MusicSyncSettings;
-import com.ashy0019.hapticscape.protocol.LocalhostGameplayEventServer;
 import com.ashy0019.hapticscape.protocol.LocalhostGameplayEventTransport;
 import com.ashy0019.hapticscape.protocol.LocalhostTransportEndpoint;
 import com.ashy0019.hapticscape.protocol.TransportWireCodec;
 import com.ashy0019.hapticscape.integration.desktop.DesktopAudioCaptureSources;
-import com.ashy0019.hapticscape.remote.DiscordCredentialStore;
 import com.ashy0019.hapticscape.integration.desktop.AwtExternalLinkOpener;
 import com.ashy0019.hapticscape.integration.desktop.AwtGlobalUiHooks;
 import com.ashy0019.hapticscape.integration.desktop.AwtTextClipboard;
@@ -26,13 +13,6 @@ import com.ashy0019.hapticscape.integration.desktop.DesktopSecretProtectors;
 import com.ashy0019.hapticscape.remote.DiscordJoinConsentHandler;
 import com.ashy0019.hapticscape.remote.DiscordJoinRequest;
 import com.ashy0019.hapticscape.remote.DiscordPairingBridge;
-import com.ashy0019.hapticscape.remote.EffectiveSettingsService;
-import com.ashy0019.hapticscape.remote.RemotePairingService;
-import com.ashy0019.hapticscape.remote.RemoteSessionListener;
-import com.ashy0019.hapticscape.remote.RemoteSessionManager;
-import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
-import com.ashy0019.hapticscape.host.DesktopNotificationService;
-import com.ashy0019.hapticscape.host.SourceMessageService;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteDesktopNotificationService;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteGameplayBridge;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteHapticScapePluginPanel;
@@ -42,21 +22,12 @@ import com.ashy0019.hapticscape.integration.runelite.RuneLiteSourceMessageServic
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteStoragePaths;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteSettingsWriter;
 import com.ashy0019.hapticscape.integration.runelite.RuneLiteSoundPlayer;
-import com.ashy0019.hapticscape.remote.RemoteSettingsSnapshot;
-import com.ashy0019.hapticscape.remote.SavedUnlockKeyStore;
-import com.ashy0019.hapticscape.remote.SettingsBackedRemotePermissionsStore;
-import com.ashy0019.hapticscape.remote.SettingsBackedRemoteSettingsStore;
 import com.ashy0019.hapticscape.remote.SettingsStore;
-import com.ashy0019.hapticscape.remote.SettingsLockCatalog;
-import com.ashy0019.hapticscape.remote.SettingsLockService;
 import com.ashy0019.hapticscape.storage.HapticScapeStoragePaths;
 import com.ashy0019.hapticscape.ui.HapticScapePanel;
-import com.ashy0019.hapticscape.update.UpdateCheckService;
-import com.ashy0019.hapticscape.update.UpdatePreferencesStore;
 import com.google.gson.Gson;
 import com.google.inject.Provides;
 import java.awt.image.BufferedImage;
-import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.concurrent.CompletableFuture;
 import javax.inject.Inject;
@@ -97,30 +68,13 @@ import okhttp3.OkHttpClient;
 )
 public class HapticScapePlugin extends Plugin
 {
-	private static final float LEVEL_99_CHEER_GAIN_DB = -4.0f;
-	private static final float ROGUE_UNLOCK_STING_GAIN_DB = -4.0f;
-	private final Level99CelebrationController level99CelebrationController =
-		new Level99CelebrationController();
-	private GameplayEventCoordinator gameplayEvents;
+	private HapticScapeRuntime runtime;
 	private RuneLiteGameplayBridge gameplayBridge;
-	private LocalhostGameplayEventServer gameplayTransportServer;
 	private LocalhostGameplayEventTransport gameplayTransport;
-	private FeedbackCoordinator feedbackCoordinator;
-	private GatedIntifaceService intifaceService;
-	private EffectiveSettingsService effectiveSettingsService;
-	private RemoteSessionManager remoteSessionManager;
-	private DiscordPairingBridge discordPairingBridge;
-	private SettingsLockService settingsLockService;
-	private MusicSyncService musicSyncService;
-	private ClickerService clickerService;
-	private SoundPlayer soundPlayer;
-	private SourceMessageService sourceMessages;
 	private HapticScapePanel panel;
 	private RuneLiteHapticScapePluginPanel panelHost;
 	private NavigationButton navigationButton;
 	private RuneLiteLevel99CelebrationOverlay level99CelebrationOverlay;
-	private UpdatePreferencesStore updatePreferencesStore;
-	private UpdateCheckService updateCheckService;
 
 	@Inject
 	private Client client;
@@ -164,110 +118,42 @@ public class HapticScapePlugin extends Plugin
 	@Override
 	protected void startUp()
 	{
-		level99CelebrationController.reset();
+		SkillCatalog skillCatalog = RuneLiteSkillCatalog.getNeutralCatalog();
+		HapticScapeStoragePaths storagePaths = RuneLiteStoragePaths.create();
+		SettingsStore settingsStore =
+			new RuneLiteSettingsWriter(configManager, HapticScapeConfig.GROUP);
+		runtime = new HapticScapeRuntime(new HapticScapeRuntimeDependencies(
+			httpClient,
+			gson,
+			config,
+			settingsStore,
+			skillCatalog,
+			storagePaths,
+			new RuneLiteSoundPlayer(audioPlayer),
+			new RuneLiteDesktopNotificationService(notifier, runeLiteConfig),
+			new RuneLiteSourceMessageService(chatMessageManager),
+			DesktopAudioCaptureSources::systemOutput,
+			DesktopSecretProtectors.savedUnlockKeys(),
+			DesktopSecretProtectors.discordCredentials(),
+			LocalhostTransportEndpoint.DEFAULT_PORT
+		));
+		runtime.start();
+
 		level99CelebrationOverlay = new RuneLiteLevel99CelebrationOverlay(
 			this,
-			level99CelebrationController
+			runtime.getLevel99CelebrationController()
 		);
 		overlayManager.add(level99CelebrationOverlay);
 
-		intifaceService = new GatedIntifaceService(
-			new DefaultIntifaceService(httpClient, gson)
-		);
-		effectiveSettingsService = new EffectiveSettingsService(config);
-		SkillCatalog skillCatalog = RuneLiteSkillCatalog.getNeutralCatalog();
-		SettingsLockCatalog.registerSkills(skillCatalog.getSkills());
-		HapticScapeStoragePaths storagePaths = RuneLiteStoragePaths.create();
-		settingsLockService = new SettingsLockService(gson, storagePaths);
-		musicSyncService = new MusicSyncService(
-			intifaceService,
-			DesktopAudioCaptureSources::systemOutput,
-			musicSettingsFromConfig()
-		);
-		soundPlayer = new RuneLiteSoundPlayer(audioPlayer);
-		clickerService = new ClickerService(
-			new SoundPlayerClickPlayback(soundPlayer),
-			clickerSettingsFromConfig()
-		);
-		DesktopNotificationService desktopNotifications =
-			new RuneLiteDesktopNotificationService(notifier, runeLiteConfig);
-		sourceMessages = new RuneLiteSourceMessageService(chatMessageManager);
-		feedbackCoordinator = new FeedbackCoordinator(
-			intifaceService,
-			clickerService,
-			musicSyncService,
-			this::effectiveSettings,
-			this::startLevel99CeremonyBySkillId,
-			desktopNotifications,
-			sourceMessages
-		);
-		SettingsStore settingsStore =
-			new RuneLiteSettingsWriter(configManager, HapticScapeConfig.GROUP);
-		SavedUnlockKeyStore savedUnlockKeyStore = new SavedUnlockKeyStore(
-			gson,
-			storagePaths,
-			DesktopSecretProtectors.savedUnlockKeys()
-		);
-		remoteSessionManager = new RemoteSessionManager(
-			httpClient,
-			gson,
-			new SettingsBackedRemoteSettingsStore(config, settingsStore),
-			effectiveSettingsService,
-			settingsLockService,
-			savedUnlockKeyStore,
-			new SettingsBackedRemotePermissionsStore(config, settingsStore),
-			feedbackCoordinator.createRemoteActionExecutor()
-		);
-		remoteSessionManager.addListener(new RemoteSessionListener()
-		{
-			@Override
-			public void onRemoteSessionChanged(RemoteSessionSnapshot snapshot)
-			{
-				feedbackCoordinator.handleRemoteSessionChanged(snapshot);
-			}
-
-			@Override
-			public void onRemoteSettingsChanged(RemoteSettingsSnapshot settings)
-			{
-				feedbackCoordinator.handleRemoteSettingsChanged(
-					settings,
-					remoteSessionManager.getSnapshot()
-				);
-			}
-		});
-		gameplayEvents = new GameplayEventCoordinator(
-			this::effectiveSettings,
-			feedbackCoordinator
-		);
-		gameplayEvents.start();
 		TransportWireCodec gameplayTransportCodec = new TransportWireCodec(gson);
-		gameplayTransportServer = new LocalhostGameplayEventServer(
-			gameplayTransportCodec,
-			gameplayEvents,
-			LocalhostTransportEndpoint.DEFAULT_PORT
-		);
 		gameplayTransport = new LocalhostGameplayEventTransport(
 			"runelite",
 			gameplayTransportCodec,
-			gameplayTransportServer.getPort()
+			runtime.getGameplayTransportPort()
 		);
 		gameplayBridge = new RuneLiteGameplayBridge(client, itemManager, gameplayTransport);
 		gameplayBridge.start();
-		updatePreferencesStore = new UpdatePreferencesStore(gson, storagePaths);
-		updateCheckService = new UpdateCheckService(httpClient, gson);
-		RemotePairingService remotePairingService = new RemotePairingService(httpClient);
-		discordPairingBridge = new DiscordPairingBridge(
-			httpClient,
-			gson,
-			remoteSessionManager,
-			remotePairingService,
-			new DiscordCredentialStore(
-				gson,
-				storagePaths,
-				DesktopSecretProtectors.discordCredentials()
-			)
-		);
-		discordPairingBridge.start();
+
 		panelHost = new RuneLiteHapticScapePluginPanel();
 		panel = new HapticScapePanel(
 			config,
@@ -278,31 +164,31 @@ public class HapticScapePlugin extends Plugin
 			new AwtGlobalUiHooks(),
 			panelHost.getSidebarScrollPane(),
 			this::connectToIntiface,
-			intifaceService::disconnect,
+			runtime.getIntifaceService()::disconnect,
 			this::sendTestPattern,
 			this::sendTestLevelUpPattern,
 			this::previewLevel99Ceremony,
 			this::sendTestSkillProfile,
 			this::sendTestGenericNotificationPattern,
 			this::sendTestAlert,
-			feedbackCoordinator::previewCustomPattern,
-			musicSyncService::updateSettings,
-			clickerService::updateSettings,
-			clickerService::click,
-			updatePreferencesStore,
-			updateCheckService,
-			remoteSessionManager,
-			remotePairingService,
-			discordPairingBridge,
-			settingsLockService,
-			feedbackCoordinator::dispatchRogueFeedback,
-			this::playRogueUnlockStingAsync,
-			feedbackCoordinator::stopAll
+			runtime::previewCustomPattern,
+			runtime.getMusicSyncService()::updateSettings,
+			runtime.getClickerService()::updateSettings,
+			runtime::playClick,
+			runtime.getUpdatePreferencesStore(),
+			runtime.getUpdateCheckService(),
+			runtime.getRemoteSessionManager(),
+			runtime.getRemotePairingService(),
+			runtime.getDiscordPairingBridge(),
+			runtime.getSettingsLockService(),
+			runtime::dispatchRogueFeedback,
+			runtime::playRogueUnlockStingAsync,
+			runtime::stopAll
 		);
 		panelHost.setContent(panel);
-		intifaceService.setConnectionListener(panel::updateConnection);
-		musicSyncService.setListener(panel::updateMusicSync);
-		musicSyncService.updateSettings(effectiveSettingsService.current().getMusicSyncSettings());
+		runtime.getIntifaceService().setConnectionListener(panel::updateConnection);
+		runtime.getMusicSyncService().setListener(panel::updateMusicSync);
+
 		navigationButton = NavigationButton.builder()
 			.tooltip("HapticScape")
 			.icon(loadNavigationIcon())
@@ -310,6 +196,8 @@ public class HapticScapePlugin extends Plugin
 			.priority(5)
 			.build();
 		clientToolbar.addNavigation(navigationButton);
+
+		DiscordPairingBridge discordPairingBridge = runtime.getDiscordPairingBridge();
 		discordPairingBridge.setJoinConsentHandler(new DiscordJoinConsentHandler()
 		{
 			@Override
@@ -362,59 +250,16 @@ public class HapticScapePlugin extends Plugin
 			gameplayTransport.close();
 			gameplayTransport = null;
 		}
-		if (gameplayTransportServer != null)
-		{
-			gameplayTransportServer.close();
-			gameplayTransportServer = null;
-		}
-		if (gameplayEvents != null)
-		{
-			gameplayEvents.close();
-			gameplayEvents = null;
-		}
-		level99CelebrationController.reset();
+
 		if (level99CelebrationOverlay != null)
 		{
 			overlayManager.remove(level99CelebrationOverlay);
 			level99CelebrationOverlay = null;
 		}
-
 		if (navigationButton != null)
 		{
 			clientToolbar.removeNavigation(navigationButton);
 			navigationButton = null;
-		}
-
-		if (discordPairingBridge != null)
-		{
-			discordPairingBridge.setJoinConsentHandler(null);
-			discordPairingBridge.close();
-			discordPairingBridge = null;
-		}
-		if (remoteSessionManager != null)
-		{
-			remoteSessionManager.close();
-			remoteSessionManager = null;
-		}
-		feedbackCoordinator = null;
-		sourceMessages = null;
-		if (musicSyncService != null)
-		{
-			musicSyncService.setListener(snapshot -> { });
-			musicSyncService.close();
-			musicSyncService = null;
-		}
-		effectiveSettingsService = null;
-		if (clickerService != null)
-		{
-			clickerService.close();
-			clickerService = null;
-		}
-		if (intifaceService != null)
-		{
-			intifaceService.setConnectionListener(snapshot -> { });
-			intifaceService.close();
-			intifaceService = null;
 		}
 		if (panel != null)
 		{
@@ -422,16 +267,10 @@ public class HapticScapePlugin extends Plugin
 			panel = null;
 		}
 		panelHost = null;
-		settingsLockService = null;
-		if (updateCheckService != null)
+		if (runtime != null)
 		{
-			updateCheckService.close();
-			updateCheckService = null;
-		}
-		if (updatePreferencesStore != null)
-		{
-			updatePreferencesStore.close();
-			updatePreferencesStore = null;
+			runtime.close();
+			runtime = null;
 		}
 		log.info("HapticScape stopped");
 	}
@@ -461,7 +300,11 @@ public class HapticScapePlugin extends Plugin
 			|| event.getGameState() == GameState.HOPPING
 			|| event.getGameState() == GameState.CONNECTION_LOST)
 		{
-			level99CelebrationController.reset();
+			HapticScapeRuntime currentRuntime = runtime;
+			if (currentRuntime != null)
+			{
+				currentRuntime.getLevel99CelebrationController().reset();
+			}
 		}
 	}
 
@@ -547,17 +390,14 @@ public class HapticScapePlugin extends Plugin
 
 	private void connectToIntiface()
 	{
-		String configuredServer = config.intifaceServer().trim();
+		HapticScapeRuntime currentRuntime = runtime;
+		if (currentRuntime == null)
+		{
+			return;
+		}
 		try
 		{
-			URI serverUri = new URI(configuredServer);
-			String scheme = serverUri.getScheme();
-			if (serverUri.getHost() == null
-				|| !("ws".equalsIgnoreCase(scheme) || "wss".equalsIgnoreCase(scheme)))
-			{
-				throw new URISyntaxException(configuredServer, "Expected a ws:// or wss:// server URI");
-			}
-			intifaceService.connect(serverUri);
+			currentRuntime.connectToIntiface();
 		}
 		catch (URISyntaxException e)
 		{
@@ -569,10 +409,10 @@ public class HapticScapePlugin extends Plugin
 	{
 		log.debug("Sending test haptic pattern");
 		HapticScapePanel currentPanel = panel;
-		FeedbackCoordinator feedback = feedbackCoordinator;
-		if (currentPanel != null && feedback != null)
+		HapticScapeRuntime currentRuntime = runtime;
+		if (currentPanel != null && currentRuntime != null)
 		{
-			feedback.sendConfiguredPattern(
+			currentRuntime.sendConfiguredPattern(
 				HapticEventType.MANUAL_PREVIEW,
 				currentPanel.getPatternPreset(),
 				"TEST_XP"
@@ -584,10 +424,10 @@ public class HapticScapePlugin extends Plugin
 	{
 		log.debug("Sending test level-up pattern");
 		HapticScapePanel currentPanel = panel;
-		FeedbackCoordinator feedback = feedbackCoordinator;
-		if (currentPanel != null && feedback != null)
+		HapticScapeRuntime currentRuntime = runtime;
+		if (currentPanel != null && currentRuntime != null)
 		{
-			feedback.sendConfiguredPattern(
+			currentRuntime.sendConfiguredPattern(
 				HapticEventType.MANUAL_PREVIEW,
 				currentPanel.getLevelUpPatternPreset(),
 				"TEST_LEVEL_UP"
@@ -598,52 +438,24 @@ public class HapticScapePlugin extends Plugin
 	private void previewLevel99Ceremony()
 	{
 		HapticScapePanel currentPanel = panel;
+		HapticScapeRuntime currentRuntime = runtime;
+		if (currentRuntime == null)
+		{
+			return;
+		}
 		String skillId = currentPanel == null ? null : currentPanel.getSelectedProfileSkillId();
-		startLevel99CeremonyBySkillId(
+		currentRuntime.startLevel99Ceremony(
 			skillId == null ? "attack" : skillId,
 			false
 		);
 	}
 
-	private void playLevel99Cheer()
-	{
-		try
-		{
-			soundPlayer.play(
-				HapticScapeSound.LEVEL_99_CHEER,
-				LEVEL_99_CHEER_GAIN_DB
-			);
-		}
-		catch (Exception e)
-		{
-			log.warn("Unable to play Level 99 cheer", e);
-		}
-	}
-
-	private void startLevel99CeremonyBySkillId(String skillId, boolean announceInChat)
-	{
-		level99CelebrationController.start(
-			RuneLiteSkillCatalog.getNeutralCatalog().require(skillId)
-		);
-		CompletableFuture.runAsync(this::playLevel99Cheer);
-		if (announceInChat && sourceMessages != null)
-		{
-			sourceMessages.postColored(Level99Ceremony.CHAT_MESSAGE, 0xFFAE00);
-		}
-		if (intifaceService != null)
-		{
-			intifaceService.play(new HapticRequest(
-				HapticEventType.LEVEL_99,
-				Level99Ceremony.pattern()
-			));
-		}
-	}
 
 	private void sendTestSkillProfile()
 	{
 		HapticScapePanel currentPanel = panel;
-		FeedbackCoordinator feedback = feedbackCoordinator;
-		if (currentPanel == null || feedback == null)
+		HapticScapeRuntime currentRuntime = runtime;
+		if (currentPanel == null || currentRuntime == null)
 		{
 			return;
 		}
@@ -656,7 +468,7 @@ public class HapticScapePlugin extends Plugin
 
 		XpFeedbackSettings settings = currentPanel.getXpFeedbackSettings(skillId);
 		log.debug("Sending test XP profile for {}", skillId);
-		feedback.sendPattern(
+		currentRuntime.sendPattern(
 			HapticEventType.MANUAL_PREVIEW,
 			settings.getPatternSelection(),
 			"TEST_SKILL_" + SkillIds.toConfigToken(skillId),
@@ -668,24 +480,24 @@ public class HapticScapePlugin extends Plugin
 	private void sendTestGenericNotificationPattern()
 	{
 		HapticScapePanel currentPanel = panel;
-		FeedbackCoordinator feedback = feedbackCoordinator;
-		if (currentPanel == null || feedback == null)
+		HapticScapeRuntime currentRuntime = runtime;
+		if (currentPanel == null || currentRuntime == null)
 		{
 			return;
 		}
 
 		NotificationFeedbackSettings settings =
 			currentPanel.getNotificationFeedbackSettings();
-		if (currentPanel.isGenericNotificationClickEnabled() && clickerService != null)
+		if (currentPanel.isGenericNotificationClickEnabled())
 		{
-			clickerService.click();
+			currentRuntime.playClick();
 		}
 		if (!settings.isEnabled())
 		{
 			return;
 		}
 		log.debug("Sending test generic notification pattern");
-		feedback.sendPattern(
+		currentRuntime.sendPattern(
 			HapticEventType.MANUAL_PREVIEW,
 			settings.getPatternSelection(),
 			"TEST_ALERT_GENERIC_NOTIFICATION",
@@ -697,19 +509,19 @@ public class HapticScapePlugin extends Plugin
 	private void sendTestAlert(AlertCategory category)
 	{
 		HapticScapePanel currentPanel = panel;
-		FeedbackCoordinator feedback = feedbackCoordinator;
-		if (currentPanel == null || feedback == null)
+		HapticScapeRuntime currentRuntime = runtime;
+		if (currentPanel == null || currentRuntime == null)
 		{
 			return;
 		}
-		if (currentPanel.isAlertClickEnabled(category) && clickerService != null)
+		if (currentPanel.isAlertClickEnabled(category))
 		{
-			clickerService.click();
+			currentRuntime.playClick();
 		}
 
 		currentPanel.getAlertProfiles()
 			.resolve(category, currentPanel.getNotificationFeedbackSettings())
-			.ifPresent(playback -> feedback.sendPattern(
+			.ifPresent(playback -> currentRuntime.sendPattern(
 				HapticEventType.MANUAL_PREVIEW,
 				playback.getPatternSelection(),
 				"TEST_ALERT_" + category.name(),
@@ -718,25 +530,6 @@ public class HapticScapePlugin extends Plugin
 			));
 	}
 
-	private void playRogueUnlockStingAsync()
-	{
-		CompletableFuture.runAsync(this::playRogueUnlockSting);
-	}
-
-	private void playRogueUnlockSting()
-	{
-		try
-		{
-			soundPlayer.play(
-				HapticScapeSound.ROGUE_UNLOCK_STING,
-				ROGUE_UNLOCK_STING_GAIN_DB
-			);
-		}
-		catch (Exception e)
-		{
-			log.warn("Unable to play Rogue Mode unlock sting", e);
-		}
-	}
 
 	private static BufferedImage loadNavigationIcon()
 	{
@@ -748,55 +541,6 @@ public class HapticScapePlugin extends Plugin
 		return ImageUtil.resizeCanvas(scaled, 16, 16);
 	}
 
-	private static int clamp(int value, int minimum, int maximum)
-	{
-		return Math.max(minimum, Math.min(maximum, value));
-	}
-
-	private RemoteSettingsSnapshot effectiveSettings()
-	{
-		EffectiveSettingsService service = effectiveSettingsService;
-		return service == null
-			? RemoteSettingsSnapshot.capture(config)
-			: service.current();
-	}
-
-	private MusicSyncSettings musicSettingsFromConfig()
-	{
-		MusicResponse response;
-		try
-		{
-			response = MusicResponse.valueOf(config.musicResponse());
-		}
-		catch (IllegalArgumentException | NullPointerException ignored)
-		{
-			response = MusicResponse.RHYTHMIC;
-		}
-		int maximum = clamp(config.musicMaximumIntensityPercent(), 0, 100);
-		int minimum = Math.min(
-			clamp(config.musicMinimumIntensityPercent(), 0, 100),
-			maximum
-		);
-		return new MusicSyncSettings(
-			config.musicSyncEnabled(),
-			response,
-			clamp(config.musicSensitivityPercent(), 25, 200),
-			minimum,
-			maximum
-		);
-	}
-
-	private ClickerSettings clickerSettingsFromConfig()
-	{
-		return new ClickerSettings(
-			config.clickerEnabled(),
-			clamp(
-				config.clickerVolumePercent(),
-				ClickerSettings.MINIMUM_VOLUME_PERCENT,
-				ClickerSettings.MAXIMUM_VOLUME_PERCENT
-			)
-		);
-	}
 
 	@Provides
 	HapticScapeConfig provideConfig(ConfigManager configManager)
