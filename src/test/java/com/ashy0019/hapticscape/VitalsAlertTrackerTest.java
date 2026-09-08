@@ -10,7 +10,7 @@ import static org.junit.Assert.assertTrue;
 
 public class VitalsAlertTrackerTest
 {
-	private static final String SOURCE = "runelite";
+	private static final String SOURCE = "test-source";
 
 	@Test
 	public void firesOnlyWhenCrossingDownwardThroughHitpointsThreshold()
@@ -68,10 +68,10 @@ public class VitalsAlertTrackerTest
 	public void sourcesTrackIndependentCrossingState()
 	{
 		VitalsAlertTracker tracker = new VitalsAlertTracker();
-		tracker.seed(event("runelite", VitalsChangedEvent.Kind.HITPOINTS, 40, 99));
+		tracker.seed(event("test-source", VitalsChangedEvent.Kind.HITPOINTS, 40, 99));
 		tracker.seed(event("other-game", VitalsChangedEvent.Kind.HITPOINTS, 10, 100));
 
-		assertTrue(update(tracker, event("runelite", VitalsChangedEvent.Kind.HITPOINTS, 20, 99)).isPresent());
+		assertTrue(update(tracker, event("test-source", VitalsChangedEvent.Kind.HITPOINTS, 20, 99)).isPresent());
 		assertFalse(update(tracker, event("other-game", VitalsChangedEvent.Kind.HITPOINTS, 9, 100)).isPresent());
 	}
 

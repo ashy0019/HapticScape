@@ -31,19 +31,19 @@ public class TransportSessionReceiverTest
 		RecordingSink sink = new RecordingSink();
 		TransportSessionReceiver receiver = new TransportSessionReceiver(sink);
 
-		TransportMessage response = receiver.receive(new TransportMessage.Reset("runelite"));
+		TransportMessage response = receiver.receive(new TransportMessage.Reset("test-source"));
 		assertError("hello_required", response);
 		assertFalse(receiver.isReady());
 
 		response = receiver.receive(new TransportMessage.Hello(
-			"runelite",
+			"test-source",
 			EventProtocol.NAME,
 			EventProtocol.VERSION,
 			CAPABILITIES
 		));
 		assertTrue(response instanceof TransportMessage.HelloAck);
 		assertTrue(receiver.isReady());
-		assertEquals("runelite", receiver.getSource());
+		assertEquals("test-source", receiver.getSource());
 		assertEquals(CAPABILITIES, receiver.getCapabilities());
 		assertEquals(CAPABILITIES, ((TransportMessage.HelloAck) response).getCapabilities());
 	}
@@ -53,7 +53,7 @@ public class TransportSessionReceiverTest
 	{
 		TransportSessionReceiver receiver = new TransportSessionReceiver(new RecordingSink());
 		TransportMessage response = receiver.receive(new TransportMessage.Hello(
-			"runelite",
+			"test-source",
 			EventProtocol.NAME,
 			EventProtocol.VERSION + 1,
 			CAPABILITIES
@@ -70,16 +70,16 @@ public class TransportSessionReceiverTest
 		TransportSessionReceiver receiver = ready(sink);
 
 		assertNull(receiver.receive(new TransportMessage.Event(
-			new PlayerDeathEvent("runelite")
+			new PlayerDeathEvent("test-source")
 		)));
 		assertEquals(1, sink.deathCount);
 
 		assertNull(receiver.receive(new TransportMessage.State(
-			new InventoryChangedEvent("runelite", 12, 28)
+			new InventoryChangedEvent("test-source", 12, 28)
 		)));
 		assertEquals(1, sink.seedInventoryCount);
 
-		assertNull(receiver.receive(new TransportMessage.Reset("runelite")));
+		assertNull(receiver.receive(new TransportMessage.Reset("test-source")));
 		assertEquals(1, sink.resetCount);
 	}
 
@@ -105,7 +105,7 @@ public class TransportSessionReceiverTest
 	{
 		TransportSessionReceiver receiver = ready(new RecordingSink());
 		TransportMessage response = receiver.receive(new TransportMessage.Event(
-			new XpEvent("runelite", "attack", 1, 2, 1, 1, 1)
+			new XpEvent("test-source", "attack", 1, 2, 1, 1, 1)
 		));
 		assertError("capability_not_declared", response);
 	}
@@ -115,7 +115,7 @@ public class TransportSessionReceiverTest
 	{
 		TransportSessionReceiver receiver = ready(new RecordingSink());
 		TransportMessage response = receiver.receive(new TransportMessage.State(
-			new PlayerDeathEvent("runelite")
+			new PlayerDeathEvent("test-source")
 		));
 		assertError("invalid_state", response);
 	}
@@ -124,7 +124,7 @@ public class TransportSessionReceiverTest
 	{
 		TransportSessionReceiver receiver = new TransportSessionReceiver(sink);
 		TransportMessage response = receiver.receive(new TransportMessage.Hello(
-			"runelite",
+			"test-source",
 			EventProtocol.NAME,
 			EventProtocol.VERSION,
 			CAPABILITIES

@@ -83,7 +83,7 @@ public class HapticScapeRuntimeTest
             assertNotNull(runtime.getSettingsLockService());
 
             try (LocalhostGameplayEventTransport transport = new LocalhostGameplayEventTransport(
-                "runelite",
+                "test-source",
                 new TransportWireCodec(gson),
                 EnumSet.allOf(SourceCapability.class),
                 runtime.getGameplayTransportPort()))

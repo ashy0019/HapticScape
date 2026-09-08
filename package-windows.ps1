@@ -67,7 +67,7 @@ try
 	Copy-Item $jarPath (Join-Path $appFilesDirectory 'hapticscape-desktop.jar')
 	# Transitional compatibility copy: HapticScape 2.4.x updaters validate this
 	# legacy filename before replacing themselves with the standalone launcher.
-	# The bytes are the RuneLite-free desktop JAR and this alias can be removed
+	# The bytes are the standalone desktop JAR and this alias can be removed
 	# after the first standalone release has become the update baseline.
 	Copy-Item $jarPath (Join-Path $appFilesDirectory 'hapticscape-client.jar')
 	Copy-Item (Join-Path $projectRoot 'LICENSE') (Join-Path $licensesDirectory 'HapticScape.txt')

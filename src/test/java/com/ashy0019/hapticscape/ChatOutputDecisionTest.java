@@ -17,7 +17,7 @@ public class ChatOutputDecisionTest
 	{
 		ChatOutputDecision decision = ChatOutputDecision.classify(
 			new ChatEvent(
-				"runelite",
+				"test-source",
 				ChatEvent.Kind.OTHER,
 				"<col=ffffff>Hello world</col>",
 				"Hello world"
@@ -34,7 +34,7 @@ public class ChatOutputDecisionTest
 	{
 		ChatOutputDecision decision = ChatOutputDecision.classify(
 			new ChatEvent(
-				"runelite",
+				"test-source",
 				ChatEvent.Kind.DIRECT_MESSAGE,
 				"Hello there",
 				"Hello there"
@@ -52,7 +52,7 @@ public class ChatOutputDecisionTest
 	{
 		ChatOutputDecision decision = ChatOutputDecision.classify(
 			new ChatEvent(
-				"runelite",
+				"test-source",
 				ChatEvent.Kind.TRADE_REQUEST,
 				"Someone wishes to trade with you.",
 				"Someone wishes to trade with you."

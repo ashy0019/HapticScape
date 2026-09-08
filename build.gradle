@@ -4,22 +4,13 @@ plugins {
 
 repositories {
 	mavenLocal()
-	maven {
-		url = 'https://repo.runelite.net'
-		content {
-			includeGroupByRegex("net\\.runelite.*")
-		}
-	}
 	mavenCentral()
 }
 
-def runeLiteVersion = '1.12.38'
-def pluginMainClass = 'com.ashy0019.hapticscape.HapticScapeClient'
 def desktopMainClass = 'com.ashy0019.hapticscape.desktop.HapticScapeDesktopMain'
 def appVersion = providers.gradleProperty('appVersion').orElse('development')
 version = appVersion.get()
-// The standalone desktop artifact intentionally carries only dependencies
-// owned by the RuneLite-free HapticScape runtime. Keep this allowlist narrow:
+// Keep the packaged desktop runtime dependency set explicit.
 // verifyStandaloneDependencies fails if the runtime graph grows unexpectedly.
 def standaloneRuntimeModules = [
 	'ch.qos.logback:logback-classic',
@@ -33,25 +24,17 @@ def standaloneRuntimeModules = [
 ] as Set
 
 dependencies {
-	// Desktop/runtime dependencies are owned by HapticScape directly. Keep these
-	// versions aligned with the previously packaged standalone artifact so this
-	// phase changes the dependency boundary without changing runtime libraries.
 	implementation 'com.google.code.gson:gson:2.8.5'
 	implementation 'com.squareup.okhttp3:okhttp:3.14.9'
 	implementation 'net.java.dev.jna:jna:5.9.0'
 	implementation 'net.java.dev.jna:jna-platform:5.9.0'
+	implementation 'org.slf4j:slf4j-api:1.7.32'
 	runtimeOnly 'ch.qos.logback:logback-classic:1.2.9'
-
-	// RuneLite remains compile-only for the temporary in-repo bridge. It is not
-	// part of the standalone runtime dependency graph.
-	compileOnly group: 'net.runelite', name:'client', version: runeLiteVersion
 
 	compileOnly 'org.projectlombok:lombok:1.18.30'
 	annotationProcessor 'org.projectlombok:lombok:1.18.30'
 
 	testImplementation 'junit:junit:4.12'
-	testImplementation group: 'net.runelite', name:'client', version: runeLiteVersion
-	testImplementation group: 'net.runelite', name:'jshell', version: runeLiteVersion
 }
 
 def standaloneRuntimeArtifacts = {
@@ -65,41 +48,6 @@ def standaloneRuntimeFiles = {
 	standaloneRuntimeArtifacts().collect { it.file }
 }
 
-def runeLiteBoundarySourceFiles = [
-	'src/main/java/com/ashy0019/hapticscape/HapticScapeClient.java',
-	'src/main/java/com/ashy0019/hapticscape/HapticScapeConfig.java',
-	'src/main/java/com/ashy0019/hapticscape/HapticScapePlugin.java'
-] as Set
-
-def runeLiteBoundarySourceDirectory =
-	'src/main/java/com/ashy0019/hapticscape/integration/runelite/'
-
-def bridgeClassIncludes = [
-	'com/ashy0019/hapticscape/HapticScapePlugin*.class',
-	'com/ashy0019/hapticscape/GameplayEventSink*.class',
-	'com/ashy0019/hapticscape/SkillIds*.class',
-	'com/ashy0019/hapticscape/event/**',
-	'com/ashy0019/hapticscape/integration/runelite/RuneLiteChatEventAdapter*.class',
-	'com/ashy0019/hapticscape/integration/runelite/RuneLiteGameplayBridge*.class',
-	'com/ashy0019/hapticscape/integration/runelite/RuneLiteInventoryEventAdapter*.class',
-	'com/ashy0019/hapticscape/integration/runelite/RuneLiteLootEventAdapter*.class',
-	'com/ashy0019/hapticscape/integration/runelite/RuneLiteNotificationEventAdapter*.class',
-	'com/ashy0019/hapticscape/integration/runelite/RuneLitePlayerDeathEventAdapter*.class',
-	'com/ashy0019/hapticscape/integration/runelite/RuneLiteToxicStatusEventAdapter*.class',
-	'com/ashy0019/hapticscape/integration/runelite/RuneLiteVitalsEventAdapter*.class',
-	'com/ashy0019/hapticscape/integration/runelite/RuneLiteXpEventAdapter*.class',
-	'com/ashy0019/hapticscape/protocol/EventEnvelope*.class',
-	'com/ashy0019/hapticscape/protocol/EventProtocol*.class',
-	'com/ashy0019/hapticscape/protocol/EventWireCodec*.class',
-	'com/ashy0019/hapticscape/protocol/LocalhostFrameIo*.class',
-	'com/ashy0019/hapticscape/protocol/LocalhostGameplayEventTransport*.class',
-	'com/ashy0019/hapticscape/protocol/LocalhostTransportEndpoint*.class',
-	'com/ashy0019/hapticscape/protocol/SourceCapability*.class',
-	'com/ashy0019/hapticscape/protocol/TransportMessage*.class',
-	'com/ashy0019/hapticscape/protocol/TransportProtocol*.class',
-	'com/ashy0019/hapticscape/protocol/TransportWireCodec*.class'
-]
-
 group = 'com.ashy0019'
 
 tasks.withType(JavaCompile).configureEach {
@@ -111,15 +59,6 @@ tasks.named('processResources') {
 	filesMatching('hapticscape-version.properties') {
 		expand(appVersion: appVersion.get())
 	}
-}
-
-// RuneLite bridge development host. Start runStandalone first.
-tasks.register('run', JavaExec) {
-	classpath = sourceSets.test.runtimeClasspath
-	mainClass = pluginMainClass
-
-	jvmArgs "-ea"
-	args "--developer-mode", "--debug"
 }
 
 tasks.register('standaloneJar', Jar) {
@@ -135,14 +74,7 @@ tasks.register('standaloneJar', Jar) {
 	}
 
 	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-	from(sourceSets.main.output) {
-		// RuneLite is a separate event source now. None of its bootstrap, config,
-		// plugin, or adapter classes belong in the desktop application.
-		exclude 'com/ashy0019/hapticscape/HapticScapeClient*.class'
-		exclude 'com/ashy0019/hapticscape/HapticScapePlugin*.class'
-		exclude 'com/ashy0019/hapticscape/HapticScapeConfig*.class'
-		exclude 'com/ashy0019/hapticscape/integration/runelite/**'
-	}
+	from(sourceSets.main.output)
 	from {
 		standaloneRuntimeFiles().collect { file ->
 			file.isDirectory() ? file : zipTree(file)
@@ -160,26 +92,6 @@ tasks.register('standaloneJar', Jar) {
 	archiveFileName.set('hapticscape-desktop.jar')
 }
 
-tasks.register('bridgeJar', Jar) {
-	dependsOn tasks.named('classes')
-	manifest {
-		attributes(
-			'Implementation-Title': 'HapticScape RuneLite Bridge',
-			'Implementation-Version': appVersion.get()
-		)
-	}
-
-	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-	from(sourceSets.main.output) {
-		include bridgeClassIncludes
-	}
-	from(layout.projectDirectory.file('runelite-plugin.properties'))
-
-	group = BasePlugin.BUILD_GROUP
-	archiveClassifier.set('bridge')
-	archiveFileName.set('hapticscape-runelite-bridge.jar')
-}
-
 tasks.register('runStandalone', JavaExec) {
 	dependsOn tasks.named('standaloneJar')
 	classpath = files(tasks.named('standaloneJar').flatMap { it.archiveFile })
@@ -187,7 +99,8 @@ tasks.register('runStandalone', JavaExec) {
 	jvmArgs "-ea"
 }
 
-tasks.register('verifyCoreRuneLiteIndependence') {
+tasks.register('verifySourceIndependence') {
+	def forbiddenHostTerms = ['rune' + 'lite']
 	def productionJavaSources = fileTree('src/main/java') {
 		include '**/*.java'
 	}
@@ -195,19 +108,13 @@ tasks.register('verifyCoreRuneLiteIndependence') {
 
 	doLast {
 		def violations = []
-
 		productionJavaSources.files.sort { left, right ->
 			project.relativePath(left) <=> project.relativePath(right)
 		}.each { sourceFile ->
 			def relativePath = project.relativePath(sourceFile).replace('\\', '/')
-			def isRuneLiteBoundary = runeLiteBoundarySourceFiles.contains(relativePath)
-				|| relativePath.startsWith(runeLiteBoundarySourceDirectory)
-			if (isRuneLiteBoundary) {
-				return
-			}
-
 			sourceFile.eachLine('UTF-8') { line, lineNumber ->
-				if (line.toLowerCase(java.util.Locale.ROOT).contains('runelite')) {
+				def normalized = line.toLowerCase(java.util.Locale.ROOT)
+				if (forbiddenHostTerms.any { normalized.contains(it) }) {
 					violations.add("${relativePath}:${lineNumber}: ${line.trim()}")
 				}
 			}
@@ -215,7 +122,7 @@ tasks.register('verifyCoreRuneLiteIndependence') {
 
 		if (!violations.isEmpty()) {
 			throw new GradleException(
-				'RuneLite-specific terminology leaked outside the temporary RuneLite boundary:\n  '
+				'Host-specific terminology leaked into the standalone production source:\n  '
 					+ violations.join('\n  ')
 			)
 		}
@@ -230,14 +137,8 @@ tasks.register('verifyStandaloneDependencies') {
 		def runtimeModules = runtimeArtifacts.collect { artifact ->
 			"${artifact.moduleVersion.id.group}:${artifact.name}".toString()
 		}.toSet()
-		def runeLiteModules = runtimeModules.findAll { it.startsWith('net.runelite:') }
 		def unexpectedModules = runtimeModules.findAll { !standaloneRuntimeModules.contains(it) }
 
-		if (!runeLiteModules.isEmpty()) {
-			throw new GradleException(
-				"RuneLite leaked into the standalone runtime dependency graph: ${runeLiteModules.sort().join(', ')}"
-			)
-		}
 		if (!unexpectedModules.isEmpty()) {
 			throw new GradleException(
 				"Standalone runtime contains unreviewed dependencies: ${unexpectedModules.sort().join(', ')}"
@@ -255,7 +156,6 @@ tasks.register('verifyStandaloneJar') {
 		def hasLauncher = false
 		def hasVersionResource = false
 		def forbiddenEntries = []
-		def runeLiteReferences = []
 
 		zipTree(jarFile).visit { details ->
 			if (details.directory) {
@@ -269,22 +169,10 @@ tasks.register('verifyStandaloneJar') {
 			if (path == 'hapticscape-version.properties') {
 				hasVersionResource = true
 			}
-			if (path.startsWith('net/runelite/')
-				|| path.startsWith('com/ashy0019/hapticscape/integration/runelite/')
-				|| path.startsWith('com/ashy0019/hapticscape/HapticScapePlugin')
-				|| path.startsWith('com/ashy0019/hapticscape/HapticScapeClient')
-				|| path.startsWith('com/ashy0019/hapticscape/HapticScapeConfig')
-				|| path.startsWith('org/junit/')
+			if (path.startsWith('org/junit/')
 				|| path.startsWith('org/hamcrest/')
 				|| (path.startsWith('com/ashy0019/hapticscape/') && path.endsWith('Test.class'))) {
 				forbiddenEntries.add(path)
-			}
-
-			if (path.startsWith('com/ashy0019/hapticscape/') && path.endsWith('.class')) {
-				def classBytes = new String(details.file.bytes, 'ISO-8859-1')
-				if (classBytes.contains('net/runelite/')) {
-					runeLiteReferences.add(path)
-				}
 			}
 		}
 
@@ -296,81 +184,20 @@ tasks.register('verifyStandaloneJar') {
 		}
 		if (!forbiddenEntries.isEmpty()) {
 			throw new GradleException(
-				"RuneLite/test code leaked into the standalone JAR: ${forbiddenEntries.sort().join(', ')}"
-			)
-		}
-		if (!runeLiteReferences.isEmpty()) {
-			throw new GradleException(
-				"Standalone HapticScape classes still reference RuneLite: ${runeLiteReferences.sort().join(', ')}"
+				"Test code leaked into the standalone JAR: ${forbiddenEntries.sort().join(', ')}"
 			)
 		}
 	}
 }
 
-tasks.register('verifyBridgeJar') {
-	dependsOn tasks.named('bridgeJar')
-
-	doLast {
-		def jarFile = tasks.named('bridgeJar').get().archiveFile.get().asFile
-		def hasPlugin = false
-		def hasPluginMetadata = false
-		def forbiddenEntries = []
-
-		zipTree(jarFile).visit { details ->
-			if (details.directory) {
-				return
-			}
-
-			def path = details.relativePath.pathString
-			if (path == 'com/ashy0019/hapticscape/HapticScapePlugin.class') {
-				hasPlugin = true
-			}
-			if (path == 'runelite-plugin.properties') {
-				hasPluginMetadata = true
-			}
-			if (path.startsWith('net/runelite/')
-				|| path.startsWith('com/google/')
-				|| path.startsWith('org/slf4j/')
-				|| path.startsWith('ch/qos/logback/')
-				|| path.startsWith('okhttp3/')
-				|| path.startsWith('okio/')
-				|| path.startsWith('com/sun/jna/')
-				|| path.startsWith('com/ashy0019/hapticscape/desktop/')
-				|| path.startsWith('com/ashy0019/hapticscape/integration/desktop/')
-				|| path.startsWith('com/ashy0019/hapticscape/device/')
-				|| path.startsWith('com/ashy0019/hapticscape/music/')
-				|| path.startsWith('com/ashy0019/hapticscape/remote/')
-				|| path.startsWith('com/ashy0019/hapticscape/ui/')
-				|| path.startsWith('org/junit/')
-				|| path.startsWith('org/hamcrest/')
-				|| path.endsWith('Test.class')) {
-				forbiddenEntries.add(path)
-			}
-		}
-
-		if (!hasPlugin) {
-			throw new GradleException('The RuneLite bridge plugin class is missing.')
-		}
-		if (!hasPluginMetadata) {
-			throw new GradleException('runelite-plugin.properties is missing from the bridge JAR.')
-		}
-		if (!forbiddenEntries.isEmpty()) {
-			throw new GradleException(
-				"Standalone or shaded dependency code leaked into the bridge JAR: ${forbiddenEntries.sort().join(', ')}"
-			)
-		}
-	}
-}
-
-tasks.register('verifySplitArtifacts') {
-	dependsOn tasks.named('verifyCoreRuneLiteIndependence')
+tasks.register('verifyStandaloneArtifact') {
+	dependsOn tasks.named('verifySourceIndependence')
 	dependsOn tasks.named('verifyStandaloneJar')
-	dependsOn tasks.named('verifyBridgeJar')
 }
 
-// Keep every ordinary test run enforcing the artifact boundary as well.
+// Keep every ordinary test run enforcing the standalone boundary as well.
 tasks.named('test') {
-	dependsOn tasks.named('verifySplitArtifacts')
+	dependsOn tasks.named('verifyStandaloneArtifact')
 }
 
 tasks.register('collectRuntimeLicenses') {

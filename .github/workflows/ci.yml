@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build:
-    name: Test and verify split artifacts
+    name: Test and verify standalone
     runs-on: ubuntu-latest
 
     steps:
@@ -39,7 +39,7 @@ jobs:
             --no-daemon \
             clean \
             test \
-            verifySplitArtifacts \
+            verifyStandaloneArtifact \
             collectRuntimeLicenses
 
       - name: Upload standalone desktop JAR
@@ -47,11 +47,4 @@ jobs:
         with:
           name: hapticscape-desktop-${{ github.sha }}
           path: build/libs/hapticscape-desktop.jar
-          retention-days: 14
-
-      - name: Upload RuneLite bridge JAR
-        uses: actions/upload-artifact@v4
-        with:
-          name: hapticscape-runelite-bridge-${{ github.sha }}
-          path: build/libs/hapticscape-runelite-bridge.jar
           retention-days: 14

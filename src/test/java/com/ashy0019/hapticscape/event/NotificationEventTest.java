@@ -11,9 +11,9 @@ public class NotificationEventTest
 	@Test
 	public void preservesNeutralNotificationFacts()
 	{
-		NotificationEvent event = new NotificationEvent("runelite", true, false);
+		NotificationEvent event = new NotificationEvent("test-source", true, false);
 
-		assertEquals("runelite", event.getSource());
+		assertEquals("test-source", event.getSource());
 		assertEquals(NotificationEvent.TYPE, event.getType());
 		assertTrue(event.isSourceFocused());
 		assertFalse(event.isSendWhenFocused());

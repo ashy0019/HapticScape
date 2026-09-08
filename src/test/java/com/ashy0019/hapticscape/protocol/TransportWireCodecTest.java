@@ -27,7 +27,7 @@ public class TransportWireCodecTest
 	public void writesStableTransportEnvelopeAndCapabilities()
 	{
 		String json = codec.encode(new TransportMessage.Hello(
-			"runelite",
+			"test-source",
 			EventProtocol.NAME,
 			EventProtocol.VERSION,
 			capabilities
@@ -38,7 +38,7 @@ public class TransportWireCodecTest
 		assertEquals(TransportProtocol.VERSION, root.get("version").getAsInt());
 		assertEquals("hello", root.get("kind").getAsString());
 		JsonObject payload = root.getAsJsonObject("payload");
-		assertEquals("runelite", payload.get("source").getAsString());
+		assertEquals("test-source", payload.get("source").getAsString());
 		JsonArray advertised = payload.getAsJsonArray("capabilities");
 		assertEquals(3, advertised.size());
 		assertEquals("experience", advertised.get(0).getAsString());
@@ -51,13 +51,13 @@ public class TransportWireCodecTest
 	{
 		TransportMessage.Hello hello = (TransportMessage.Hello) codec.decode(codec.encode(
 			new TransportMessage.Hello(
-				"runelite",
+				"test-source",
 				EventProtocol.NAME,
 				EventProtocol.VERSION,
 				capabilities
 			)
 		));
-		assertEquals("runelite", hello.getSource());
+		assertEquals("test-source", hello.getSource());
 		assertEquals(EventProtocol.NAME, hello.getEventProtocol());
 		assertEquals(EventProtocol.VERSION, hello.getEventVersion());
 		assertEquals(capabilities, hello.getCapabilities());
@@ -73,9 +73,9 @@ public class TransportWireCodecTest
 		assertEquals(capabilities, ack.getCapabilities());
 
 		TransportMessage.Reset reset = (TransportMessage.Reset) codec.decode(codec.encode(
-			new TransportMessage.Reset("runelite")
+			new TransportMessage.Reset("test-source")
 		));
-		assertEquals("runelite", reset.getSource());
+		assertEquals("test-source", reset.getSource());
 
 		TransportMessage.Error error = (TransportMessage.Error) codec.decode(codec.encode(
 			new TransportMessage.Error("bad_thing", "Nope")
@@ -88,11 +88,11 @@ public class TransportWireCodecTest
 	public void eventAndStateAreDifferentWireKinds()
 	{
 		String eventJson = codec.encode(new TransportMessage.Event(
-			new PlayerDeathEvent("runelite")
+			new PlayerDeathEvent("test-source")
 		));
 		String stateJson = codec.encode(new TransportMessage.State(
 			new VitalsChangedEvent(
-				"runelite",
+				"test-source",
 				VitalsChangedEvent.Kind.PRAYER,
 				50,
 				77
@@ -118,14 +118,14 @@ public class TransportWireCodecTest
 	public void rejectsWrongTransportProtocol()
 	{
 		codec.decode("{\"protocol\":\"something-else\",\"version\":1,"
-			+ "\"kind\":\"reset\",\"payload\":{\"source\":\"runelite\"}}");
+			+ "\"kind\":\"reset\",\"payload\":{\"source\":\"test-source\"}}");
 	}
 
 	@Test(expected = TransportProtocolException.class)
 	public void rejectsFutureTransportVersion()
 	{
 		codec.decode("{\"protocol\":\"hapticscape-local-source\",\"version\":2,"
-			+ "\"kind\":\"reset\",\"payload\":{\"source\":\"runelite\"}}");
+			+ "\"kind\":\"reset\",\"payload\":{\"source\":\"test-source\"}}");
 	}
 
 	@Test(expected = TransportProtocolException.class)

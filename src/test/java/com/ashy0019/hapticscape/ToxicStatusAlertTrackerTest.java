@@ -12,33 +12,33 @@ public class ToxicStatusAlertTrackerTest
 	public void alertsWhenNewlyPoisonedAndAgainWhenPoisonBecomesVenom()
 	{
 		ToxicStatusAlertTracker tracker = new ToxicStatusAlertTracker();
-		tracker.seed(event("runelite", ToxicStatusChangedEvent.Status.CLEAR));
+		tracker.seed(event("test-source", ToxicStatusChangedEvent.Status.CLEAR));
 
-		assertTrue(tracker.update(event("runelite", ToxicStatusChangedEvent.Status.POISONED)).isPresent());
-		assertFalse(tracker.update(event("runelite", ToxicStatusChangedEvent.Status.POISONED)).isPresent());
-		assertTrue(tracker.update(event("runelite", ToxicStatusChangedEvent.Status.VENOMED)).isPresent());
-		assertFalse(tracker.update(event("runelite", ToxicStatusChangedEvent.Status.VENOMED)).isPresent());
+		assertTrue(tracker.update(event("test-source", ToxicStatusChangedEvent.Status.POISONED)).isPresent());
+		assertFalse(tracker.update(event("test-source", ToxicStatusChangedEvent.Status.POISONED)).isPresent());
+		assertTrue(tracker.update(event("test-source", ToxicStatusChangedEvent.Status.VENOMED)).isPresent());
+		assertFalse(tracker.update(event("test-source", ToxicStatusChangedEvent.Status.VENOMED)).isPresent());
 	}
 
 	@Test
 	public void venomDirectlyFromClearAlertsOnce()
 	{
 		ToxicStatusAlertTracker tracker = new ToxicStatusAlertTracker();
-		tracker.seed(event("runelite", ToxicStatusChangedEvent.Status.CLEAR));
+		tracker.seed(event("test-source", ToxicStatusChangedEvent.Status.CLEAR));
 
-		assertTrue(tracker.update(event("runelite", ToxicStatusChangedEvent.Status.VENOMED)).isPresent());
-		assertFalse(tracker.update(event("runelite", ToxicStatusChangedEvent.Status.VENOMED)).isPresent());
+		assertTrue(tracker.update(event("test-source", ToxicStatusChangedEvent.Status.VENOMED)).isPresent());
+		assertFalse(tracker.update(event("test-source", ToxicStatusChangedEvent.Status.VENOMED)).isPresent());
 	}
 
 	@Test
 	public void clearingRearmsAndSourcesStayIndependent()
 	{
 		ToxicStatusAlertTracker tracker = new ToxicStatusAlertTracker();
-		tracker.seed(event("runelite", ToxicStatusChangedEvent.Status.POISONED));
+		tracker.seed(event("test-source", ToxicStatusChangedEvent.Status.POISONED));
 		tracker.seed(event("other-game", ToxicStatusChangedEvent.Status.CLEAR));
 
-		assertFalse(tracker.update(event("runelite", ToxicStatusChangedEvent.Status.CLEAR)).isPresent());
-		assertTrue(tracker.update(event("runelite", ToxicStatusChangedEvent.Status.POISONED)).isPresent());
+		assertFalse(tracker.update(event("test-source", ToxicStatusChangedEvent.Status.CLEAR)).isPresent());
+		assertTrue(tracker.update(event("test-source", ToxicStatusChangedEvent.Status.POISONED)).isPresent());
 		assertTrue(tracker.update(event("other-game", ToxicStatusChangedEvent.Status.POISONED)).isPresent());
 	}
 
@@ -46,7 +46,7 @@ public class ToxicStatusAlertTrackerTest
 	public void firstObservationDoesNotFire()
 	{
 		ToxicStatusAlertTracker tracker = new ToxicStatusAlertTracker();
-		assertFalse(tracker.update(event("runelite", ToxicStatusChangedEvent.Status.POISONED)).isPresent());
+		assertFalse(tracker.update(event("test-source", ToxicStatusChangedEvent.Status.POISONED)).isPresent());
 	}
 
 	private static ToxicStatusChangedEvent event(String source, ToxicStatusChangedEvent.Status status)

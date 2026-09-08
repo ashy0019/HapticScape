@@ -9,9 +9,9 @@ public class LootReceivedEventTest
 	@Test
 	public void carriesOnlyNeutralLootFacts()
 	{
-		LootReceivedEvent event = new LootReceivedEvent("runelite", 3, 1_234_567L);
+		LootReceivedEvent event = new LootReceivedEvent("test-source", 3, 1_234_567L);
 
-		assertEquals("runelite", event.getSource());
+		assertEquals("test-source", event.getSource());
 		assertEquals(LootReceivedEvent.TYPE, event.getType());
 		assertEquals(3, event.getStackCount());
 		assertEquals(1_234_567L, event.getTotalValue());

@@ -13,7 +13,7 @@ import org.junit.Test;
 public class SettingsBackedHapticScapeSettingsTest
 {
     @Test
-    public void usesStandaloneSafeDefaultsWithoutRuneLiteConfig()
+    public void usesStandaloneSafeDefaultsWithoutHostConfig()
     {
         SettingsBackedHapticScapeSettings settings = new SettingsBackedHapticScapeSettings(
             new MapSettingsStore(),

@@ -1,6 +1,7 @@
 package com.ashy0019.hapticscape.remote;
 
-import com.ashy0019.hapticscape.HapticScapeConfig;
+import com.ashy0019.hapticscape.HapticScapeSettingKeys;
+
 import com.google.gson.Gson;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -112,18 +113,18 @@ public class SettingsLockServiceTest
 		);
 		service.arm(service.createProposal("policy test password".toCharArray()));
 
-		assertTrue(service.canEditLocally(HapticScapeConfig.CUSTOM_PATTERNS_KEY));
-		assertTrue(service.canEditLocally(HapticScapeConfig.MUSIC_SYNC_ENABLED_KEY));
-		assertTrue(service.canEditLocally(HapticScapeConfig.MUSIC_RESPONSE_KEY));
-		assertTrue(service.canEditLocally(HapticScapeConfig.MUSIC_SENSITIVITY_PERCENT_KEY));
+		assertTrue(service.canEditLocally(HapticScapeSettingKeys.CUSTOM_PATTERNS));
+		assertTrue(service.canEditLocally(HapticScapeSettingKeys.MUSIC_SYNC_ENABLED));
+		assertTrue(service.canEditLocally(HapticScapeSettingKeys.MUSIC_RESPONSE));
+		assertTrue(service.canEditLocally(HapticScapeSettingKeys.MUSIC_SENSITIVITY_PERCENT));
 		assertTrue(service.canEditLocally(
-			HapticScapeConfig.MUSIC_MINIMUM_INTENSITY_PERCENT_KEY
+			HapticScapeSettingKeys.MUSIC_MINIMUM_INTENSITY_PERCENT
 		));
 		assertTrue(service.canEditLocally(
-			HapticScapeConfig.MUSIC_MAXIMUM_INTENSITY_PERCENT_KEY
+			HapticScapeSettingKeys.MUSIC_MAXIMUM_INTENSITY_PERCENT
 		));
-		assertFalse(service.canEditLocally(HapticScapeConfig.INTENSITY_PERCENT_KEY));
-		assertFalse(service.canEditLocally(HapticScapeConfig.CLICKER_ENABLED_KEY));
+		assertFalse(service.canEditLocally(HapticScapeSettingKeys.INTENSITY_PERCENT));
+		assertFalse(service.canEditLocally(HapticScapeSettingKeys.CLICKER_ENABLED));
 	}
 
 	@Test
@@ -150,11 +151,11 @@ public class SettingsLockServiceTest
 			assertFalse(service.isLocked(SettingsLockCatalog.MILESTONE_HAPTICS));
 			assertFalse(service.canEditLocally(
 				SettingsLockCatalog.LEVEL_UP_HAPTICS,
-				HapticScapeConfig.LEVEL_UP_FEEDBACK_ENABLED_KEY
+				HapticScapeSettingKeys.LEVEL_UP_FEEDBACK_ENABLED
 			));
 			assertTrue(service.canEditLocally(
 				SettingsLockCatalog.MILESTONE_HAPTICS,
-				HapticScapeConfig.MILESTONE_FEEDBACK_ENABLED_KEY
+				HapticScapeSettingKeys.MILESTONE_FEEDBACK_ENABLED
 			));
 			assertEquals(2, service.getSnapshot().getLockCount());
 
@@ -259,7 +260,7 @@ public class SettingsLockServiceTest
 			SettingsLockService service = new SettingsLockService(gson, path);
 			assertTrue(service.getSnapshot().isLegacyFullLock());
 			assertTrue(service.isLocked(SettingsLockCatalog.LEVEL_UP_HAPTICS));
-			assertFalse(service.canEditLocally(HapticScapeConfig.CLICKER_ENABLED_KEY));
+			assertFalse(service.canEditLocally(HapticScapeSettingKeys.CLICKER_ENABLED));
 			assertTrue(service.unlock(password));
 		}
 		finally
