@@ -58,7 +58,7 @@ public class HapticScapePlugin extends Plugin
     protected void startUp()
     {
         startGameplayBridge(LocalhostTransportEndpoint.DEFAULT_PORT);
-        log.info("HapticScape RuneLite bridge connected to standalone runtime");
+        log.info("HapticScape RuneLite bridge started; local transport will connect when available");
     }
 
     private void startGameplayBridge(int port)
@@ -67,6 +67,7 @@ public class HapticScapePlugin extends Plugin
         LocalhostGameplayEventTransport transport = new LocalhostGameplayEventTransport(
             "runelite",
             codec,
+            RuneLiteGameplayBridge.CAPABILITIES,
             port
         );
         RuneLiteGameplayBridge bridge = new RuneLiteGameplayBridge(client, itemManager, transport);

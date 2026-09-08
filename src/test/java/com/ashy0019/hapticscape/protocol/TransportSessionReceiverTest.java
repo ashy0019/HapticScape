@@ -9,6 +9,8 @@ import com.ashy0019.hapticscape.event.PlayerDeathEvent;
 import com.ashy0019.hapticscape.event.ToxicStatusChangedEvent;
 import com.ashy0019.hapticscape.event.VitalsChangedEvent;
 import com.ashy0019.hapticscape.event.XpEvent;
+import java.util.EnumSet;
+import java.util.Set;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -18,8 +20,13 @@ import static org.junit.Assert.assertTrue;
 
 public class TransportSessionReceiverTest
 {
+	private static final Set<SourceCapability> CAPABILITIES = EnumSet.of(
+		SourceCapability.INVENTORY_OCCUPANCY,
+		SourceCapability.ACTOR_DEATH
+	);
+
 	@Test
-	public void requiresHelloAndNegotiatesEventProtocol()
+	public void requiresHelloAndNegotiatesSourceCapabilities()
 	{
 		RecordingSink sink = new RecordingSink();
 		TransportSessionReceiver receiver = new TransportSessionReceiver(sink);
@@ -31,11 +38,14 @@ public class TransportSessionReceiverTest
 		response = receiver.receive(new TransportMessage.Hello(
 			"runelite",
 			EventProtocol.NAME,
-			EventProtocol.VERSION
+			EventProtocol.VERSION,
+			CAPABILITIES
 		));
 		assertTrue(response instanceof TransportMessage.HelloAck);
 		assertTrue(receiver.isReady());
 		assertEquals("runelite", receiver.getSource());
+		assertEquals(CAPABILITIES, receiver.getCapabilities());
+		assertEquals(CAPABILITIES, ((TransportMessage.HelloAck) response).getCapabilities());
 	}
 
 	@Test
@@ -45,7 +55,8 @@ public class TransportSessionReceiverTest
 		TransportMessage response = receiver.receive(new TransportMessage.Hello(
 			"runelite",
 			EventProtocol.NAME,
-			EventProtocol.VERSION + 1
+			EventProtocol.VERSION + 1,
+			CAPABILITIES
 		));
 
 		assertError("unsupported_event_version", response);
@@ -53,19 +64,17 @@ public class TransportSessionReceiverTest
 	}
 
 	@Test
-	public void dispatchesPublishSeedAndResetAfterHello()
+	public void dispatchesEventStateAndResetAfterHello()
 	{
 		RecordingSink sink = new RecordingSink();
 		TransportSessionReceiver receiver = ready(sink);
 
 		assertNull(receiver.receive(new TransportMessage.Event(
-			TransportMessage.EventOperation.PUBLISH,
 			new PlayerDeathEvent("runelite")
 		)));
 		assertEquals(1, sink.deathCount);
 
-		assertNull(receiver.receive(new TransportMessage.Event(
-			TransportMessage.EventOperation.SEED,
+		assertNull(receiver.receive(new TransportMessage.State(
 			new InventoryChangedEvent("runelite", 12, 28)
 		)));
 		assertEquals(1, sink.seedInventoryCount);
@@ -81,7 +90,6 @@ public class TransportSessionReceiverTest
 		TransportSessionReceiver receiver = ready(sink);
 
 		TransportMessage response = receiver.receive(new TransportMessage.Event(
-			TransportMessage.EventOperation.PUBLISH,
 			new PlayerDeathEvent("other-source")
 		));
 		assertError("source_mismatch", response);
@@ -93,14 +101,23 @@ public class TransportSessionReceiverTest
 	}
 
 	@Test
-	public void rejectsInvalidSeedEventFamily()
+	public void rejectsEventsOutsideAdvertisedCapabilities()
 	{
 		TransportSessionReceiver receiver = ready(new RecordingSink());
 		TransportMessage response = receiver.receive(new TransportMessage.Event(
-			TransportMessage.EventOperation.SEED,
+			new XpEvent("runelite", "attack", 1, 2, 1, 1, 1)
+		));
+		assertError("capability_not_declared", response);
+	}
+
+	@Test
+	public void rejectsInvalidStateEventFamily()
+	{
+		TransportSessionReceiver receiver = ready(new RecordingSink());
+		TransportMessage response = receiver.receive(new TransportMessage.State(
 			new PlayerDeathEvent("runelite")
 		));
-		assertError("invalid_event_operation", response);
+		assertError("invalid_state", response);
 	}
 
 	private static TransportSessionReceiver ready(RecordingSink sink)
@@ -109,7 +126,8 @@ public class TransportSessionReceiverTest
 		TransportMessage response = receiver.receive(new TransportMessage.Hello(
 			"runelite",
 			EventProtocol.NAME,
-			EventProtocol.VERSION
+			EventProtocol.VERSION,
+			CAPABILITIES
 		));
 		assertTrue(response instanceof TransportMessage.HelloAck);
 		return receiver;

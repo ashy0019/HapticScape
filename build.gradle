@@ -94,6 +94,7 @@ def bridgeClassIncludes = [
 	'com/ashy0019/hapticscape/protocol/LocalhostFrameIo*.class',
 	'com/ashy0019/hapticscape/protocol/LocalhostGameplayEventTransport*.class',
 	'com/ashy0019/hapticscape/protocol/LocalhostTransportEndpoint*.class',
+	'com/ashy0019/hapticscape/protocol/SourceCapability*.class',
 	'com/ashy0019/hapticscape/protocol/TransportMessage*.class',
 	'com/ashy0019/hapticscape/protocol/TransportProtocol*.class',
 	'com/ashy0019/hapticscape/protocol/TransportWireCodec*.class'

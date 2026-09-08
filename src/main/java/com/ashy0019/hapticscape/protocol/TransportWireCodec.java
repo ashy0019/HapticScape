@@ -1,15 +1,18 @@
 package com.ashy0019.hapticscape.protocol;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import java.math.BigDecimal;
+import java.util.EnumSet;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 
-/** Explicit JSON codec for transport control and gameplay frames. */
+/** Explicit JSON codec for local event transport control, event, and state frames. */
 public final class TransportWireCodec
 {
 	private final Gson gson;
@@ -85,16 +88,21 @@ public final class TransportWireCodec
 				return new TransportMessage.Hello(
 					requireString(payload, "source"),
 					requireString(payload, "eventProtocol"),
-					requireInt(payload, "eventVersion")
+					requireInt(payload, "eventVersion"),
+					requireCapabilities(payload, "capabilities")
 				);
 			case HELLO_ACK:
 				return new TransportMessage.HelloAck(
 					requireString(payload, "eventProtocol"),
-					requireInt(payload, "eventVersion")
+					requireInt(payload, "eventVersion"),
+					requireCapabilities(payload, "capabilities")
 				);
 			case EVENT:
 				return new TransportMessage.Event(
-					operationFromWire(requireString(payload, "operation")),
+					decodeEvent(requireObject(payload, "event"))
+				);
+			case STATE:
+				return new TransportMessage.State(
 					decodeEvent(requireObject(payload, "event"))
 				);
 			case RESET:
@@ -118,18 +126,22 @@ public final class TransportWireCodec
 			payload.addProperty("source", hello.getSource());
 			payload.addProperty("eventProtocol", hello.getEventProtocol());
 			payload.addProperty("eventVersion", hello.getEventVersion());
+			payload.add("capabilities", encodeCapabilities(hello.getCapabilities()));
 		}
 		else if (message instanceof TransportMessage.HelloAck)
 		{
 			TransportMessage.HelloAck ack = (TransportMessage.HelloAck) message;
 			payload.addProperty("eventProtocol", ack.getEventProtocol());
 			payload.addProperty("eventVersion", ack.getEventVersion());
+			payload.add("capabilities", encodeCapabilities(ack.getCapabilities()));
 		}
 		else if (message instanceof TransportMessage.Event)
 		{
-			TransportMessage.Event eventMessage = (TransportMessage.Event) message;
-			payload.addProperty("operation", operationToWire(eventMessage.getOperation()));
-			payload.add("event", encodeEvent(eventMessage.getEvent()));
+			payload.add("event", encodeEvent(((TransportMessage.Event) message).getEvent()));
+		}
+		else if (message instanceof TransportMessage.State)
+		{
+			payload.add("event", encodeEvent(((TransportMessage.State) message).getEvent()));
 		}
 		else if (message instanceof TransportMessage.Reset)
 		{
@@ -160,6 +172,44 @@ public final class TransportWireCodec
 		return eventCodec.decode(gson.toJson(object));
 	}
 
+	private static JsonArray encodeCapabilities(Set<SourceCapability> capabilities)
+	{
+		JsonArray array = new JsonArray();
+		for (SourceCapability capability : SourceCapability.values())
+		{
+			if (capabilities.contains(capability))
+			{
+				array.add(capability.getWireName());
+			}
+		}
+		return array;
+	}
+
+	private static Set<SourceCapability> requireCapabilities(JsonObject object, String name)
+	{
+		JsonElement value = require(object, name);
+		if (!value.isJsonArray())
+		{
+			throw new TransportProtocolException("Field must be an array: " + name);
+		}
+		EnumSet<SourceCapability> capabilities = EnumSet.noneOf(SourceCapability.class);
+		for (JsonElement item : value.getAsJsonArray())
+		{
+			if (!item.isJsonPrimitive() || !item.getAsJsonPrimitive().isString())
+			{
+				throw new TransportProtocolException("Capability values must be strings");
+			}
+			SourceCapability capability = SourceCapability.fromWire(item.getAsString());
+			if (!capabilities.add(capability))
+			{
+				throw new TransportProtocolException(
+					"Duplicate source capability: " + capability.getWireName()
+				);
+			}
+		}
+		return capabilities;
+	}
+
 	private static String kindToWire(TransportMessage.Kind kind)
 	{
 		switch (kind)
@@ -170,6 +220,8 @@ public final class TransportWireCodec
 				return "hello_ack";
 			case EVENT:
 				return "event";
+			case STATE:
+				return "state";
 			case RESET:
 				return "reset";
 			case ERROR:
@@ -189,38 +241,14 @@ public final class TransportWireCodec
 				return TransportMessage.Kind.HELLO_ACK;
 			case "event":
 				return TransportMessage.Kind.EVENT;
+			case "state":
+				return TransportMessage.Kind.STATE;
 			case "reset":
 				return TransportMessage.Kind.RESET;
 			case "error":
 				return TransportMessage.Kind.ERROR;
 			default:
 				throw new TransportProtocolException("Unsupported transport message kind: " + value);
-		}
-	}
-
-	private static String operationToWire(TransportMessage.EventOperation operation)
-	{
-		switch (operation)
-		{
-			case PUBLISH:
-				return "publish";
-			case SEED:
-				return "seed";
-			default:
-				throw new TransportProtocolException("Unsupported event operation: " + operation);
-		}
-	}
-
-	private static TransportMessage.EventOperation operationFromWire(String value)
-	{
-		switch (normalize(value))
-		{
-			case "publish":
-				return TransportMessage.EventOperation.PUBLISH;
-			case "seed":
-				return TransportMessage.EventOperation.SEED;
-			default:
-				throw new TransportProtocolException("Unsupported event operation: " + value);
 		}
 	}
 

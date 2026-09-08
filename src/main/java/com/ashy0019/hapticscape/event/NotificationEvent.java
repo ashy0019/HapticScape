@@ -9,7 +9,7 @@ import java.util.Objects;
  */
 public final class NotificationEvent implements HapticScapeEvent
 {
-	public static final String TYPE = "notification";
+	public static final String TYPE = "notification.emitted";
 
 	private final String source;
 	private final boolean sourceFocused;

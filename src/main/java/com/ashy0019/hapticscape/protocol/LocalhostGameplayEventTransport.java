@@ -13,40 +13,84 @@ import com.ashy0019.hapticscape.event.XpEvent;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
 
-/** Loopback TCP client that publishes neutral gameplay events to HapticScape. */
+/**
+ * Asynchronous loopback TCP publisher for source-neutral local events.
+ *
+ * <p>Gameplay/source callback threads never perform socket I/O. Transient
+ * events are best-effort and are dropped while disconnected or when the
+ * bounded queue is full. State snapshots are retained and coalesced, then
+ * replayed after reconnect following a source reset.</p>
+ */
 public final class LocalhostGameplayEventTransport implements GameplayEventSink, AutoCloseable
 {
-	private final Object ioLock = new Object();
+	private static final int EVENT_QUEUE_CAPACITY = 256;
+	private static final long WRITER_IDLE_MILLIS = 50L;
+	private static final long RECONNECT_INITIAL_MILLIS = 250L;
+	private static final long RECONNECT_MAX_MILLIS = 5_000L;
+
+	private final Object stateLock = new Object();
 	private final String source;
 	private final TransportWireCodec codec;
+	private final Set<SourceCapability> capabilities;
 	private final int port;
-	private Socket socket;
-	private boolean closed;
+	private final BlockingQueue<TransportMessage.Event> eventQueue =
+		new ArrayBlockingQueue<>(EVENT_QUEUE_CAPACITY);
+	private final Map<String, StateSnapshot> latestStates = new LinkedHashMap<>();
+	private final Map<String, Long> sentStateRevisions = new LinkedHashMap<>();
+	private final Thread writerThread;
+
+	private volatile Socket socket;
+	private volatile boolean connected;
+	private volatile boolean closed;
+	private long stateRevision;
+	private long resetRevision = 1L;
+	private long sentResetRevision;
 
 	public LocalhostGameplayEventTransport(
 		String source,
 		TransportWireCodec codec,
+		Set<SourceCapability> capabilities,
 		int port)
 	{
 		this.source = TransportMessage.requireIdentifier(source, "source");
 		this.codec = Objects.requireNonNull(codec, "codec");
+		this.capabilities = TransportMessage.immutableCapabilities(capabilities);
 		if (port <= 0 || port > 65_535)
 		{
 			throw new IllegalArgumentException("port must be between 1 and 65535");
 		}
 		this.port = port;
-		synchronized (ioLock)
-		{
-			connectLocked();
-		}
+		writerThread = new Thread(this::runWriter, "HapticScape-local-event-writer");
+		writerThread.setDaemon(true);
+		writerThread.start();
+	}
+
+	/** Returns whether the background writer currently has a negotiated socket. */
+	public boolean isConnected()
+	{
+		return connected;
 	}
 
 	@Override
 	public void resetSourceState()
 	{
-		send(new TransportMessage.Reset(source));
+		ensureOpen();
+		eventQueue.clear();
+		synchronized (stateLock)
+		{
+			resetRevision++;
+			latestStates.clear();
+			sentStateRevisions.clear();
+		}
+		wakeWriter();
 	}
 
 	@Override
@@ -82,19 +126,19 @@ public final class LocalhostGameplayEventTransport implements GameplayEventSink,
 	@Override
 	public void onVitalsEvent(VitalsChangedEvent event)
 	{
-		publish(event);
+		publishStateful(event);
 	}
 
 	@Override
 	public void onInventoryEvent(InventoryChangedEvent event)
 	{
-		publish(event);
+		publishStateful(event);
 	}
 
 	@Override
 	public void onToxicStatusEvent(ToxicStatusChangedEvent event)
 	{
-		publish(event);
+		publishStateful(event);
 	}
 
 	@Override
@@ -117,18 +161,65 @@ public final class LocalhostGameplayEventTransport implements GameplayEventSink,
 
 	private void publish(HapticScapeEvent event)
 	{
-		send(new TransportMessage.Event(
-			TransportMessage.EventOperation.PUBLISH,
-			requireSource(event)
-		));
+		ensureOpen();
+		HapticScapeEvent validated = requireSource(event);
+		if (!connected)
+		{
+			return;
+		}
+		eventQueue.offer(new TransportMessage.Event(validated));
 	}
 
 	private void seed(HapticScapeEvent event)
 	{
-		send(new TransportMessage.Event(
-			TransportMessage.EventOperation.SEED,
-			requireSource(event)
-		));
+		ensureOpen();
+		HapticScapeEvent validated = requireSource(event);
+		String key = stateKey(validated);
+		synchronized (stateLock)
+		{
+			latestStates.put(
+				key,
+				new StateSnapshot(++stateRevision, new TransportMessage.State(validated))
+			);
+		}
+		wakeWriter();
+	}
+
+	private void publishStateful(HapticScapeEvent event)
+	{
+		ensureOpen();
+		HapticScapeEvent validated = requireSource(event);
+		String key = stateKey(validated);
+		boolean queued = false;
+		boolean shouldWake = false;
+		synchronized (stateLock)
+		{
+			long revision = ++stateRevision;
+			latestStates.put(
+				key,
+				new StateSnapshot(revision, new TransportMessage.State(validated))
+			);
+			if (connected)
+			{
+				queued = eventQueue.offer(new TransportMessage.Event(validated));
+				if (queued)
+				{
+					sentStateRevisions.put(key, revision);
+				}
+				else
+				{
+					shouldWake = true;
+				}
+			}
+			else
+			{
+				shouldWake = true;
+			}
+		}
+		if (shouldWake)
+		{
+			wakeWriter();
+		}
 	}
 
 	private HapticScapeEvent requireSource(HapticScapeEvent event)
@@ -143,61 +234,103 @@ public final class LocalhostGameplayEventTransport implements GameplayEventSink,
 		return event;
 	}
 
-	private void send(TransportMessage message)
+	private static String stateKey(HapticScapeEvent event)
 	{
-		String frame = codec.encode(message);
-		synchronized (ioLock)
+		if (event instanceof VitalsChangedEvent)
 		{
-			ensureOpen();
-			try
-			{
-				writeLocked(frame);
-				return;
-			}
-			catch (IOException firstFailure)
-			{
-				closeSocketLocked();
-			}
-
-			connectLocked();
-			try
-			{
-				writeLocked(frame);
-			}
-			catch (IOException retryFailure)
-			{
-				closeSocketLocked();
-				throw new TransportProtocolException(
-					"Unable to send local gameplay transport frame after reconnect",
-					retryFailure
-				);
-			}
+			VitalsChangedEvent vitals = (VitalsChangedEvent) event;
+			return event.getType() + ":" + vitals.getKind().name();
 		}
+		return event.getType();
 	}
 
-	private void connectLocked()
+	private void runWriter()
 	{
-		ensureOpen();
-		Socket connected = new Socket();
+		long reconnectDelayMillis = RECONNECT_INITIAL_MILLIS;
+		while (!closed)
+		{
+			if (!connected)
+			{
+				if (!connect())
+				{
+					if (closed)
+					{
+						break;
+					}
+					waitForWork(reconnectDelayMillis);
+					reconnectDelayMillis = Math.min(
+						RECONNECT_MAX_MILLIS,
+						reconnectDelayMillis * 2L
+					);
+					continue;
+				}
+				reconnectDelayMillis = RECONNECT_INITIAL_MILLIS;
+			}
+
+			try
+			{
+				PendingControl control = nextPendingControl();
+				if (control != null)
+				{
+					write(control.message);
+					markControlSent(control);
+					continue;
+				}
+
+				TransportMessage.Event event = eventQueue.poll(
+					WRITER_IDLE_MILLIS,
+					TimeUnit.MILLISECONDS
+				);
+				if (event != null)
+				{
+					write(event);
+				}
+			}
+			catch (InterruptedException ex)
+			{
+				if (closed)
+				{
+					Thread.currentThread().interrupt();
+					break;
+				}
+			}
+			catch (IOException | RuntimeException ex)
+			{
+				disconnect();
+			}
+		}
+		disconnect();
+	}
+
+	private boolean connect()
+	{
+		if (closed)
+		{
+			return false;
+		}
+
+		Socket candidate = new Socket();
+		socket = candidate;
 		try
 		{
-			connected.connect(
+			candidate.connect(
 				new InetSocketAddress(LocalhostTransportEndpoint.address(), port),
 				LocalhostTransportEndpoint.CONNECT_TIMEOUT_MILLIS
 			);
-			connected.setTcpNoDelay(true);
-			connected.setSoTimeout(LocalhostTransportEndpoint.HANDSHAKE_TIMEOUT_MILLIS);
+			candidate.setTcpNoDelay(true);
+			candidate.setSoTimeout(LocalhostTransportEndpoint.HANDSHAKE_TIMEOUT_MILLIS);
 
 			TransportMessage.Hello hello = new TransportMessage.Hello(
 				source,
 				EventProtocol.NAME,
-				EventProtocol.VERSION
+				EventProtocol.VERSION,
+				capabilities
 			);
-			LocalhostFrameIo.write(connected.getOutputStream(), codec.encode(hello));
-			String responseFrame = LocalhostFrameIo.read(connected.getInputStream());
+			LocalhostFrameIo.write(candidate.getOutputStream(), codec.encode(hello));
+			String responseFrame = LocalhostFrameIo.read(candidate.getInputStream());
 			if (responseFrame == null)
 			{
-				throw new TransportProtocolException("Local gameplay transport closed during hello");
+				throw new TransportProtocolException("Local event transport closed during hello");
 			}
 			TransportMessage response = codec.decode(responseFrame);
 			if (response instanceof TransportMessage.Error)
@@ -209,72 +342,103 @@ public final class LocalhostGameplayEventTransport implements GameplayEventSink,
 			}
 			if (!(response instanceof TransportMessage.HelloAck))
 			{
-				throw new TransportProtocolException("Local gameplay transport did not acknowledge hello");
+				throw new TransportProtocolException("Local event transport did not acknowledge hello");
 			}
 			TransportMessage.HelloAck ack = (TransportMessage.HelloAck) response;
 			if (!EventProtocol.NAME.equals(ack.getEventProtocol())
-				|| ack.getEventVersion() != EventProtocol.VERSION)
+				|| ack.getEventVersion() != EventProtocol.VERSION
+				|| !capabilities.equals(ack.getCapabilities()))
 			{
 				throw new TransportProtocolException(
-					"Local gameplay transport acknowledged incompatible event protocol"
+					"Local event transport acknowledged an incompatible source contract"
 				);
 			}
-			connected.setSoTimeout(0);
-			socket = connected;
+
+			candidate.setSoTimeout(0);
+			connected = true;
+			eventQueue.clear();
+			synchronized (stateLock)
+			{
+				sentResetRevision = 0L;
+				sentStateRevisions.clear();
+			}
+			return true;
 		}
 		catch (IOException | RuntimeException ex)
 		{
-			try
+			closeSocket(candidate);
+			if (socket == candidate)
 			{
-				connected.close();
+				socket = null;
 			}
-			catch (IOException ignored)
+			connected = false;
+			return false;
+		}
+	}
+
+	private PendingControl nextPendingControl()
+	{
+		synchronized (stateLock)
+		{
+			if (sentResetRevision < resetRevision)
 			{
-				// Preserve the connection failure.
+				return PendingControl.reset(
+					resetRevision,
+					new TransportMessage.Reset(source)
+				);
 			}
-			if (ex instanceof TransportProtocolException)
+
+			for (Map.Entry<String, StateSnapshot> entry : latestStates.entrySet())
 			{
-				throw (TransportProtocolException) ex;
+				long sentRevision = sentStateRevisions.getOrDefault(entry.getKey(), 0L);
+				StateSnapshot snapshot = entry.getValue();
+				if (sentRevision < snapshot.revision)
+				{
+					return PendingControl.state(
+						entry.getKey(),
+						snapshot.revision,
+						snapshot.message
+					);
+				}
 			}
-			throw new TransportProtocolException(
-				"Unable to connect local gameplay transport to "
-					+ LocalhostTransportEndpoint.HOST + ":" + port,
-				ex
-			);
+			return null;
 		}
 	}
 
-	private void writeLocked(String frame) throws IOException
+	private void markControlSent(PendingControl control)
 	{
-		if (socket == null || socket.isClosed())
+		synchronized (stateLock)
 		{
-			throw new IOException("Local gameplay transport socket is closed");
-		}
-		LocalhostFrameIo.write(socket.getOutputStream(), frame);
-	}
-
-	private void ensureOpen()
-	{
-		if (closed)
-		{
-			throw new TransportProtocolException("Local gameplay transport is closed");
+			if (control.stateKey == null)
+			{
+				sentResetRevision = Math.max(sentResetRevision, control.revision);
+				return;
+			}
+			sentStateRevisions.put(control.stateKey, control.revision);
 		}
 	}
 
-	@Override
-	public void close()
-	{
-		synchronized (ioLock)
-		{
-			closed = true;
-			closeSocketLocked();
-		}
-	}
-
-	private void closeSocketLocked()
+	private void write(TransportMessage message) throws IOException
 	{
 		Socket current = socket;
+		if (!connected || current == null || current.isClosed())
+		{
+			throw new IOException("Local event transport socket is closed");
+		}
+		LocalhostFrameIo.write(current.getOutputStream(), codec.encode(message));
+	}
+
+	private void disconnect()
+	{
+		connected = false;
+		eventQueue.clear();
+		Socket current = socket;
 		socket = null;
+		closeSocket(current);
+	}
+
+	private static void closeSocket(Socket current)
+	{
 		if (current == null)
 		{
 			return;
@@ -286,6 +450,92 @@ public final class LocalhostGameplayEventTransport implements GameplayEventSink,
 		catch (IOException ignored)
 		{
 			// Best-effort shutdown.
+		}
+	}
+
+	private void waitForWork(long millis)
+	{
+		try
+		{
+			Thread.sleep(millis);
+		}
+		catch (InterruptedException ex)
+		{
+			if (closed)
+			{
+				Thread.currentThread().interrupt();
+			}
+		}
+	}
+
+	private void wakeWriter()
+	{
+		writerThread.interrupt();
+	}
+
+	private void ensureOpen()
+	{
+		if (closed)
+		{
+			throw new TransportProtocolException("Local event transport is closed");
+		}
+	}
+
+	@Override
+	public void close()
+	{
+		closed = true;
+		disconnect();
+		writerThread.interrupt();
+		if (Thread.currentThread() != writerThread)
+		{
+			try
+			{
+				writerThread.join(2_000L);
+			}
+			catch (InterruptedException ex)
+			{
+				Thread.currentThread().interrupt();
+			}
+		}
+	}
+
+	private static final class StateSnapshot
+	{
+		private final long revision;
+		private final TransportMessage.State message;
+
+		private StateSnapshot(long revision, TransportMessage.State message)
+		{
+			this.revision = revision;
+			this.message = message;
+		}
+	}
+
+	private static final class PendingControl
+	{
+		private final String stateKey;
+		private final long revision;
+		private final TransportMessage message;
+
+		private PendingControl(String stateKey, long revision, TransportMessage message)
+		{
+			this.stateKey = stateKey;
+			this.revision = revision;
+			this.message = message;
+		}
+
+		private static PendingControl reset(long revision, TransportMessage.Reset message)
+		{
+			return new PendingControl(null, revision, message);
+		}
+
+		private static PendingControl state(
+			String stateKey,
+			long revision,
+			TransportMessage.State message)
+		{
+			return new PendingControl(stateKey, revision, message);
 		}
 	}
 }

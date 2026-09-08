@@ -1,9 +1,12 @@
 package com.ashy0019.hapticscape.protocol;
 
 import com.ashy0019.hapticscape.event.HapticScapeEvent;
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.Objects;
+import java.util.Set;
 
-/** Typed messages carried by the source-to-HapticScape transport. */
+/** Typed messages carried by the source-to-HapticScape local event transport. */
 public interface TransportMessage
 {
 	enum Kind
@@ -11,14 +14,9 @@ public interface TransportMessage
 		HELLO,
 		HELLO_ACK,
 		EVENT,
+		STATE,
 		RESET,
 		ERROR
-	}
-
-	enum EventOperation
-	{
-		PUBLISH,
-		SEED
 	}
 
 	Kind getKind();
@@ -28,8 +26,13 @@ public interface TransportMessage
 		private final String source;
 		private final String eventProtocol;
 		private final int eventVersion;
+		private final Set<SourceCapability> capabilities;
 
-		public Hello(String source, String eventProtocol, int eventVersion)
+		public Hello(
+			String source,
+			String eventProtocol,
+			int eventVersion,
+			Set<SourceCapability> capabilities)
 		{
 			this.source = requireIdentifier(source, "source");
 			this.eventProtocol = requireIdentifier(eventProtocol, "eventProtocol");
@@ -38,6 +41,7 @@ public interface TransportMessage
 				throw new IllegalArgumentException("eventVersion must be positive");
 			}
 			this.eventVersion = eventVersion;
+			this.capabilities = immutableCapabilities(capabilities);
 		}
 
 		@Override
@@ -60,14 +64,23 @@ public interface TransportMessage
 		{
 			return eventVersion;
 		}
+
+		public Set<SourceCapability> getCapabilities()
+		{
+			return capabilities;
+		}
 	}
 
 	final class HelloAck implements TransportMessage
 	{
 		private final String eventProtocol;
 		private final int eventVersion;
+		private final Set<SourceCapability> capabilities;
 
-		public HelloAck(String eventProtocol, int eventVersion)
+		public HelloAck(
+			String eventProtocol,
+			int eventVersion,
+			Set<SourceCapability> capabilities)
 		{
 			this.eventProtocol = requireIdentifier(eventProtocol, "eventProtocol");
 			if (eventVersion <= 0)
@@ -75,6 +88,7 @@ public interface TransportMessage
 				throw new IllegalArgumentException("eventVersion must be positive");
 			}
 			this.eventVersion = eventVersion;
+			this.capabilities = immutableCapabilities(capabilities);
 		}
 
 		@Override
@@ -92,16 +106,19 @@ public interface TransportMessage
 		{
 			return eventVersion;
 		}
+
+		public Set<SourceCapability> getCapabilities()
+		{
+			return capabilities;
+		}
 	}
 
 	final class Event implements TransportMessage
 	{
-		private final EventOperation operation;
 		private final HapticScapeEvent event;
 
-		public Event(EventOperation operation, HapticScapeEvent event)
+		public Event(HapticScapeEvent event)
 		{
-			this.operation = Objects.requireNonNull(operation, "operation");
 			this.event = Objects.requireNonNull(event, "event");
 		}
 
@@ -111,9 +128,26 @@ public interface TransportMessage
 			return Kind.EVENT;
 		}
 
-		public EventOperation getOperation()
+		public HapticScapeEvent getEvent()
 		{
-			return operation;
+			return event;
+		}
+	}
+
+	/** Snapshot/state seed delivered without triggering edge-based feedback. */
+	final class State implements TransportMessage
+	{
+		private final HapticScapeEvent event;
+
+		public State(HapticScapeEvent event)
+		{
+			this.event = Objects.requireNonNull(event, "event");
+		}
+
+		@Override
+		public Kind getKind()
+		{
+			return Kind.STATE;
 		}
 
 		public HapticScapeEvent getEvent()
@@ -169,6 +203,16 @@ public interface TransportMessage
 		{
 			return message;
 		}
+	}
+
+	static Set<SourceCapability> immutableCapabilities(Set<SourceCapability> capabilities)
+	{
+		Objects.requireNonNull(capabilities, "capabilities");
+		if (capabilities.isEmpty())
+		{
+			return Collections.emptySet();
+		}
+		return Collections.unmodifiableSet(EnumSet.copyOf(capabilities));
 	}
 
 	static String requireIdentifier(String value, String name)

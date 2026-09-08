@@ -11,24 +11,28 @@ import com.ashy0019.hapticscape.event.ToxicStatusChangedEvent;
 import com.ashy0019.hapticscape.event.VitalsChangedEvent;
 import com.ashy0019.hapticscape.event.XpEvent;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * In-process proof transport that exercises the full transport framing,
- * handshake, event-wire codec, and receiver dispatch contract without a socket.
+ * handshake, event-wire codec, capability negotiation, and receiver dispatch contract without a socket.
  */
 public final class InProcessWireGameplayEventTransport implements GameplayEventSink
 {
 	private final String source;
 	private final TransportWireCodec codec;
+	private final Set<SourceCapability> capabilities;
 	private final TransportSessionReceiver receiver;
 
 	public InProcessWireGameplayEventTransport(
 		String source,
 		TransportWireCodec codec,
+		Set<SourceCapability> capabilities,
 		GameplayEventSink downstream)
 	{
 		this.source = TransportMessage.requireIdentifier(source, "source");
 		this.codec = Objects.requireNonNull(codec, "codec");
+		this.capabilities = TransportMessage.immutableCapabilities(capabilities);
 		this.receiver = new TransportSessionReceiver(
 			Objects.requireNonNull(downstream, "downstream")
 		);
@@ -112,7 +116,8 @@ public final class InProcessWireGameplayEventTransport implements GameplayEventS
 		TransportMessage response = roundTripResponse(new TransportMessage.Hello(
 			source,
 			EventProtocol.NAME,
-			EventProtocol.VERSION
+			EventProtocol.VERSION,
+			capabilities
 		));
 		if (!(response instanceof TransportMessage.HelloAck))
 		{
@@ -120,26 +125,21 @@ public final class InProcessWireGameplayEventTransport implements GameplayEventS
 		}
 		TransportMessage.HelloAck ack = (TransportMessage.HelloAck) response;
 		if (!EventProtocol.NAME.equals(ack.getEventProtocol())
-			|| ack.getEventVersion() != EventProtocol.VERSION)
+			|| ack.getEventVersion() != EventProtocol.VERSION
+			|| !capabilities.equals(ack.getCapabilities()))
 		{
-			throw new TransportProtocolException("Transport hello acknowledged incompatible event protocol");
+			throw new TransportProtocolException("Transport hello acknowledged an incompatible source contract");
 		}
 	}
 
 	private void publish(HapticScapeEvent event)
 	{
-		send(new TransportMessage.Event(
-			TransportMessage.EventOperation.PUBLISH,
-			requireSource(event)
-		));
+		send(new TransportMessage.Event(requireSource(event)));
 	}
 
 	private void seed(HapticScapeEvent event)
 	{
-		send(new TransportMessage.Event(
-			TransportMessage.EventOperation.SEED,
-			requireSource(event)
-		));
+		send(new TransportMessage.State(requireSource(event)));
 	}
 
 	private HapticScapeEvent requireSource(HapticScapeEvent event)

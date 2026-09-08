@@ -9,7 +9,7 @@ import java.util.Objects;
  */
 public final class VitalsChangedEvent implements HapticScapeEvent
 {
-	public static final String TYPE = "vitals_changed";
+	public static final String TYPE = "resource.changed";
 
 	public enum Kind
 	{
