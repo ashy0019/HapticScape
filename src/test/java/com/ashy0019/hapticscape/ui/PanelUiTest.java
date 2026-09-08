@@ -8,10 +8,29 @@ import javax.swing.JTabbedPane;
 import javax.swing.SwingUtilities;
 import org.junit.Test;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 public class PanelUiTest
 {
+	@Test
+	public void compactTabsKeepTheirLabelsReadable() throws Exception
+	{
+		AtomicReference<JTabbedPane> result = new AtomicReference<>();
+		SwingUtilities.invokeAndWait(() ->
+		{
+			JTabbedPane tabs = new JTabbedPane();
+			PanelUi.addCompactTab(tabs, "XP + Skills", new JPanel());
+			PanelUi.addCompactTab(tabs, "Clicks + Phrases", new JPanel());
+			result.set(tabs);
+		});
+
+		JTabbedPane tabs = result.get();
+		assertEquals("XP + Skills", ((javax.swing.JLabel) tabs.getTabComponentAt(0)).getText());
+		assertTrue(tabs.getTabComponentAt(0).getPreferredSize().width > 58);
+		assertTrue(tabs.getTabComponentAt(1).getPreferredSize().width > 90);
+	}
+
 	@Test
 	public void flexibleVerticalComponentAllowsTabHeightToGrow() throws Exception
 	{

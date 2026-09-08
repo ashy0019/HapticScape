@@ -11,12 +11,17 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
 import java.awt.Polygon;
 import java.awt.RenderingHints;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.math.BigDecimal;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Locale;
@@ -28,7 +33,6 @@ import javax.swing.DefaultComboBoxModel;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
-import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JOptionPane;
@@ -41,6 +45,8 @@ import javax.swing.Timer;
 final class PatternForgePanel extends JPanel
 {
 	private static final int MAXIMUM_UNDO_STATES = 20;
+	private static final int WIDE_BREAKPOINT = 1120;
+	private static final int MEDIUM_BREAKPOINT = 720;
 
 	private final SettingsChangeSink settingsSink;
 	private final Consumer<CustomPatternEntry> previewAction;
@@ -67,8 +73,11 @@ final class PatternForgePanel extends JPanel
 		1
 	));
 	private final JLabel playbackSummaryLabel = new JLabel();
+	private final JLabel beatSummaryLabel = new JLabel("", SwingConstants.RIGHT);
 	private final JLabel saveStateLabel = new JLabel("Saved", SwingConstants.RIGHT);
+	private final PatternTimeline outputTimeline = new PatternTimeline();
 	private final Deque<CustomPattern> undoStates = new ArrayDeque<>();
+	private final JPanel layoutPanel = new JPanel(new GridBagLayout());
 
 	private CustomPatternLibrary library;
 	private int selectedPatternId = -1;
@@ -80,6 +89,7 @@ final class PatternForgePanel extends JPanel
 	private boolean previewAllowed = true;
 	private Timer playheadTimer;
 	private long previewStartedAt;
+	private int layoutMode = -1;
 
 	PatternForgePanel(
 		CustomPatternLibrary library,
@@ -95,8 +105,9 @@ final class PatternForgePanel extends JPanel
 			"libraryChangeAction"
 		);
 
-		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
-		setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+		setName("patternComposer");
+		setLayout(new BorderLayout());
+		setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
 		patternComboBox.setRenderer(new DefaultListCellRenderer()
 		{
@@ -122,8 +133,14 @@ final class PatternForgePanel extends JPanel
 			}
 		});
 
-		JPanel patternChoice = new JPanel(new BorderLayout());
-		patternChoice.add(patternComboBox, BorderLayout.CENTER);
+		JPanel libraryPanel = new JPanel();
+		libraryPanel.setName("patternLibrary");
+		libraryPanel.setLayout(new BoxLayout(libraryPanel, BoxLayout.Y_AXIS));
+		libraryPanel.setBorder(BorderFactory.createTitledBorder("Pattern library"));
+		patternComboBox.setMaximumSize(new Dimension(Integer.MAX_VALUE,
+			patternComboBox.getPreferredSize().height));
+		patternComboBox.setAlignmentX(Component.LEFT_ALIGNMENT);
+		libraryPanel.add(patternComboBox);
 		JPanel patternButtons = new JPanel(new GridLayout(1, 3, 4, 0));
 		configureCompactButton(addButton);
 		configureCompactButton(renameButton);
@@ -132,36 +149,62 @@ final class PatternForgePanel extends JPanel
 		patternButtons.add(renameButton);
 		patternButtons.add(deleteButton);
 		patternButtons.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
-		patternChoice.add(patternButtons, BorderLayout.SOUTH);
-		JPanel patternRow = new JPanel(new BorderLayout(8, 0));
-		patternRow.add(new JLabel("Pattern"), BorderLayout.WEST);
-		patternRow.add(patternChoice, BorderLayout.CENTER);
-		addVerticalComponent(this, patternRow);
+		patternButtons.setMaximumSize(new Dimension(Integer.MAX_VALUE,
+			patternButtons.getPreferredSize().height));
+		patternButtons.setAlignmentX(Component.LEFT_ALIGNMENT);
+		libraryPanel.add(patternButtons);
+		JLabel libraryHint = new JLabel("Select a reusable pattern to edit.");
+		libraryHint.setBorder(BorderFactory.createEmptyBorder(5, 1, 0, 1));
+		libraryHint.setAlignmentX(Component.LEFT_ALIGNMENT);
+		libraryPanel.add(libraryHint);
 
-		JLabel instructions = new JLabel(
-			"<html>Draw one beat on the curve below.<br>Left to right is time; height is intensity.</html>"
+		JPanel shapePanel = new JPanel(new BorderLayout(0, 5));
+		shapePanel.setName("patternShapeEditor");
+		shapePanel.setBorder(BorderFactory.createTitledBorder("Shape editor"));
+		JPanel shapeHeading = new JPanel(new BorderLayout(8, 0));
+		JLabel instructions = new JLabel("Draw intensity over one beat.");
+		instructions.setToolTipText("Left to right is time; height is intensity");
+		shapeHeading.add(instructions, BorderLayout.CENTER);
+		beatSummaryLabel.setName("patternBeatSummary");
+		shapeHeading.add(beatSummaryLabel, BorderLayout.EAST);
+		shapePanel.add(shapeHeading, BorderLayout.NORTH);
+		canvas.setName("patternCanvas");
+		shapePanel.add(canvas, BorderLayout.CENTER);
+		JPanel shapeFooter = new JPanel(new BorderLayout(0, 5));
+		outputTimeline.setName("patternOutputTimeline");
+		outputTimeline.setToolTipText(
+			"Complete output timeline; repeated beats are grouped when the count is high"
 		);
-		instructions.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));
-		addVerticalComponent(this, instructions);
-		addVerticalComponent(this, canvas);
+		shapeFooter.add(outputTimeline, BorderLayout.NORTH);
+		JPanel drawingButtons = new JPanel(new GridLayout(1, 2, 4, 0));
+		drawingButtons.add(undoButton);
+		drawingButtons.add(clearButton);
+		shapeFooter.add(drawingButtons, BorderLayout.SOUTH);
+		shapePanel.add(shapeFooter, BorderLayout.SOUTH);
 
 		configureCompactSpinner(beatDurationSpinner);
 		configureCompactSpinner(beatCountSpinner);
+		beatDurationSpinner.setName("patternBeatDuration");
+		beatCountSpinner.setName("patternBeatCount");
 		beatDurationSpinner.setToolTipText(
 			"Length of one drawn beat, from 50 ms to 10 seconds"
 		);
 		beatCountSpinner.setToolTipText(
 			"Number of times to repeat the drawn beat, from 1 to 72"
 		);
+		JPanel playbackPanel = new JPanel();
+		playbackPanel.setName("patternPlayback");
+		playbackPanel.setLayout(new BoxLayout(playbackPanel, BoxLayout.Y_AXIS));
+		playbackPanel.setBorder(BorderFactory.createTitledBorder("Playback"));
 		JPanel beatDurationRow = new JPanel(new BorderLayout(8, 0));
 		beatDurationRow.add(new JLabel("Beat length (ms)"), BorderLayout.CENTER);
 		beatDurationRow.add(beatDurationSpinner, BorderLayout.EAST);
-		addVerticalComponent(this, beatDurationRow);
+		PanelUi.addVerticalComponent(playbackPanel, beatDurationRow);
 
 		JPanel beatCountRow = new JPanel(new BorderLayout(8, 0));
-		beatCountRow.add(new JLabel("Beats"), BorderLayout.CENTER);
+		beatCountRow.add(new JLabel("Repeat"), BorderLayout.CENTER);
 		beatCountRow.add(beatCountSpinner, BorderLayout.EAST);
-		addVerticalComponent(this, beatCountRow);
+		PanelUi.addVerticalComponent(playbackPanel, beatCountRow);
 
 		JPanel saveStateRow = new JPanel(new BorderLayout());
 		playbackSummaryLabel.setToolTipText(
@@ -169,14 +212,27 @@ final class PatternForgePanel extends JPanel
 		);
 		saveStateRow.add(playbackSummaryLabel, BorderLayout.WEST);
 		saveStateRow.add(saveStateLabel, BorderLayout.EAST);
-		addVerticalComponent(this, saveStateRow);
+		saveStateRow.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));
+		PanelUi.addVerticalComponent(playbackPanel, saveStateRow);
 
-		JPanel actionButtons = new JPanel(new GridLayout(2, 2, 4, 4));
-		actionButtons.add(undoButton);
-		actionButtons.add(clearButton);
+		JPanel actionButtons = new JPanel(new GridLayout(1, 2, 4, 0));
 		actionButtons.add(previewButton);
 		actionButtons.add(saveButton);
-		addVerticalComponent(this, actionButtons);
+		PanelUi.addVerticalComponent(playbackPanel, actionButtons);
+
+		JPanel libraryHost = host(libraryPanel, 270);
+		JPanel shapeHost = host(shapePanel, 540);
+		JPanel playbackHost = host(playbackPanel, 270);
+		add(layoutPanel, BorderLayout.NORTH);
+		addComponentListener(new ComponentAdapter()
+		{
+			@Override
+			public void componentResized(ComponentEvent event)
+			{
+				reflow(libraryHost, shapeHost, playbackHost);
+			}
+		});
+		reflow(libraryHost, shapeHost, playbackHost);
 
 		canvas.setGestureStartAction(this::rememberUndoState);
 		canvas.setPatternChangeAction(pattern -> changeDraft(pattern, false));
@@ -207,14 +263,6 @@ final class PatternForgePanel extends JPanel
 		Dimension preferred = spinner.getPreferredSize();
 		spinner.setPreferredSize(new Dimension(82, preferred.height));
 		spinner.setMaximumSize(new Dimension(82, preferred.height));
-	}
-
-	private static void addVerticalComponent(JPanel panel, JComponent component)
-	{
-		Dimension preferredSize = component.getPreferredSize();
-		component.setAlignmentX(Component.LEFT_ALIGNMENT);
-		component.setMaximumSize(new Dimension(Integer.MAX_VALUE, preferredSize.height));
-		panel.add(component);
 	}
 
 	CustomPatternLibrary getLibrary()
@@ -566,6 +614,7 @@ final class PatternForgePanel extends JPanel
 		long totalDurationMillis = (long) beatDurationMillis * getBeatCount();
 		previewStartedAt = System.currentTimeMillis();
 		canvas.setPlayheadProgress(0.0);
+		outputTimeline.setPlayheadProgress(0.0);
 		playheadTimer = new Timer(30, event ->
 		{
 			long elapsedMillis = System.currentTimeMillis() - previewStartedAt;
@@ -578,6 +627,9 @@ final class PatternForgePanel extends JPanel
 				double beatProgress = (double) (elapsedMillis % beatDurationMillis)
 					/ beatDurationMillis;
 				canvas.setPlayheadProgress(beatProgress);
+				outputTimeline.setPlayheadProgress(
+					(double) elapsedMillis / totalDurationMillis
+				);
 			}
 		});
 		playheadTimer.start();
@@ -591,6 +643,7 @@ final class PatternForgePanel extends JPanel
 			playheadTimer = null;
 		}
 		canvas.setPlayheadProgress(-1.0);
+		outputTimeline.setPlayheadProgress(-1.0);
 	}
 
 	private int getBeatDurationMillis()
@@ -605,8 +658,13 @@ final class PatternForgePanel extends JPanel
 
 	private void updatePlaybackSummary()
 	{
-		long totalMillis = (long) getBeatDurationMillis() * getBeatCount();
+		int beatDurationMillis = getBeatDurationMillis();
+		int beatCount = getBeatCount();
+		long totalMillis = (long) beatDurationMillis * beatCount;
+		beatSummaryLabel.setText("One beat · " + formatDuration(beatDurationMillis));
 		playbackSummaryLabel.setText("Total " + formatDuration(totalMillis));
+		canvas.setBeatDurationMillis(beatDurationMillis);
+		outputTimeline.setPlayback(beatDurationMillis, beatCount);
 	}
 
 	private static String formatDuration(long durationMillis)
@@ -622,11 +680,196 @@ final class PatternForgePanel extends JPanel
 		return String.format(Locale.ROOT, "%.1f s", durationMillis / 1_000.0);
 	}
 
+	static String formatTimelineOffset(int durationMillis)
+	{
+		if (durationMillis <= 0)
+		{
+			return "0";
+		}
+		if (durationMillis < 1_000)
+		{
+			return durationMillis + " ms";
+		}
+		return BigDecimal.valueOf(durationMillis, 3)
+			.stripTrailingZeros()
+			.toPlainString() + " s";
+	}
+
 	private void setDirty(boolean dirty)
 	{
 		this.dirty = dirty;
 		saveStateLabel.setText(dirty ? "Unsaved" : "Saved");
 		refreshEditorState();
+	}
+
+	private void reflow(Component library, Component shape, Component playback)
+	{
+		int desired = layoutModeForWidth(getWidth());
+		if (desired == layoutMode)
+		{
+			return;
+		}
+		layoutMode = desired;
+		layoutPanel.removeAll();
+		if (layoutMode == 3)
+		{
+			addSection(library, 0, 0, 1, 1, 0.0, 0.0, GridBagConstraints.HORIZONTAL);
+			addSection(shape, 1, 0, 1, 1, 1.0, 1.0, GridBagConstraints.BOTH);
+			addSection(playback, 2, 0, 1, 1, 0.0, 0.0, GridBagConstraints.HORIZONTAL);
+		}
+		else if (layoutMode == 2)
+		{
+			addSection(shape, 0, 0, 2, 1, 1.0, 1.0, GridBagConstraints.BOTH);
+			addSection(library, 0, 1, 1, 1, 0.5, 0.0, GridBagConstraints.HORIZONTAL);
+			addSection(playback, 1, 1, 1, 1, 0.5, 0.0, GridBagConstraints.HORIZONTAL);
+		}
+		else
+		{
+			addSection(library, 0, 0, 1, 1, 1.0, 0.0, GridBagConstraints.HORIZONTAL);
+			addSection(shape, 0, 1, 1, 1, 1.0, 1.0, GridBagConstraints.BOTH);
+			addSection(playback, 0, 2, 1, 1, 1.0, 0.0, GridBagConstraints.HORIZONTAL);
+		}
+		layoutPanel.revalidate();
+		layoutPanel.repaint();
+	}
+
+	static int layoutModeForWidth(int width)
+	{
+		return width >= WIDE_BREAKPOINT ? 3 : width >= MEDIUM_BREAKPOINT ? 2 : 1;
+	}
+
+	private void addSection(
+		Component component,
+		int x,
+		int y,
+		int width,
+		int height,
+		double weightX,
+		double weightY,
+		int fill)
+	{
+		GridBagConstraints constraints = new GridBagConstraints();
+		constraints.gridx = x;
+		constraints.gridy = y;
+		constraints.gridwidth = width;
+		constraints.gridheight = height;
+		constraints.weightx = weightX;
+		constraints.weighty = weightY;
+		constraints.fill = fill;
+		constraints.anchor = GridBagConstraints.NORTHWEST;
+		constraints.insets = new Insets(0, 0, 7, 7);
+		layoutPanel.add(component, constraints);
+	}
+
+	private static JPanel host(Component component, int preferredWidth)
+	{
+		JPanel host = new WidthHintPanel(preferredWidth);
+		host.add(component, BorderLayout.CENTER);
+		return host;
+	}
+
+	/** Supplies orderly desktop columns without fixing the editor's height. */
+	private static final class WidthHintPanel extends JPanel
+	{
+		private final int preferredWidth;
+
+		private WidthHintPanel(int preferredWidth)
+		{
+			super(new BorderLayout());
+			this.preferredWidth = preferredWidth;
+		}
+
+		@Override
+		public Dimension getPreferredSize()
+		{
+			Dimension preferred = super.getPreferredSize();
+			return new Dimension(Math.max(preferredWidth, preferred.width), preferred.height);
+		}
+	}
+
+	/** Compact overview of every repeated beat in the complete output. */
+	private static final class PatternTimeline extends JPanel
+	{
+		private static final Color BACKGROUND = new Color(32, 34, 37);
+		private static final Color GRID = new Color(91, 94, 98);
+		private static final Color TEXT = new Color(190, 190, 190);
+		private static final Color PLAYHEAD = new Color(255, 220, 90);
+		private static final int MAXIMUM_VISIBLE_SEGMENTS = 12;
+
+		private int beatDurationMillis = CustomPatternEntry.DEFAULT_BEAT_DURATION_MILLIS;
+		private int beatCount = CustomPatternEntry.DEFAULT_BEAT_COUNT;
+		private double playheadProgress = -1.0;
+
+		private PatternTimeline()
+		{
+			setPreferredSize(new Dimension(0, 30));
+			setMinimumSize(new Dimension(80, 30));
+		}
+
+		private void setPlayback(int durationMillis, int repeats)
+		{
+			beatDurationMillis = durationMillis;
+			beatCount = Math.max(1, repeats);
+			repaint();
+		}
+
+		private void setPlayheadProgress(double progress)
+		{
+			playheadProgress = progress < 0.0
+				? -1.0
+				: Math.max(0.0, Math.min(1.0, progress));
+			repaint();
+		}
+
+		@Override
+		protected void paintComponent(Graphics graphics)
+		{
+			super.paintComponent(graphics);
+			Graphics2D graphics2D = (Graphics2D) graphics.create();
+			try
+			{
+				int left = 2;
+				int top = 3;
+				int width = Math.max(1, getWidth() - 4);
+				int height = Math.max(1, getHeight() - 7);
+				graphics2D.setColor(BACKGROUND);
+				graphics2D.fillRect(left, top, width, height);
+				graphics2D.setColor(GRID);
+				graphics2D.drawRect(left, top, width - 1, height - 1);
+
+				int visibleSegments = Math.min(beatCount, MAXIMUM_VISIBLE_SEGMENTS);
+				for (int segment = 1; segment < visibleSegments; segment++)
+				{
+					int x = left + width * segment / visibleSegments;
+					graphics2D.drawLine(x, top, x, top + height - 1);
+				}
+
+				graphics2D.setFont(getFont().deriveFont(10f));
+				graphics2D.setColor(TEXT);
+				String label = beatCount == 1
+					? "1 beat · " + formatDuration(beatDurationMillis)
+					: beatCount + " beats · "
+						+ formatDuration((long) beatDurationMillis * beatCount);
+				int labelWidth = graphics2D.getFontMetrics().stringWidth(label);
+				graphics2D.drawString(
+					label,
+					Math.max(left + 4, left + (width - labelWidth) / 2),
+					top + height - 6
+				);
+
+				if (playheadProgress >= 0.0)
+				{
+					int x = left + (int) Math.round((width - 1) * playheadProgress);
+					graphics2D.setColor(PLAYHEAD);
+					graphics2D.setStroke(new BasicStroke(2f));
+					graphics2D.drawLine(x, top, x, top + height - 1);
+				}
+			}
+			finally
+			{
+				graphics2D.dispose();
+			}
+		}
 	}
 
 	private static final class PatternCanvas extends JPanel
@@ -639,7 +882,7 @@ final class PatternForgePanel extends JPanel
 		private static final int LEFT = 28;
 		private static final int RIGHT = 8;
 		private static final int TOP = 10;
-		private static final int BOTTOM = 18;
+		private static final int BOTTOM = 25;
 
 		private int[] samples = new int[CustomPattern.EDITOR_SAMPLE_COUNT];
 		private Runnable gestureStartAction = () -> { };
@@ -648,11 +891,12 @@ final class PatternForgePanel extends JPanel
 		private int previousSampleIndex = -1;
 		private int previousIntensity;
 		private boolean editable = true;
+		private int beatDurationMillis = CustomPatternEntry.DEFAULT_BEAT_DURATION_MILLIS;
 
 		private PatternCanvas()
 		{
-			setPreferredSize(new Dimension(0, 180));
-			setMinimumSize(new Dimension(100, 150));
+			setPreferredSize(new Dimension(540, 280));
+			setMinimumSize(new Dimension(180, 180));
 			setToolTipText("Click and drag to draw intensity over time");
 			setBorder(BorderFactory.createLineBorder(new Color(91, 74, 49)));
 			MouseAdapter drawingHandler = new MouseAdapter()
@@ -722,6 +966,12 @@ final class PatternForgePanel extends JPanel
 			repaint();
 		}
 
+		private void setBeatDurationMillis(int durationMillis)
+		{
+			beatDurationMillis = Math.max(1, durationMillis);
+			repaint();
+		}
+
 		private void updateFromMouse(MouseEvent event)
 		{
 			int graphWidth = Math.max(1, getWidth() - LEFT - RIGHT);
@@ -778,9 +1028,10 @@ final class PatternForgePanel extends JPanel
 				int graphHeight = Math.max(1, getHeight() - TOP - BOTTOM);
 				graphics2D.setColor(GRID);
 				graphics2D.setStroke(new BasicStroke(1f));
-				for (int division = 0; division <= 4; division++)
+				int timeDivisions = getWidth() < 360 ? 2 : 4;
+				for (int division = 0; division <= timeDivisions; division++)
 				{
-					int x = LEFT + graphWidth * division / 4;
+					int x = LEFT + graphWidth * division / timeDivisions;
 					graphics2D.drawLine(x, TOP, x, TOP + graphHeight);
 				}
 				for (int division = 0; division <= 2; division++)
@@ -793,6 +1044,21 @@ final class PatternForgePanel extends JPanel
 				graphics2D.drawString("100", 2, TOP + 5);
 				graphics2D.drawString("50", 8, TOP + graphHeight / 2 + 5);
 				graphics2D.drawString("0", 14, TOP + graphHeight + 5);
+				for (int division = 0; division <= timeDivisions; division++)
+				{
+					int offsetMillis = (int) Math.round(
+						(double) beatDurationMillis * division / timeDivisions
+					);
+					String label = formatTimelineOffset(offsetMillis);
+					int labelWidth = graphics2D.getFontMetrics().stringWidth(label);
+					int tickX = LEFT + graphWidth * division / timeDivisions;
+					int labelX = division == 0
+						? tickX
+						: division == timeDivisions
+							? tickX - labelWidth
+							: tickX - labelWidth / 2;
+					graphics2D.drawString(label, labelX, getHeight() - 4);
+				}
 
 				int[] xPoints = new int[samples.length + 2];
 				int[] yPoints = new int[samples.length + 2];

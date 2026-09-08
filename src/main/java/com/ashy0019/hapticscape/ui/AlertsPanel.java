@@ -17,43 +17,64 @@ import com.ashy0019.hapticscape.remote.SettingsLockCatalog;
 import com.ashy0019.hapticscape.remote.SettingsLockService;
 import com.ashy0019.hapticscape.remote.SettingsLockTarget;
 import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import javax.swing.BorderFactory;
-import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
+import javax.swing.ListCellRenderer;
+import javax.swing.ListSelectionModel;
 import javax.swing.SpinnerNumberModel;
 
 final class AlertsPanel extends JPanel
 {
+	private static final int WIDE_BREAKPOINT = 1120;
+	private static final int MEDIUM_BREAKPOINT = 720;
+
 	private final SettingsChangeSink settingsSink;
 	private final Supplier<CustomPatternLibrary> customPatternsSupplier;
+	private final JPanel layoutPanel = new JPanel(new GridBagLayout());
+	private final JList<AlertCategory> categoryList =
+		new JList<>(AlertCategory.values());
+	private final JLabel selectedCategoryLabel = new JLabel();
+	private final JLabel behaviorHintLabel = new JLabel();
+	private final JPanel customProfilePanel = new JPanel();
+	private JPanel specificPanel;
+	private int layoutMode = -1;
 
 	private final JCheckBox genericEnabledCheckBox =
-		new JCheckBox("Haptic generic notifications");
+		new JCheckBox("Catch-all haptics");
 	private final JCheckBox genericClickEnabledCheckBox =
-		new JCheckBox("Click generic notifications");
-	private final JCheckBox respectFocusCheckBox = new JCheckBox("Respect source focus");
+		new JCheckBox("Catch-all click");
+	private final JCheckBox respectFocusCheckBox = new JCheckBox("Respect gameplay focus");
 	private final JSlider genericIntensitySlider;
 	private final JLabel genericIntensityValueLabel = new JLabel();
 	private final JComboBox<HapticPatternSelection> genericPatternComboBox;
 	private final JSpinner genericDurationSpinner;
-	private final JButton testGenericButton = new JButton("Test generic");
+	private final JButton testGenericButton = new JButton("Test generic profile");
 
-	private final JComboBox<AlertCategory> categoryComboBox =
-		new JComboBox<>(AlertCategory.values());
 	private final JComboBox<AlertBehavior> behaviorComboBox =
 		new JComboBox<>(AlertBehavior.values());
 	private final JCheckBox specificClickEnabledCheckBox =
-		new JCheckBox("Click for this alert");
+		new JCheckBox("Click sound");
 	private final JPanel triggerRow = new JPanel(new BorderLayout(8, 0));
 	private final JLabel triggerLabel = new JLabel();
 	private final JSpinner triggerSpinner = new JSpinner();
@@ -128,8 +149,9 @@ final class AlertsPanel extends JPanel
 			configuredProfiles
 		);
 
-		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
-		setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+		setName("alertsWorkspace");
+		setLayout(new BorderLayout());
+		setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
 		genericIntensitySlider = new JSlider(
 			NotificationFeedbackSettings.MINIMUM_INTENSITY_PERCENT,
@@ -171,7 +193,7 @@ final class AlertsPanel extends JPanel
 			lockSelectionEnabled
 		);
 		specificBlockHeader = new LockableSectionHeader(
-			"Selected alert settings",
+			"Alert outputs",
 			() -> SettingsLockCatalog.alertBlock(selectedCategory),
 			lockDraft,
 			lockService,
@@ -180,9 +202,28 @@ final class AlertsPanel extends JPanel
 			lockSelectionEnabled
 		);
 
-		add(createGenericPanel());
-		add(Box.createVerticalStrut(6));
-		add(createSpecificPanel());
+		categoryList.setName("alertCategoryList");
+		categoryList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		categoryList.setVisibleRowCount(AlertCategory.values().length);
+		categoryList.setFixedCellHeight(43);
+		categoryList.setCellRenderer(new AlertCategoryRenderer());
+		categoryList.setSelectedValue(selectedCategory, true);
+		JPanel categoriesPanel = createCategoriesPanel();
+		specificPanel = createSpecificPanel();
+		JPanel genericPanel = createGenericPanel();
+		JPanel categoriesHost = host(categoriesPanel, 300);
+		JPanel specificHost = host(specificPanel, 390);
+		JPanel genericHost = host(genericPanel, 360);
+		add(layoutPanel, BorderLayout.NORTH);
+		addComponentListener(new ComponentAdapter()
+		{
+			@Override
+			public void componentResized(ComponentEvent event)
+			{
+				reflow(categoriesHost, specificHost, genericHost);
+			}
+		});
+		reflow(categoriesHost, specificHost, genericHost);
 		genericEnabledLockBinding = binding(
 			genericEnabledCheckBox,
 			SettingsLockCatalog.GENERIC_NOTIFICATION_HAPTICS,
@@ -364,11 +405,24 @@ final class AlertsPanel extends JPanel
 		updateSpecificControlState();
 	}
 
+	private JPanel createCategoriesPanel()
+	{
+		JPanel panel = new JPanel(new BorderLayout(0, 5));
+		panel.setBorder(BorderFactory.createTitledBorder("Alert types"));
+		JLabel help = new JLabel("Select an event to edit");
+		help.setEnabled(false);
+		panel.add(help, BorderLayout.NORTH);
+		JScrollPane scrollPane = new JScrollPane(categoryList);
+		scrollPane.setBorder(BorderFactory.createEmptyBorder());
+		panel.add(scrollPane, BorderLayout.CENTER);
+		return panel;
+	}
+
 	private JPanel createGenericPanel()
 	{
 		JPanel panel = new JPanel();
 		panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-		panel.setBorder(BorderFactory.createTitledBorder("Generic"));
+		panel.setBorder(BorderFactory.createTitledBorder("Generic defaults"));
 		PanelUi.addVerticalComponent(panel, genericBlockHeader);
 
 		genericEnabledCheckBox.setSelected(genericEnabled);
@@ -415,12 +469,12 @@ final class AlertsPanel extends JPanel
 	{
 		JPanel panel = new JPanel();
 		panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-		panel.setBorder(BorderFactory.createTitledBorder("Specific alerts"));
-
-		JPanel categoryRow = new JPanel(new BorderLayout());
-		categoryComboBox.setToolTipText("Select the alert type to customize");
-		categoryRow.add(categoryComboBox, BorderLayout.CENTER);
-		PanelUi.addVerticalComponent(panel, categoryRow);
+		panel.setBorder(BorderFactory.createTitledBorder("Selected alert"));
+		selectedCategoryLabel.setFont(
+			selectedCategoryLabel.getFont().deriveFont(Font.BOLD)
+		);
+		selectedCategoryLabel.setBorder(BorderFactory.createEmptyBorder(2, 2, 5, 2));
+		PanelUi.addVerticalComponent(panel, selectedCategoryLabel);
 		PanelUi.addVerticalComponent(panel, specificBlockHeader);
 		specificClickEnabledCheckBox.setToolTipText(
 			"Play one click for the selected semantic alert"
@@ -428,30 +482,38 @@ final class AlertsPanel extends JPanel
 		PanelUi.addVerticalComponent(panel, specificClickEnabledCheckBox);
 
 		JPanel behaviorRow = new JPanel(new BorderLayout(8, 0));
-		behaviorRow.add(new JLabel("Behavior"), BorderLayout.CENTER);
+		behaviorRow.add(new JLabel("Haptics"), BorderLayout.CENTER);
 		behaviorRow.add(behaviorComboBox, BorderLayout.EAST);
 		PanelUi.setFixedWidth(behaviorComboBox, PanelUi.SELECTOR_CONTROL_WIDTH);
 		PanelUi.addVerticalComponent(panel, behaviorRow);
+		behaviorHintLabel.setEnabled(false);
+		behaviorHintLabel.setBorder(BorderFactory.createEmptyBorder(3, 2, 4, 2));
+		PanelUi.addVerticalComponent(panel, behaviorHintLabel);
 
 		triggerRow.add(triggerLabel, BorderLayout.CENTER);
 		triggerRow.add(triggerSpinner, BorderLayout.EAST);
 		PanelUi.addVerticalComponent(panel, triggerRow);
 
+		customProfilePanel.setLayout(
+			new BoxLayout(customProfilePanel, BoxLayout.Y_AXIS)
+		);
+		customProfilePanel.setBorder(BorderFactory.createTitledBorder("Custom haptics"));
 		JPanel intensityHeader = new JPanel(new BorderLayout());
 		intensityHeader.add(new JLabel("Intensity"), BorderLayout.WEST);
 		intensityHeader.add(specificIntensityValueLabel, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(panel, intensityHeader);
-		PanelUi.addVerticalComponent(panel, specificIntensitySlider);
+		PanelUi.addVerticalComponent(customProfilePanel, intensityHeader);
+		PanelUi.addVerticalComponent(customProfilePanel, specificIntensitySlider);
 
 		JPanel patternRow = new JPanel(new BorderLayout(8, 0));
 		patternRow.add(new JLabel("Pattern"), BorderLayout.CENTER);
 		patternRow.add(specificPatternComboBox, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(panel, patternRow);
+		PanelUi.addVerticalComponent(customProfilePanel, patternRow);
 
 		JPanel durationRow = new JPanel(new BorderLayout(8, 0));
 		durationRow.add(new JLabel(PanelUi.DURATION_LABEL), BorderLayout.CENTER);
 		durationRow.add(specificDurationSpinner, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(panel, durationRow);
+		PanelUi.addVerticalComponent(customProfilePanel, durationRow);
+		PanelUi.addFlexibleVerticalComponent(panel, customProfilePanel);
 
 		JPanel testRow = new JPanel(new BorderLayout());
 		testRow.add(testSpecificButton, BorderLayout.EAST);
@@ -560,10 +622,10 @@ final class AlertsPanel extends JPanel
 		});
 		testGenericButton.addActionListener(event -> testGenericAction.run());
 
-		categoryComboBox.addActionListener(event ->
+		categoryList.addListSelectionListener(event ->
 		{
-			AlertCategory category = (AlertCategory) categoryComboBox.getSelectedItem();
-			if (category != null)
+			AlertCategory category = categoryList.getSelectedValue();
+			if (!event.getValueIsAdjusting() && category != null)
 			{
 				selectedCategory = category;
 				specificBlockHeader.refresh();
@@ -614,6 +676,10 @@ final class AlertsPanel extends JPanel
 	private void loadSelectedCategory()
 	{
 		AlertProfile profile = alertProfiles.get(selectedCategory);
+		selectedCategoryLabel.setText(selectedCategory.getDisplayName());
+		selectedCategoryLabel.setToolTipText(
+			"Settings for " + selectedCategory.getDisplayName().toLowerCase()
+		);
 		updatingSpecificControls = true;
 		try
 		{
@@ -648,6 +714,7 @@ final class AlertsPanel extends JPanel
 			updatingSpecificControls = false;
 		}
 		updateSpecificControlState();
+		categoryList.repaint();
 		revalidate();
 		repaint();
 	}
@@ -691,6 +758,7 @@ final class AlertsPanel extends JPanel
 			((Number) triggerSpinner.getValue()).intValue()
 		);
 		persistTriggerSettings(SettingsLockCatalog.alertBlock(selectedCategory));
+		categoryList.repaint();
 	}
 
 	private void updateGenericControlState()
@@ -712,7 +780,7 @@ final class AlertsPanel extends JPanel
 		genericIntensityValueLabel.setEnabled(blockEditable && externallyScaled);
 		genericDurationSpinner.setEnabled(blockEditable && externallyScaled);
 		testGenericButton.setEnabled(
-			previewAllowed && editable && ((connected && genericEnabled) || genericClickEnabled)
+			previewAllowed && editable && (connected || genericClickEnabled)
 		);
 	}
 
@@ -728,7 +796,7 @@ final class AlertsPanel extends JPanel
 		boolean externallyScaled = pattern == null || !pattern.isCustom();
 
 		// Category selection is navigation only, so the participant can inspect every alert.
-		categoryComboBox.setEnabled(true);
+		categoryList.setEnabled(true);
 		behaviorComboBox.setEnabled(blockEditable);
 		specificClickLockBinding.refresh();
 		specificClickEnabledCheckBox.setEnabled(
@@ -743,6 +811,31 @@ final class AlertsPanel extends JPanel
 			previewAllowed && editable && ((connected && behavior != AlertBehavior.OFF)
 				|| clickerAlertSettings.isEnabled(selectedCategory))
 		);
+		updateBehaviorPresentation(behavior);
+		categoryList.repaint();
+	}
+
+	private void updateBehaviorPresentation(AlertBehavior behavior)
+	{
+		boolean custom = behavior == AlertBehavior.CUSTOM;
+		customProfilePanel.setVisible(custom);
+		if (behavior == AlertBehavior.USE_GENERIC)
+		{
+			behaviorHintLabel.setText("Uses the settings in Generic defaults.");
+		}
+		else if (behavior == AlertBehavior.OFF)
+		{
+			behaviorHintLabel.setText("Haptics are off; the click sound can remain enabled.");
+		}
+		else
+		{
+			behaviorHintLabel.setText("Uses the custom haptic profile below.");
+		}
+		if (specificPanel != null)
+		{
+			specificPanel.revalidate();
+			specificPanel.repaint();
+		}
 	}
 
 	private void persistMigratedSettings(
@@ -819,6 +912,174 @@ final class AlertsPanel extends JPanel
 			HapticScapeSettingKeys.CLICKER_ALERT_SETTINGS,
 			clickerAlertSettings.toConfigValue()
 		);
+	}
+
+	private void reflow(
+		Component categories,
+		Component specific,
+		Component generic)
+	{
+		int desired = layoutModeForWidth(getWidth());
+		if (desired == layoutMode)
+		{
+			return;
+		}
+		layoutMode = desired;
+		layoutPanel.removeAll();
+		if (layoutMode == 3)
+		{
+			addSection(categories, 0, 0, 1, 1, 0.0, 0.0, GridBagConstraints.HORIZONTAL);
+			addSection(specific, 1, 0, 1, 1, 0.0, 0.0, GridBagConstraints.HORIZONTAL);
+			addSection(generic, 2, 0, 1, 1, 0.0, 0.0, GridBagConstraints.HORIZONTAL);
+			addRemainder(3, 0);
+		}
+		else if (layoutMode == 2)
+		{
+			addSection(categories, 0, 0, 1, 2, 0.44, 1.0, GridBagConstraints.BOTH);
+			addSection(specific, 1, 0, 1, 1, 0.56, 0.0, GridBagConstraints.HORIZONTAL);
+			addSection(generic, 1, 1, 1, 1, 0.56, 1.0, GridBagConstraints.HORIZONTAL);
+		}
+		else
+		{
+			addSection(categories, 0, 0, 1, 1, 1.0, 0.0, GridBagConstraints.HORIZONTAL);
+			addSection(specific, 0, 1, 1, 1, 1.0, 0.0, GridBagConstraints.HORIZONTAL);
+			addSection(generic, 0, 2, 1, 1, 1.0, 0.0, GridBagConstraints.HORIZONTAL);
+		}
+		layoutPanel.revalidate();
+		layoutPanel.repaint();
+	}
+
+	static int layoutModeForWidth(int width)
+	{
+		return width >= WIDE_BREAKPOINT ? 3 : width >= MEDIUM_BREAKPOINT ? 2 : 1;
+	}
+
+	private void addSection(
+		Component component,
+		int x,
+		int y,
+		int width,
+		int height,
+		double weightX,
+		double weightY,
+		int fill)
+	{
+		GridBagConstraints constraints = new GridBagConstraints();
+		constraints.gridx = x;
+		constraints.gridy = y;
+		constraints.gridwidth = width;
+		constraints.gridheight = height;
+		constraints.weightx = weightX;
+		constraints.weighty = weightY;
+		constraints.fill = fill;
+		constraints.anchor = GridBagConstraints.NORTHWEST;
+		constraints.insets = new Insets(0, 0, 7, 7);
+		layoutPanel.add(component, constraints);
+	}
+
+	private void addRemainder(int x, int y)
+	{
+		GridBagConstraints constraints = new GridBagConstraints();
+		constraints.gridx = x;
+		constraints.gridy = y;
+		constraints.weightx = 1.0;
+		constraints.fill = GridBagConstraints.HORIZONTAL;
+		layoutPanel.add(new JPanel(), constraints);
+	}
+
+	private String categorySummary(AlertCategory category)
+	{
+		AlertBehavior behavior = alertProfiles.get(category).getBehavior();
+		String haptics;
+		switch (behavior)
+		{
+			case USE_GENERIC:
+				haptics = "Generic haptics";
+				break;
+			case CUSTOM:
+				haptics = "Custom haptics";
+				break;
+			case OFF:
+			default:
+				haptics = "Haptics off";
+				break;
+		}
+		StringBuilder summary = new StringBuilder(haptics)
+			.append(clickerAlertSettings.isEnabled(category) ? " · Click on" : " · Click off");
+		if (category.hasTriggerParameter())
+		{
+			summary.append(" · ")
+				.append(category.getTriggerParameter().getLabel())
+				.append(' ')
+				.append(triggerSettings.get(category));
+		}
+		return summary.toString();
+	}
+
+	private static JPanel host(Component component, int preferredWidth)
+	{
+		JPanel host = new WidthHintPanel(preferredWidth);
+		host.add(component, BorderLayout.NORTH);
+		return host;
+	}
+
+	private final class AlertCategoryRenderer extends JPanel
+		implements ListCellRenderer<AlertCategory>
+	{
+		private final JLabel title = new JLabel();
+		private final JLabel summary = new JLabel();
+
+		private AlertCategoryRenderer()
+		{
+			super(new BorderLayout(0, 1));
+			setBorder(BorderFactory.createEmptyBorder(4, 6, 4, 6));
+			title.setFont(title.getFont().deriveFont(Font.BOLD));
+			summary.setFont(summary.getFont().deriveFont(10f));
+			add(title, BorderLayout.NORTH);
+			add(summary, BorderLayout.SOUTH);
+		}
+
+		@Override
+		public Component getListCellRendererComponent(
+			JList<? extends AlertCategory> list,
+			AlertCategory value,
+			int index,
+			boolean selected,
+			boolean focused)
+		{
+			title.setText(value.getDisplayName());
+			summary.setText(categorySummary(value));
+			Color background = selected
+				? list.getSelectionBackground()
+				: list.getBackground();
+			Color foreground = selected
+				? list.getSelectionForeground()
+				: list.getForeground();
+			setBackground(background);
+			title.setForeground(foreground);
+			summary.setForeground(foreground);
+			setOpaque(true);
+			return this;
+		}
+	}
+
+	/** Width hint keeps wide layouts orderly while allowing dynamic editor height. */
+	private static final class WidthHintPanel extends JPanel
+	{
+		private final int preferredWidth;
+
+		private WidthHintPanel(int preferredWidth)
+		{
+			super(new BorderLayout());
+			this.preferredWidth = preferredWidth;
+		}
+
+		@Override
+		public Dimension getPreferredSize()
+		{
+			Dimension preferred = super.getPreferredSize();
+			return new Dimension(Math.max(preferredWidth, preferred.width), preferred.height);
+		}
 	}
 
 	private static LockableCheckBoxBinding binding(

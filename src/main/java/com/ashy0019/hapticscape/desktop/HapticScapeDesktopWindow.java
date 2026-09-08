@@ -95,6 +95,7 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 		);
 		pageScrollPane.setBorder(BorderFactory.createEmptyBorder());
 		pageScrollPane.setViewportView(panel);
+		pageScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
 		pageScrollPane.getVerticalScrollBar().setUnitIncrement(16);
 
 		sourceMessageLabel.setBorder(BorderFactory.createEmptyBorder(5, 8, 6, 8));
@@ -242,10 +243,6 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 		if (panel.isGenericNotificationClickEnabled())
 		{
 			runtime.playClick();
-		}
-		if (!settings.isEnabled())
-		{
-			return;
 		}
 		runtime.sendPattern(
 			HapticEventType.MANUAL_PREVIEW,

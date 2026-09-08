@@ -16,8 +16,13 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Graphics;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.GridLayout;
+import java.awt.Insets;
 import java.awt.Rectangle;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -37,17 +42,30 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.ListSelectionModel;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 
+/** Inline, responsive phrase-rule list and editor. */
 final class ClickerPhraseRulesPanel extends JPanel
 {
+	private static final int SIDE_BY_SIDE_BREAKPOINT = 620;
+
 	private final SettingsChangeSink settingsSink;
 	private final DefaultListModel<ClickerPhraseRule> ruleModel =
 		new DefaultListModel<>();
-	private final JList<ClickerPhraseRule> ruleList =
-		new JList<>(ruleModel);
-	private final JButton addButton = new JButton("Add");
-	private final JButton editButton = new JButton("Edit");
+	private final JList<ClickerPhraseRule> ruleList = new JList<>(ruleModel);
+	private final JButton addButton = new JButton("New rule");
 	private final JButton deleteButton = new JButton("Delete");
+	private final JLabel ruleCountLabel = new JLabel();
+	private final JLabel editorTitle = new JLabel("No rule selected");
+	private final JCheckBox editorEnabled = new JCheckBox("Enabled");
+	private final JComboBox<ClickerPhraseMatchMode> editorMode =
+		new JComboBox<>(ClickerPhraseMatchMode.values());
+	private final JTextArea editorExpression = new JTextArea(5, 28);
+	private final JButton saveButton = new JButton("Save rule");
+	private final JButton cancelButton = new JButton("Cancel");
+	private final JPanel editorPanel = new JPanel();
+	private final JPanel responsiveContent = new JPanel(new GridBagLayout());
 	private final SettingsLockDraft lockDraft;
 	private final SettingsLockService lockService;
 	private final RemoteSessionManager sessionManager;
@@ -56,6 +74,12 @@ final class ClickerPhraseRulesPanel extends JPanel
 
 	private volatile ClickerPhraseRules rules;
 	private boolean remoteReadOnly;
+	private boolean loadingEditor;
+	private boolean refreshingModel;
+	private boolean editingNewRule;
+	private boolean dirty;
+	private String selectionBeforeAddId;
+	private int layoutMode = -1;
 
 	ClickerPhraseRulesPanel(
 		HapticScapeSettingsSource config,
@@ -82,55 +106,34 @@ final class ClickerPhraseRulesPanel extends JPanel
 			);
 		}
 
-		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
-		setBorder(BorderFactory.createTitledBorder("Phrase clicks"));
-
-		JLabel description = new JLabel(
-			"Click when an incoming chat message matches a local rule."
-		);
+		setName("phraseRulesWorkspace");
+		setLayout(new BorderLayout(0, 5));
+		setBorder(BorderFactory.createTitledBorder("Phrase rules"));
+		JPanel heading = new JPanel(new BorderLayout(8, 0));
+		JLabel description = new JLabel("Click when an incoming chat message matches a rule.");
 		description.setToolTipText(
 			"Contains and Exact ignore case. Regex uses Java regular expressions."
 		);
-		PanelUi.addVerticalComponent(this, description);
+		heading.add(description, BorderLayout.CENTER);
+		heading.add(ruleCountLabel, BorderLayout.EAST);
+		add(heading, BorderLayout.NORTH);
 
-		ruleList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-		ruleList.setCellRenderer(new PhraseRuleRenderer());
-		JScrollPane scrollPane = new JScrollPane(ruleList);
-		scrollPane.setPreferredSize(new Dimension(0, 115));
-		scrollPane.setToolTipText(
-			"Regex uses find(). Use ^ and $ for a whole-message match, "
-				+ "or (?i) for case-insensitive regex. During Remote Play, "
-				+ "Shift-click a rule to select it for post-session locking."
-		);
-		PanelUi.addVerticalComponent(this, scrollPane);
-
-		JPanel buttons = new JPanel(new GridLayout(1, 3, 4, 0));
-		buttons.add(addButton);
-		buttons.add(editButton);
-		buttons.add(deleteButton);
-		PanelUi.addVerticalComponent(this, buttons);
-
-		ruleList.addListSelectionListener(event ->
-		{
-			if (!event.getValueIsAdjusting())
-			{
-				refreshEnabledState();
-			}
-		});
-		ruleList.addMouseListener(new MouseAdapter()
+		JPanel listPanel = createListPanel();
+		createEditorPanel();
+		add(responsiveContent, BorderLayout.CENTER);
+		addComponentListener(new ComponentAdapter()
 		{
 			@Override
-			public void mouseClicked(MouseEvent event)
+			public void componentResized(ComponentEvent event)
 			{
-				handleRuleShiftClick(event);
+				reflow(listPanel, editorPanel);
 			}
 		});
-		addButton.addActionListener(event -> addRule());
-		editButton.addActionListener(event -> editSelectedRule());
-		deleteButton.addActionListener(event -> deleteSelectedRule());
-		lockDraft.addListener(this::refreshLockState);
+		reflow(listPanel, editorPanel);
 
-		refreshModel();
+		configureListeners();
+		lockDraft.addListener(this::refreshLockState);
+		refreshModel(null);
 	}
 
 	ClickerPhraseRules getRules()
@@ -141,11 +144,14 @@ final class ClickerPhraseRulesPanel extends JPanel
 	void applyDisplayedRules(ClickerPhraseRules displayedRules)
 	{
 		rules = displayedRules;
-		refreshModel();
+		editingNewRule = false;
+		dirty = false;
+		refreshModel(selectedRuleId());
 	}
 
 	void setClickerEnabled(boolean enabled)
 	{
+		// Phrase rules remain editable while click output is off.
 		refreshEnabledState();
 	}
 
@@ -155,69 +161,201 @@ final class ClickerPhraseRulesPanel extends JPanel
 		refreshEnabledState();
 	}
 
-	private void addRule()
+	static int layoutModeForWidth(int width)
 	{
-		if (rules.getRules().size() >= ClickerPhraseRules.MAXIMUM_RULES)
+		return width >= SIDE_BY_SIDE_BREAKPOINT ? 2 : 1;
+	}
+
+	private JPanel createListPanel()
+	{
+		JPanel panel = new JPanel(new BorderLayout(0, 4));
+		panel.setBorder(BorderFactory.createTitledBorder("Rules"));
+		ruleList.setName("phraseRuleList");
+		ruleList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		ruleList.setCellRenderer(new PhraseRuleRenderer());
+		ruleList.setFixedCellHeight(29);
+		JScrollPane scrollPane = new JScrollPane(ruleList);
+		scrollPane.setPreferredSize(new Dimension(300, 210));
+		scrollPane.setToolTipText(
+			"Shift-click a rule during Remote Play to select its post-session lock."
+		);
+		panel.add(scrollPane, BorderLayout.CENTER);
+
+		JPanel buttons = new JPanel(new GridLayout(1, 2, 4, 0));
+		buttons.add(addButton);
+		buttons.add(deleteButton);
+		panel.add(buttons, BorderLayout.SOUTH);
+		return panel;
+	}
+
+	private void createEditorPanel()
+	{
+		editorPanel.setLayout(new BoxLayout(editorPanel, BoxLayout.Y_AXIS));
+		editorPanel.setBorder(BorderFactory.createTitledBorder("Rule editor"));
+		editorTitle.setBorder(BorderFactory.createEmptyBorder(2, 2, 4, 2));
+		PanelUi.addVerticalComponent(editorPanel, editorTitle);
+		PanelUi.addVerticalComponent(editorPanel, editorEnabled);
+		PanelUi.setFixedWidth(editorMode, PanelUi.SELECTOR_CONTROL_WIDTH);
+		PanelUi.addVerticalComponent(editorPanel, row("Match", editorMode));
+		PanelUi.addVerticalComponent(editorPanel, new JLabel("Phrase or regular expression"));
+		editorExpression.setLineWrap(false);
+		JScrollPane expressionScroll = new JScrollPane(editorExpression);
+		expressionScroll.setPreferredSize(new Dimension(330, 112));
+		PanelUi.addVerticalComponent(editorPanel, expressionScroll);
+		JLabel hint = new JLabel("Contains/Exact ignore case; Regex uses Java syntax.");
+		hint.setToolTipText(
+			"Regex uses find(). Add ^...$ for a whole-message match or (?i) for case-insensitive matching."
+		);
+		PanelUi.addVerticalComponent(editorPanel, hint);
+
+		JPanel actions = new JPanel(new GridLayout(1, 2, 4, 0));
+		actions.add(saveButton);
+		actions.add(cancelButton);
+		PanelUi.addVerticalComponent(editorPanel, actions);
+	}
+
+	private void configureListeners()
+	{
+		ruleList.addListSelectionListener(event ->
+		{
+			if (!event.getValueIsAdjusting() && !refreshingModel && !dirty)
+			{
+				editingNewRule = false;
+				loadEditor(ruleList.getSelectedValue(), false);
+			}
+		});
+		ruleList.addMouseListener(new MouseAdapter()
+		{
+			@Override
+			public void mouseClicked(MouseEvent event)
+			{
+				handleRuleShiftClick(event);
+			}
+		});
+		addButton.addActionListener(event -> startNewRule());
+		deleteButton.addActionListener(event -> deleteSelectedRule());
+		saveButton.addActionListener(event -> saveEditor());
+		cancelButton.addActionListener(event -> cancelEditor());
+		editorEnabled.addActionListener(event -> markDirty());
+		editorMode.addActionListener(event -> markDirty());
+		editorExpression.getDocument().addDocumentListener(new DocumentListener()
+		{
+			@Override
+			public void insertUpdate(DocumentEvent event)
+			{
+				markDirty();
+			}
+
+			@Override
+			public void removeUpdate(DocumentEvent event)
+			{
+				markDirty();
+			}
+
+			@Override
+			public void changedUpdate(DocumentEvent event)
+			{
+				markDirty();
+			}
+		});
+	}
+
+	private void startNewRule()
+	{
+		if (remoteReadOnly || rules.getRules().size() >= ClickerPhraseRules.MAXIMUM_RULES)
+		{
+			return;
+		}
+		selectionBeforeAddId = selectedRuleId();
+		editingNewRule = true;
+		dirty = true;
+		refreshingModel = true;
+		try
+		{
+			ruleList.clearSelection();
+		}
+		finally
+		{
+			refreshingModel = false;
+		}
+		loadEditor(null, true);
+		editorExpression.requestFocusInWindow();
+	}
+
+	private void saveEditor()
+	{
+		if (remoteReadOnly || !dirty)
+		{
+			return;
+		}
+		ClickerPhraseRule existing = editingNewRule ? null : ruleList.getSelectedValue();
+		SettingsLockTarget target = existing == null ? null : target(existing);
+		if (target != null && isPersistentlyLocked(target))
+		{
+			return;
+		}
+		try
+		{
+			ClickerPhraseMatchMode mode =
+				(ClickerPhraseMatchMode) editorMode.getSelectedItem();
+			ClickerPhraseRule updated = existing == null
+				? new ClickerPhraseRule(
+					editorEnabled.isSelected(),
+					mode,
+					editorExpression.getText()
+				)
+				: existing.withValues(
+					editorEnabled.isSelected(),
+					mode,
+					editorExpression.getText()
+				);
+			if (existing == null)
+			{
+				rules = rules.withAdded(updated);
+			}
+			else
+			{
+				rules = rules.withReplaced(ruleList.getSelectedIndex(), updated);
+			}
+			persist(target);
+			editingNewRule = false;
+			dirty = false;
+			selectionBeforeAddId = null;
+			refreshModel(updated.getId());
+		}
+		catch (IllegalArgumentException | IllegalStateException exception)
 		{
 			JOptionPane.showMessageDialog(
 				this,
-				"Maximum of "
-					+ ClickerPhraseRules.MAXIMUM_RULES
-					+ " phrase rules reached.",
-				"Phrase rules",
-				JOptionPane.WARNING_MESSAGE
+				exception.getMessage(),
+				"Invalid phrase rule",
+				JOptionPane.ERROR_MESSAGE
 			);
-			return;
 		}
-
-		ClickerPhraseRule rule = showRuleEditor(null);
-		if (rule == null)
-		{
-			return;
-		}
-
-		rules = rules.withAdded(rule);
-		persist(null);
-		refreshModel();
-		ruleList.setSelectedIndex(ruleModel.size() - 1);
 	}
 
-	private void editSelectedRule()
+	private void cancelEditor()
 	{
-		int index = ruleList.getSelectedIndex();
-		if (index < 0)
+		if (!dirty)
 		{
 			return;
 		}
-		ClickerPhraseRule existing = rules.getRules().get(index);
-		SettingsLockTarget target = target(existing);
-		if (isPersistentlyLocked(target))
-		{
-			return;
-		}
-
-		ClickerPhraseRule updated = showRuleEditor(
-			existing
-		);
-		if (updated == null)
-		{
-			return;
-		}
-
-		rules = rules.withReplaced(index, updated);
-		persist(target);
-		refreshModel();
-		ruleList.setSelectedIndex(index);
+		String restoreId = editingNewRule ? selectionBeforeAddId : selectedRuleId();
+		editingNewRule = false;
+		dirty = false;
+		selectionBeforeAddId = null;
+		refreshModel(restoreId);
 	}
 
 	private void deleteSelectedRule()
 	{
 		int index = ruleList.getSelectedIndex();
-		if (index < 0)
+		if (remoteReadOnly || dirty || index < 0)
 		{
 			return;
 		}
-		SettingsLockTarget target = target(rules.getRules().get(index));
+		ClickerPhraseRule selected = rules.getRules().get(index);
+		SettingsLockTarget target = target(selected);
 		if (isPersistentlyLocked(target))
 		{
 			return;
@@ -225,136 +363,94 @@ final class ClickerPhraseRulesPanel extends JPanel
 
 		rules = rules.withRemoved(index);
 		persist(target);
-		refreshModel();
+		String nextId = rules.getRules().isEmpty()
+			? null
+			: rules.getRules().get(Math.min(index, rules.getRules().size() - 1)).getId();
+		refreshModel(nextId);
 	}
 
-	private ClickerPhraseRule showRuleEditor(ClickerPhraseRule existing)
+	private void markDirty()
 	{
-		JCheckBox enabled = new JCheckBox(
-			"Enabled",
-			existing == null || existing.isEnabled()
-		);
-
-		JComboBox<ClickerPhraseMatchMode> mode =
-			new JComboBox<>(ClickerPhraseMatchMode.values());
-		if (existing != null)
+		if (loadingEditor)
 		{
-			mode.setSelectedItem(existing.getMode());
+			return;
 		}
-
-		JTextArea expression = new JTextArea(4, 24);
-		expression.setLineWrap(false);
-		if (existing != null)
-		{
-			expression.setText(existing.getExpression());
-		}
-
-		JScrollPane expressionScroll = new JScrollPane(expression);
-		expressionScroll.setPreferredSize(new Dimension(280, 85));
-
-		JLabel hint = new JLabel(
-			"Contains/Exact ignore case; Regex uses Java syntax."
-		);
-		hint.setToolTipText(
-			"Regex uses find(). Add ^...$ for whole-message matching "
-				+ "or (?i) for case-insensitive matching."
-		);
-
-		JPanel editor = new JPanel();
-		editor.setLayout(new BoxLayout(editor, BoxLayout.Y_AXIS));
-		PanelUi.addVerticalComponent(editor, enabled);
-		PanelUi.addVerticalComponent(editor, row("Match", mode));
-		PanelUi.addVerticalComponent(editor, new JLabel("Phrase / regex"));
-		PanelUi.addVerticalComponent(editor, expressionScroll);
-		PanelUi.addVerticalComponent(editor, hint);
-
-		while (true)
-		{
-			int result = JOptionPane.showConfirmDialog(
-				this,
-				editor,
-				existing == null
-					? "Add phrase rule"
-					: "Edit phrase rule",
-				JOptionPane.OK_CANCEL_OPTION,
-				JOptionPane.PLAIN_MESSAGE
-			);
-
-			if (result != JOptionPane.OK_OPTION)
-			{
-				return null;
-			}
-
-			try
-			{
-				ClickerPhraseMatchMode selectedMode =
-					(ClickerPhraseMatchMode) mode.getSelectedItem();
-				return existing == null
-					? new ClickerPhraseRule(
-						enabled.isSelected(),
-						selectedMode,
-						expression.getText()
-					)
-					: existing.withValues(
-						enabled.isSelected(),
-						selectedMode,
-						expression.getText()
-					);
-			}
-			catch (IllegalArgumentException exception)
-			{
-				JOptionPane.showMessageDialog(
-					this,
-					exception.getMessage(),
-					"Invalid phrase rule",
-					JOptionPane.ERROR_MESSAGE
-				);
-			}
-		}
-	}
-
-	private void refreshModel()
-	{
-		ClickerPhraseRule selectedRule = ruleList.getSelectedValue();
-		String selectedId = selectedRule == null ? null : selectedRule.getId();
-		ruleModel.clear();
-
-		for (ClickerPhraseRule rule : rules.getRules())
-		{
-			ruleModel.addElement(rule);
-		}
-
-		if (!ruleModel.isEmpty())
-		{
-			int selectedIndex = findRuleIndex(selectedId);
-			ruleList.setSelectedIndex(selectedIndex < 0 ? 0 : selectedIndex);
-		}
-
+		dirty = true;
 		refreshEnabledState();
+	}
+
+	private void loadEditor(ClickerPhraseRule rule, boolean newRule)
+	{
+		loadingEditor = true;
+		try
+		{
+			editorTitle.setText(newRule
+				? "New phrase rule"
+				: rule == null ? "No rule selected" : rule.toString());
+			editorEnabled.setSelected(rule == null || rule.isEnabled());
+			editorMode.setSelectedItem(
+				rule == null ? ClickerPhraseMatchMode.CONTAINS : rule.getMode()
+			);
+			editorExpression.setText(rule == null ? "" : rule.getExpression());
+			editorExpression.setCaretPosition(0);
+		}
+		finally
+		{
+			loadingEditor = false;
+		}
+		dirty = newRule;
+		refreshEnabledState();
+	}
+
+	private void refreshModel(String preferredId)
+	{
+		String selectedId = preferredId == null ? selectedRuleId() : preferredId;
+		refreshingModel = true;
+		try
+		{
+			ruleModel.clear();
+			for (ClickerPhraseRule rule : rules.getRules())
+			{
+				ruleModel.addElement(rule);
+			}
+			if (!ruleModel.isEmpty())
+			{
+				int selectedIndex = findRuleIndex(selectedId);
+				ruleList.setSelectedIndex(selectedIndex < 0 ? 0 : selectedIndex);
+			}
+			else
+			{
+				ruleList.clearSelection();
+			}
+		}
+		finally
+		{
+			refreshingModel = false;
+		}
+		ruleCountLabel.setText(
+			rules.getRules().size() + "/" + ClickerPhraseRules.MAXIMUM_RULES
+		);
+		loadEditor(ruleList.getSelectedValue(), false);
 	}
 
 	private void refreshEnabledState()
 	{
-		boolean selected = ruleList.getSelectedIndex() >= 0;
-		SettingsLockTarget selectedTarget = selected
-			? target(ruleList.getSelectedValue())
-			: null;
-		boolean selectedLocked = selectedTarget != null
-			&& isPersistentlyLocked(selectedTarget);
-		// Phrase rules remain independently configurable even while the clicker is off.
-		// A Click settings block lock must not become an indirect phrase-rule lock.
-		ruleList.setEnabled(true);
+		ClickerPhraseRule selected = ruleList.getSelectedValue();
+		boolean selectedLocked = selected != null && isPersistentlyLocked(target(selected));
+		boolean hasEditor = editingNewRule || selected != null;
+		boolean editorEditable = !remoteReadOnly && hasEditor && !selectedLocked;
+		ruleList.setEnabled(!dirty);
 		addButton.setEnabled(
 			!remoteReadOnly
-				&& rules.getRules().size()
-					< ClickerPhraseRules.MAXIMUM_RULES
+				&& !dirty
+				&& rules.getRules().size() < ClickerPhraseRules.MAXIMUM_RULES
 		);
-		editButton.setEnabled(
-			!remoteReadOnly && selected && !selectedLocked
-		);
-		deleteButton.setEnabled(
-			!remoteReadOnly && selected && !selectedLocked
-		);
+		deleteButton.setEnabled(!remoteReadOnly && !dirty && selected != null && !selectedLocked);
+		editorEnabled.setEnabled(editorEditable);
+		editorMode.setEnabled(editorEditable);
+		editorExpression.setEnabled(editorEditable);
+		saveButton.setEnabled(editorEditable && dirty);
+		cancelButton.setEnabled(dirty);
 	}
 
 	private void persist(SettingsLockTarget target)
@@ -368,7 +464,8 @@ final class ClickerPhraseRulesPanel extends JPanel
 
 	private void handleRuleShiftClick(MouseEvent event)
 	{
-		if ((event.getModifiersEx() & InputEvent.SHIFT_DOWN_MASK) == 0
+		if (dirty
+			|| (event.getModifiersEx() & InputEvent.SHIFT_DOWN_MASK) == 0
 			|| !editingRemoteSubject.getAsBoolean()
 			|| !lockSelectionEnabled.getAsBoolean())
 		{
@@ -394,6 +491,12 @@ final class ClickerPhraseRulesPanel extends JPanel
 	{
 		ruleList.repaint();
 		refreshEnabledState();
+	}
+
+	private String selectedRuleId()
+	{
+		ClickerPhraseRule selected = ruleList.getSelectedValue();
+		return selected == null ? null : selected.getId();
 	}
 
 	private int findRuleIndex(String id)
@@ -440,6 +543,47 @@ final class ClickerPhraseRulesPanel extends JPanel
 			return LockState.NONE;
 		}
 		return lockService.isLocked(target) ? LockState.PERSISTENT : LockState.NONE;
+	}
+
+	private void reflow(Component listPanel, Component editor)
+	{
+		int desired = layoutModeForWidth(getWidth());
+		if (desired == layoutMode)
+		{
+			return;
+		}
+		layoutMode = desired;
+		responsiveContent.removeAll();
+		if (layoutMode == 2)
+		{
+			addSection(listPanel, 0, 0, 0.46, GridBagConstraints.BOTH);
+			addSection(editor, 1, 0, 0.54, GridBagConstraints.BOTH);
+		}
+		else
+		{
+			addSection(listPanel, 0, 0, 1.0, GridBagConstraints.HORIZONTAL);
+			addSection(editor, 0, 1, 1.0, GridBagConstraints.HORIZONTAL);
+		}
+		responsiveContent.revalidate();
+		responsiveContent.repaint();
+	}
+
+	private void addSection(
+		Component component,
+		int x,
+		int y,
+		double weightX,
+		int fill)
+	{
+		GridBagConstraints constraints = new GridBagConstraints();
+		constraints.gridx = x;
+		constraints.gridy = y;
+		constraints.weightx = weightX;
+		constraints.weighty = 1.0;
+		constraints.fill = fill;
+		constraints.anchor = GridBagConstraints.NORTHWEST;
+		constraints.insets = new Insets(0, 0, 0, x == 0 && layoutMode == 2 ? 6 : 0);
+		responsiveContent.add(component, constraints);
 	}
 
 	private enum LockState
@@ -523,7 +667,7 @@ final class ClickerPhraseRulesPanel extends JPanel
 		}
 	}
 
-	private static JPanel row(String name, java.awt.Component control)
+	private static JPanel row(String name, Component control)
 	{
 		JPanel row = new JPanel(new BorderLayout(8, 0));
 		row.add(new JLabel(name), BorderLayout.CENTER);

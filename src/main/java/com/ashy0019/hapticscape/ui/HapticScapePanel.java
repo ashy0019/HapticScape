@@ -8,7 +8,6 @@ import com.ashy0019.hapticscape.CustomPatternLibrary;
 import com.ashy0019.hapticscape.HapticPatternSelection;
 import com.ashy0019.hapticscape.HapticScapeSettingKeys;
 import com.ashy0019.hapticscape.HapticScapeSettingsSource;
-import com.ashy0019.hapticscape.HapticScapeSettingKeys;
 import com.ashy0019.hapticscape.NotificationFeedbackSettings;
 import com.ashy0019.hapticscape.SkillCatalog;
 import com.ashy0019.hapticscape.SkillFeedbackProfiles;
@@ -55,6 +54,7 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
+import java.awt.Rectangle;
 import java.awt.event.InputEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -76,21 +76,23 @@ import javax.swing.JScrollPane;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
+import javax.swing.Scrollable;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 
 public final class HapticScapePanel extends JPanel
-	implements RemoteSessionListener, SettingsLockListener
+	implements RemoteSessionListener, SettingsLockListener, Scrollable
 {
 	private static final int DEVELOPER_UNLOCK_CLICKS = 9;
 	private static final long DEVELOPER_UNLOCK_WINDOW_NANOS = TimeUnit.SECONDS.toNanos(4);
 	private static final String NORMAL_CARD = "normal";
-	private static final String REMOTE_CARD = "remote";
 	private static final String ROGUE_CARD = "rogue";
-	private static final String LOCAL_FEEDBACK_CARD = "localFeedback";
-	private static final String REMOTE_FEEDBACK_CARD = "remoteFeedback";
+	private static final String GAMEPLAY_WORKSPACE = "gameplay";
+	private static final String PATTERNS_WORKSPACE = "patterns";
+	private static final String REMOTE_WORKSPACE = "remote";
+	private static final String SETTINGS_WORKSPACE = "settings";
 	private static final int MINE_WORKSPACE_INDEX = 0;
 	private static final int SUBJECT_WORKSPACE_INDEX = 1;
 	private static final String SETTINGS_LOCKED_MESSAGE =
@@ -107,8 +109,6 @@ public final class HapticScapePanel extends JPanel
 	private final JTabbedPane tabs;
 	private final CardLayout contentLayout = new CardLayout();
 	private final JPanel contentHost = new JPanel(contentLayout);
-	private final CardLayout feedbackLayout = new CardLayout();
-	private final JPanel feedbackHost = new JPanel(feedbackLayout);
 	private final JTabbedPane controllerWorkspaceTabs = new JTabbedPane(JTabbedPane.TOP);
 	private final JLabel statusLabel = new JLabel("Disconnected", SwingConstants.CENTER);
 	private final DefaultListModel<DeviceInfo> deviceModel = new DefaultListModel<>();
@@ -120,9 +120,6 @@ public final class HapticScapePanel extends JPanel
 	private final JButton resetRogueDiscoveryButton = new JButton("Reset Rogue");
 	private final JButton clearSettingsLockButton = new JButton("Clear settings lock");
 	private final JButton stopButton = new JButton("Stop now");
-	private final JButton updatesButton = new JButton("Updates");
-	private final JButton remoteButton = new JButton("Remote Control");
-	private final JButton remoteBackButton = new JButton("Back to HapticScape");
 	private final JPanel settingsLockBanner = new JPanel(new BorderLayout(6, 0));
 	private final JLabel settingsLockLabel = new JLabel(SETTINGS_LOCKED_MESSAGE);
 	private final JButton unlockSettingsButton = new JButton("Unlock");
@@ -159,6 +156,8 @@ public final class HapticScapePanel extends JPanel
 	private final LockableCheckBoxBinding level99LockBinding;
 	private final LockableSectionHeader feedbackBlockHeader;
 	private final RemoteControlPanel remoteControlPanel;
+	private final ForgeWorkspacePanel forgeWorkspacePanel;
+	private final WorkspaceShell workspaceShell = new WorkspaceShell();
 	private final JScrollPane pageScrollPane;
 	private final GlobalUiHooks.Registration pageScrollRouting;
 	private final SidebarActionFocusGuard sidebarActionFocusGuard;
@@ -236,10 +235,6 @@ public final class HapticScapePanel extends JPanel
 		setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
 		statusLabel.setBorder(BorderFactory.createEmptyBorder(4, 2, 4, 2));
-		updatesButton.setMargin(new java.awt.Insets(2, 5, 2, 5));
-		updatesButton.setToolTipText("Configure HapticScape client updates");
-		remoteButton.setText("Remote Play");
-		remoteButton.setToolTipText("Create or join an opt-in encrypted Remote Play session");
 		developerStatusTimer = new Timer(1600, event ->
 			statusLabel.setText(latestConnectionSnapshot.getMessage()));
 		developerStatusTimer.setRepeats(false);
@@ -422,6 +417,15 @@ public final class HapticScapePanel extends JPanel
 			this::isLockSelectionEnabled
 		);
 		updatesPanel = new UpdatesPanel(updatePreferencesStore, updateCheckService);
+		RemoteLiveForgePanel liveForgePanel = new RemoteLiveForgePanel(
+			remoteSessionManager,
+			globalUiHooks
+		);
+		forgeWorkspacePanel = new ForgeWorkspacePanel(
+			customPatternsPanel,
+			liveForgePanel,
+			remoteSessionManager
+		);
 		remoteControlPanel = new RemoteControlPanel(
 			config,
 			settingsStore,
@@ -431,22 +435,27 @@ public final class HapticScapePanel extends JPanel
 			remoteSessionManager,
 			remotePairingService,
 			discordPairingBridge,
-			settingsLockDraft
+			settingsLockDraft,
+			this::openSubjectSettings,
+			this::openLiveForge
 		);
 		roguePanel = new RoguePanel(settingsStore, rogueFeedbackAction);
 		rogueLauncher = new RogueLauncherPanel(this::toggleRogueView);
 
 		tabs = new JTabbedPane(JTabbedPane.TOP, JTabbedPane.SCROLL_TAB_LAYOUT);
+		tabs.setName("gameplayWorkspaceTabs");
 		tabs.putClientProperty(
 			"FlatLaf.style",
 			"tabInsets: 2,1,2,1; tabHeight: 26; tabAreaAlignment: center"
 		);
-		PanelUi.addCompactTab(tabs, "Skills", skillsPanel);
-		PanelUi.addCompactTab(tabs, "XP", profilesPanel);
+		JPanel xpAndSkills = new XpSkillsWorkspacePanel(
+			settingsPanel,
+			skillsPanel,
+			profilesPanel
+		);
+		PanelUi.addCompactTab(tabs, "XP + Skills", xpAndSkills);
 		PanelUi.addCompactTab(tabs, "Alerts", alertsPanel);
-		PanelUi.addCompactTab(tabs, "Forge", customPatternsPanel);
-		PanelUi.addCompactTab(tabs, "Music", musicPanel);
-		PanelUi.addCompactTab(tabs, "Click", clickerPanel);
+		PanelUi.addCompactTab(tabs, "Clicks + Phrases", clickerPanel);
 		JPanel topPanel = new JPanel();
 		topPanel.setLayout(new BoxLayout(topPanel, BoxLayout.Y_AXIS));
 		PanelUi.addVerticalComponent(topPanel, statusLabel);
@@ -490,24 +499,9 @@ public final class HapticScapePanel extends JPanel
 				);
 			}
 		});
-		PanelUi.addVerticalComponent(topPanel, controllerWorkspaceTabs);
-
-		JPanel localFeedback = new JPanel();
-		localFeedback.setLayout(new BoxLayout(localFeedback, BoxLayout.Y_AXIS));
-		PanelUi.addVerticalComponent(localFeedback, settingsPanel);
-		PanelUi.addFlexibleVerticalComponent(localFeedback, tabs);
-
-		JPanel remoteFeedback = new JPanel(new BorderLayout());
-		remoteFeedback.setBorder(BorderFactory.createTitledBorder("Feedback settings"));
-		JLabel remoteFeedbackLabel = new JLabel(
-			"<html><center>Settings are controlled by the paired controller.<br>"
-				+ "Intiface connection and Emergency Off remain local.</center></html>",
-			SwingConstants.CENTER
-		);
-		remoteFeedback.add(remoteFeedbackLabel, BorderLayout.CENTER);
-		feedbackHost.add(localFeedback, LOCAL_FEEDBACK_CARD);
-		feedbackHost.add(remoteFeedback, REMOTE_FEEDBACK_CARD);
-		PanelUi.addFlexibleVerticalComponent(topPanel, feedbackHost);
+		// The legacy controller-workspace selector remains as internal state only.
+		// Primary navigation selects local settings; Remote Play explicitly opens
+		// subject settings when requested.
 
 		JList<DeviceInfo> deviceList = new JList<>(deviceModel);
 		JScrollPane scrollPane = new JScrollPane(deviceList);
@@ -537,45 +531,51 @@ public final class HapticScapePanel extends JPanel
 			musicPanel.disableMusicSync();
 			stopAction.run();
 		});
-		remoteButton.addActionListener(event -> showRemoteView());
-		remoteBackButton.addActionListener(event -> showNormalView());
 		remoteEmergencyButton.addActionListener(event -> remoteSessionManager.emergencyPause());
 		remoteResumeButton.addActionListener(event -> remoteSessionManager.resumeParticipant());
 		remoteEndButton.addActionListener(event -> remoteSessionManager.endSession());
 
-		updatesButton.addActionListener(event -> JOptionPane.showMessageDialog(
-			this,
-			updatesPanel,
-			"HapticScape updates",
-			JOptionPane.PLAIN_MESSAGE));
-
-		JPanel primaryButtons = new JPanel(new GridLayout(2, 2, 6, 6));
-		primaryButtons.add(connectButton);
-		primaryButtons.add(disconnectButton);
+		JPanel primaryButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
 		primaryButtons.add(testButton);
 		primaryButtons.add(stopButton);
 
-		JPanel buttons = new JPanel();
-		buttons.setLayout(new BoxLayout(buttons, BoxLayout.Y_AXIS));
-		PanelUi.addVerticalComponent(buttons, primaryButtons);
-		PanelUi.addVerticalComponent(buttons, updatesButton);
+		JPanel deviceSettings = new JPanel(new BorderLayout(0, 6));
+		deviceSettings.setBorder(BorderFactory.createTitledBorder("Intiface devices"));
+		deviceSettings.add(scrollPane, BorderLayout.CENTER);
+		JPanel deviceButtons = new JPanel(new GridLayout(1, 2, 4, 0));
+		deviceButtons.add(connectButton);
+		deviceButtons.add(disconnectButton);
+		deviceSettings.add(deviceButtons, BorderLayout.SOUTH);
+
+		JPanel settingsWorkspace = new ResponsiveColumnsPanel(
+			deviceSettings,
+			updatesPanel,
+			developerControlsRow
+		);
+
+		JTabbedPane patternTabs = new JTabbedPane(JTabbedPane.TOP);
+		patternTabs.setName("patternsWorkspaceTabs");
+		patternTabs.addTab("Forge", forgeWorkspacePanel);
+		patternTabs.addTab("Music Sync", musicPanel);
+
+		workspaceShell.addWorkspace(GAMEPLAY_WORKSPACE, "Gameplay", tabs);
+		workspaceShell.addWorkspace(PATTERNS_WORKSPACE, "Patterns + Audio", patternTabs);
+		workspaceShell.addWorkspace(REMOTE_WORKSPACE, "Remote Play", remoteControlPanel);
+		workspaceShell.addWorkspace(SETTINGS_WORKSPACE, "Settings", settingsWorkspace);
+		workspaceShell.setUserSelectionAction(this::handleWorkspaceSelected);
 
 		JPanel normalContent = new JPanel(new BorderLayout(0, 8));
 		normalContent.add(topPanel, BorderLayout.NORTH);
-		normalContent.add(scrollPane, BorderLayout.CENTER);
-		normalContent.add(buttons, BorderLayout.SOUTH);
+		normalContent.add(workspaceShell, BorderLayout.CENTER);
+		JPanel statusBar = new JPanel(new BorderLayout(8, 0));
+		statusBar.add(statusLabel, BorderLayout.CENTER);
+		statusBar.add(primaryButtons, BorderLayout.EAST);
+		normalContent.add(statusBar, BorderLayout.SOUTH);
 
 		JPanel normalView = new JPanel(new BorderLayout(0, 6));
-		normalView.add(remoteButton, BorderLayout.NORTH);
 		normalView.add(normalContent, BorderLayout.CENTER);
 
-		JPanel remoteView = new JPanel(new BorderLayout(0, 6));
-		remoteBackButton.setToolTipText("Return to the main HapticScape controls");
-		remoteView.add(remoteBackButton, BorderLayout.NORTH);
-		remoteView.add(remoteControlPanel, BorderLayout.CENTER);
-
 		contentHost.add(normalView, NORMAL_CARD);
-		contentHost.add(remoteView, REMOTE_CARD);
 		contentHost.add(roguePanel, ROGUE_CARD);
 		add(rogueLauncher, BorderLayout.NORTH);
 		add(contentHost, BorderLayout.CENTER);
@@ -600,6 +600,44 @@ public final class HapticScapePanel extends JPanel
 	public int getIntensityPercent()
 	{
 		return intensityPercent;
+	}
+
+	@Override
+	public Dimension getPreferredScrollableViewportSize()
+	{
+		return getPreferredSize();
+	}
+
+	@Override
+	public int getScrollableUnitIncrement(
+		Rectangle visibleRect,
+		int orientation,
+		int direction)
+	{
+		return 16;
+	}
+
+	@Override
+	public int getScrollableBlockIncrement(
+		Rectangle visibleRect,
+		int orientation,
+		int direction)
+	{
+		return Math.max(16, orientation == SwingConstants.VERTICAL
+			? visibleRect.height - 16
+			: visibleRect.width - 16);
+	}
+
+	@Override
+	public boolean getScrollableTracksViewportWidth()
+	{
+		return true;
+	}
+
+	@Override
+	public boolean getScrollableTracksViewportHeight()
+	{
+		return false;
 	}
 
 	public void showDiscordRemoteView()
@@ -1081,6 +1119,7 @@ public final class HapticScapePanel extends JPanel
 		remoteSessionManager.removeListener(this);
 		settingsLockService.removeListener(this);
 		remoteControlPanel.close();
+		forgeWorkspacePanel.close();
 		developerStatusTimer.stop();
 		rogueKeyHook.close();
 		roguePanel.close();
@@ -1176,11 +1215,38 @@ public final class HapticScapePanel extends JPanel
 
 	private void showRemoteView()
 	{
-		rogueViewActive = false;
-		contentLayout.show(contentHost, REMOTE_CARD);
-		rogueLauncher.setActive(false);
-		contentHost.revalidate();
-		contentHost.repaint();
+		showNormalView();
+		forgeWorkspacePanel.leaveWorkspace();
+		workspaceShell.showWorkspace(REMOTE_WORKSPACE);
+	}
+
+	private void openLiveForge()
+	{
+		selectControllerWorkspace(false);
+		showNormalView();
+		forgeWorkspacePanel.showLive();
+		workspaceShell.showWorkspace(PATTERNS_WORKSPACE);
+	}
+
+	private void openSubjectSettings()
+	{
+		selectControllerWorkspace(true);
+		showNormalView();
+		workspaceShell.showWorkspace(GAMEPLAY_WORKSPACE);
+	}
+
+	private void handleWorkspaceSelected(String workspace)
+	{
+		if (!PATTERNS_WORKSPACE.equals(workspace))
+		{
+			forgeWorkspacePanel.leaveWorkspace();
+		}
+		if (GAMEPLAY_WORKSPACE.equals(workspace)
+			|| PATTERNS_WORKSPACE.equals(workspace)
+			|| SETTINGS_WORKSPACE.equals(workspace))
+		{
+			selectControllerWorkspace(false);
+		}
 	}
 
 	private void resetRogueDiscovery()
@@ -1678,7 +1744,6 @@ public final class HapticScapePanel extends JPanel
 		// Keep the normal HapticScape UI visible during Remote Control. The
 		// participant can navigate it and watch remote values change, but cannot
 		// mutate remotely authoritative feedback settings.
-		feedbackLayout.show(feedbackHost, LOCAL_FEEDBACK_CARD);
 		if (!participantControlled
 			&& !(controllerSession && subjectWorkspaceSelected && subjectAvailable))
 		{
