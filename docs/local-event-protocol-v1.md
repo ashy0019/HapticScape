@@ -162,3 +162,25 @@ longer valid:
 The v1 protocol intentionally contains no HapticScape-to-source gameplay action
 message. Adding source-control behavior requires a separate protocol and is not
 an extension of this event contract.
+
+## Delivery and reconnect semantics
+
+Source implementations must keep network connection and framing work off the
+source application's event/callback threads.
+
+The v1 delivery model intentionally distinguishes transient events from state:
+
+- `event` is best-effort and at-most-once. It is not queued while disconnected
+  and is not replayed after reconnect.
+- current values for state-capable event families are retained as the latest
+  snapshot for each state key. Repeated updates may be coalesced while
+  disconnected; the transient `event` edge itself is still dropped.
+- after every successful reconnect, the source sends `reset` before replaying
+  its retained current `state` snapshots.
+- a bounded transient-event queue must be used while connected. Queue pressure
+  drops transient events rather than blocking the source application.
+
+Because transient events are never retried or replayed, v1 does not require
+message sequence numbers or delivery acknowledgements. A TCP connection is the
+transport session boundary; reconnect creates a fresh negotiated session and
+state is re-established with `reset` plus current snapshots.

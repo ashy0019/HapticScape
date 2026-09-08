@@ -88,7 +88,12 @@ public class HapticScapeRuntimeTest
                 EnumSet.allOf(SourceCapability.class),
                 runtime.getGameplayTransportPort()))
             {
-                // Constructor performs the real transport hello/ack handshake.
+                long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+                while (!transport.isConnected() && System.nanoTime() < deadline)
+                {
+                    Thread.sleep(25L);
+                }
+                assertTrue(transport.isConnected());
             }
         }
         finally
