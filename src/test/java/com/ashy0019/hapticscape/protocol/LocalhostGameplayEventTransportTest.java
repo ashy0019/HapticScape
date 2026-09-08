@@ -32,7 +32,7 @@ public class LocalhostGameplayEventTransportTest
 			new LocalhostGameplayEventServer(codec, downstream, 0);
 			 LocalhostGameplayEventTransport transport =
 				 new LocalhostGameplayEventTransport(
-					"runelite",
+					"test-source",
 					codec,
 					EnumSet.allOf(SourceCapability.class),
 					server.getPort()
@@ -42,10 +42,10 @@ public class LocalhostGameplayEventTransportTest
 			assertTrue(awaitConnected(transport));
 
 			transport.onXpEvent(new XpEvent(
-				"runelite", "WOODCUTTING", 100, 120, 20, 1, 2
+				"test-source", "WOODCUTTING", 100, 120, 20, 1, 2
 			));
-			transport.seedInventory(new InventoryChangedEvent("runelite", 12, 28));
-			transport.onPlayerDeathEvent(new PlayerDeathEvent("runelite"));
+			transport.seedInventory(new InventoryChangedEvent("test-source", 12, 28));
+			transport.onPlayerDeathEvent(new PlayerDeathEvent("test-source"));
 
 			assertTrue(downstream.await());
 			assertEquals("woodcutting", downstream.xp.getSkillId());
@@ -62,15 +62,15 @@ public class LocalhostGameplayEventTransportTest
 		int port = unusedLoopbackPort();
 		try (LocalhostGameplayEventTransport transport =
 			new LocalhostGameplayEventTransport(
-				"runelite",
+				"test-source",
 				codec,
 				EnumSet.allOf(SourceCapability.class),
 				port
 			))
 		{
-			transport.seedInventory(new InventoryChangedEvent("runelite", 5, 28));
-			transport.seedInventory(new InventoryChangedEvent("runelite", 17, 28));
-			transport.onPlayerDeathEvent(new PlayerDeathEvent("runelite"));
+			transport.seedInventory(new InventoryChangedEvent("test-source", 5, 28));
+			transport.seedInventory(new InventoryChangedEvent("test-source", 17, 28));
+			transport.onPlayerDeathEvent(new PlayerDeathEvent("test-source"));
 			assertFalse(transport.isConnected());
 
 			RecordingSink downstream = new RecordingSink(2);
@@ -97,26 +97,26 @@ public class LocalhostGameplayEventTransportTest
 
 		try (LocalhostGameplayEventTransport transport =
 			new LocalhostGameplayEventTransport(
-				"runelite",
+				"test-source",
 				codec,
 				EnumSet.allOf(SourceCapability.class),
 				port
 			))
 		{
 			assertTrue(awaitConnected(transport));
-			transport.seedInventory(new InventoryChangedEvent("runelite", 12, 28));
+			transport.seedInventory(new InventoryChangedEvent("test-source", 12, 28));
 			assertTrue(firstSink.await());
 			firstServer.close();
 
 			for (int i = 0; i < 20 && transport.isConnected(); i++)
 			{
-				transport.onPlayerDeathEvent(new PlayerDeathEvent("runelite"));
+				transport.onPlayerDeathEvent(new PlayerDeathEvent("test-source"));
 				Thread.sleep(50L);
 			}
 			assertTrue(awaitDisconnected(transport));
 
-			transport.onPlayerDeathEvent(new PlayerDeathEvent("runelite"));
-			transport.onInventoryEvent(new InventoryChangedEvent("runelite", 19, 28));
+			transport.onPlayerDeathEvent(new PlayerDeathEvent("test-source"));
+			transport.onInventoryEvent(new InventoryChangedEvent("test-source", 19, 28));
 			RecordingSink secondSink = new RecordingSink(2);
 			try (LocalhostGameplayEventServer secondServer =
 				new LocalhostGameplayEventServer(codec, secondSink, port))

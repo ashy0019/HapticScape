@@ -16,42 +16,28 @@ import javax.swing.JScrollPane;
 import javax.swing.JSlider;
 import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
-import net.runelite.client.ui.PluginPanel;
 import org.junit.Test;
 
 public class AwtGlobalUiHooksTest
 {
 	@Test
-	public void routesToTheScrollPaneOwnedByRuneLitePluginPanel() throws Exception
+	public void routesToTheSuppliedHostScrollPane() throws Exception
 	{
 		onEdt(() ->
 		{
-			TestPluginPanel panel = new TestPluginPanel();
-			panel.setLayout(null);
-			panel.setPreferredSize(new Dimension(PluginPanel.PANEL_WIDTH, 1_000));
+			JPanel page = tallPage();
 			JButton control = new JButton("Control");
 			control.setBounds(10, 150, 120, 25);
-			panel.add(control);
-
-			JScrollPane runeLiteScroll = panel.runeLiteScrollPane();
-			runeLiteScroll.setSize(
-				PluginPanel.PANEL_WIDTH + PluginPanel.SCROLLBAR_WIDTH,
-				200
-			);
-			runeLiteScroll.doLayout();
-			runeLiteScroll.getViewport().setViewSize(new Dimension(
-				PluginPanel.PANEL_WIDTH,
-				1_000
-			));
-			runeLiteScroll.getVerticalScrollBar().setValue(100);
+			page.add(control);
+			JScrollPane hostScroll = pageScroll(page);
 
 			try (GlobalUiHooks.Registration ignored =
-				new AwtGlobalUiHooks().installSidebarScrollRouting(runeLiteScroll, panel))
+				new AwtGlobalUiHooks().installSidebarScrollRouting(hostScroll, page))
 			{
-				int before = runeLiteScroll.getVerticalScrollBar().getValue();
+				int before = hostScroll.getVerticalScrollBar().getValue();
 				control.dispatchEvent(wheel(control, 1));
 
-				assertTrue(runeLiteScroll.getVerticalScrollBar().getValue() > before);
+				assertTrue(hostScroll.getVerticalScrollBar().getValue() > before);
 			}
 			return null;
 		});
@@ -243,11 +229,4 @@ public class AwtGlobalUiHooksTest
 		return result.get();
 	}
 
-	private static final class TestPluginPanel extends PluginPanel
-	{
-		private JScrollPane runeLiteScrollPane()
-		{
-			return getScrollPane();
-		}
-	}
 }

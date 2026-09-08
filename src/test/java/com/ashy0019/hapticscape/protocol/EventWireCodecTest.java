@@ -27,27 +27,27 @@ public class EventWireCodecTest
 	public void roundTripsEveryEventFamily()
 	{
 		List<HapticScapeEvent> events = Arrays.asList(
-			new XpEvent("runelite", "WOODCUTTING", 1_000, 1_420, 420, 9, 10),
+			new XpEvent("test-source", "WOODCUTTING", 1_000, 1_420, 420, 9, 10),
 			new ChatEvent(
-				"runelite",
+				"test-source",
 				ChatEvent.Kind.DIRECT_MESSAGE,
 				"<col=ffffff>Hello</col>",
 				"Hello"
 			),
-			new PlayerDeathEvent("runelite"),
+			new PlayerDeathEvent("test-source"),
 			new VitalsChangedEvent(
-				"runelite",
+				"test-source",
 				VitalsChangedEvent.Kind.HITPOINTS,
 				17,
 				99
 			),
-			new InventoryChangedEvent("runelite", 28, 28),
+			new InventoryChangedEvent("test-source", 28, 28),
 			new ToxicStatusChangedEvent(
-				"runelite",
+				"test-source",
 				ToxicStatusChangedEvent.Status.VENOMED
 			),
-			new LootReceivedEvent("runelite", 2, 1_500_000L),
-			new NotificationEvent("runelite", true, false)
+			new LootReceivedEvent("test-source", 2, 1_500_000L),
+			new NotificationEvent("test-source", true, false)
 		);
 
 		for (HapticScapeEvent event : events)
@@ -60,12 +60,12 @@ public class EventWireCodecTest
 	@Test
 	public void writesStableVersionedEnvelope()
 	{
-		String json = codec.encode(new PlayerDeathEvent("runelite"));
+		String json = codec.encode(new PlayerDeathEvent("test-source"));
 		JsonObject root = new JsonParser().parse(json).getAsJsonObject();
 
 		assertEquals(EventProtocol.NAME, root.get("protocol").getAsString());
 		assertEquals(EventProtocol.VERSION, root.get("version").getAsInt());
-		assertEquals("runelite", root.get("source").getAsString());
+		assertEquals("test-source", root.get("source").getAsString());
 		assertEquals(PlayerDeathEvent.TYPE, root.get("type").getAsString());
 		assertTrue(root.get("payload").getAsJsonObject().entrySet().isEmpty());
 	}
@@ -74,19 +74,19 @@ public class EventWireCodecTest
 	public void wireEnumsAreExplicitAndLowercase()
 	{
 		JsonObject chat = payload(codec.encode(new ChatEvent(
-			"runelite",
+			"test-source",
 			ChatEvent.Kind.TRADE_REQUEST,
 			"trade",
 			"trade"
 		)));
 		JsonObject vitals = payload(codec.encode(new VitalsChangedEvent(
-			"runelite",
+			"test-source",
 			VitalsChangedEvent.Kind.SPECIAL_ATTACK,
 			75,
 			100
 		)));
 		JsonObject toxic = payload(codec.encode(new ToxicStatusChangedEvent(
-			"runelite",
+			"test-source",
 			ToxicStatusChangedEvent.Status.POISONED
 		)));
 
@@ -99,28 +99,28 @@ public class EventWireCodecTest
 	public void rejectsWrongProtocol()
 	{
 		codec.decode("{\"protocol\":\"something-else\",\"version\":1,"
-			+ "\"source\":\"runelite\",\"type\":\"actor.death\",\"payload\":{}}");
+			+ "\"source\":\"test-source\",\"type\":\"actor.death\",\"payload\":{}}");
 	}
 
 	@Test(expected = EventProtocolException.class)
 	public void rejectsFutureVersion()
 	{
 		codec.decode("{\"protocol\":\"hapticscape-local-events\",\"version\":2,"
-			+ "\"source\":\"runelite\",\"type\":\"actor.death\",\"payload\":{}}");
+			+ "\"source\":\"test-source\",\"type\":\"actor.death\",\"payload\":{}}");
 	}
 
 	@Test(expected = EventProtocolException.class)
 	public void rejectsUnknownEventType()
 	{
 		codec.decode("{\"protocol\":\"hapticscape-local-events\",\"version\":1,"
-			+ "\"source\":\"runelite\",\"type\":\"future_magic\",\"payload\":{}}");
+			+ "\"source\":\"test-source\",\"type\":\"future_magic\",\"payload\":{}}");
 	}
 
 	@Test(expected = EventProtocolException.class)
 	public void rejectsMissingRequiredPayloadField()
 	{
 		codec.decode("{\"protocol\":\"hapticscape-local-events\",\"version\":1,"
-			+ "\"source\":\"runelite\",\"type\":\"inventory.occupancy\","
+			+ "\"source\":\"test-source\",\"type\":\"inventory.occupancy\","
 			+ "\"payload\":{\"filledSlots\":28}}");
 	}
 
@@ -128,7 +128,7 @@ public class EventWireCodecTest
 	public void rejectsWrongPayloadFieldType()
 	{
 		codec.decode("{\"protocol\":\"hapticscape-local-events\",\"version\":1,"
-			+ "\"source\":\"runelite\",\"type\":\"notification.emitted\","
+			+ "\"source\":\"test-source\",\"type\":\"notification.emitted\","
 			+ "\"payload\":{\"sourceFocused\":\"true\",\"sendWhenFocused\":false}}");
 	}
 

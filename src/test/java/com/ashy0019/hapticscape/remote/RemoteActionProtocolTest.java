@@ -1,11 +1,13 @@
 package com.ashy0019.hapticscape.remote;
 
+import com.ashy0019.hapticscape.HapticScapeSettingKeys;
+import com.ashy0019.hapticscape.TestHapticScapeSettings;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
-import com.ashy0019.hapticscape.HapticScapeConfig;
 import com.google.gson.Gson;
 import java.time.Clock;
 import java.time.Instant;
@@ -65,7 +67,7 @@ public class RemoteActionProtocolTest
 
 			assertEquals(participantPermissions, controller.getPeerPermissions());
 			assertFalse(controller.updateControllerSetting(
-				HapticScapeConfig.INTENSITY_PERCENT_KEY,
+				HapticScapeSettingKeys.INTENSITY_PERCENT,
 				80
 			));
 
@@ -130,7 +132,7 @@ public class RemoteActionProtocolTest
 			participant.updateLocalPermissions(enabled);
 			assertEquals(enabled, controller.getPeerPermissions());
 			assertTrue(controller.updateControllerSetting(
-				HapticScapeConfig.INTENSITY_PERCENT_KEY,
+				HapticScapeSettingKeys.INTENSITY_PERCENT,
 				75
 			));
 		}
@@ -352,7 +354,7 @@ public class RemoteActionProtocolTest
 		}
 	}
 
-	private static final class MutableConfig implements HapticScapeConfig
+	private static final class MutableConfig extends TestHapticScapeSettings
 	{
 		private int intensity;
 

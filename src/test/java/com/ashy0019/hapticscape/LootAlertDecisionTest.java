@@ -20,7 +20,7 @@ public class LootAlertDecisionTest
 	public void emptyLootBatchNeverAlerts()
 	{
 		assertFalse(LootAlertDecision.shouldAlert(
-			new LootReceivedEvent("runelite", 0, 0L),
+			new LootReceivedEvent("test-source", 0, 0L),
 			0L
 		));
 	}
@@ -36,6 +36,6 @@ public class LootAlertDecisionTest
 
 	private static LootReceivedEvent event(long totalValue)
 	{
-		return new LootReceivedEvent("runelite", 1, totalValue);
+		return new LootReceivedEvent("test-source", 1, totalValue);
 	}
 }

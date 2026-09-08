@@ -24,22 +24,22 @@ public class InProcessWireGameplayEventTransportTest
 		RecordingSink downstream = new RecordingSink();
 		InProcessWireGameplayEventTransport transport = transport(downstream);
 
-		XpEvent xp = new XpEvent("runelite", "WOODCUTTING", 100, 120, 20, 1, 2);
-		ChatEvent chat = new ChatEvent("runelite", ChatEvent.Kind.OTHER, "raw", "normalized");
+		XpEvent xp = new XpEvent("test-source", "WOODCUTTING", 100, 120, 20, 1, 2);
+		ChatEvent chat = new ChatEvent("test-source", ChatEvent.Kind.OTHER, "raw", "normalized");
 		VitalsChangedEvent vitals = new VitalsChangedEvent(
-			"runelite",
+			"test-source",
 			VitalsChangedEvent.Kind.HITPOINTS,
 			17,
 			99
 		);
-		InventoryChangedEvent inventory = new InventoryChangedEvent("runelite", 28, 28);
+		InventoryChangedEvent inventory = new InventoryChangedEvent("test-source", 28, 28);
 		ToxicStatusChangedEvent toxic = new ToxicStatusChangedEvent(
-			"runelite",
+			"test-source",
 			ToxicStatusChangedEvent.Status.POISONED
 		);
-		LootReceivedEvent loot = new LootReceivedEvent("runelite", 2, 123_456L);
-		PlayerDeathEvent death = new PlayerDeathEvent("runelite");
-		NotificationEvent notification = new NotificationEvent("runelite", true, false);
+		LootReceivedEvent loot = new LootReceivedEvent("test-source", 2, 123_456L);
+		PlayerDeathEvent death = new PlayerDeathEvent("test-source");
+		NotificationEvent notification = new NotificationEvent("test-source", true, false);
 
 		transport.onXpEvent(xp);
 		transport.onChatEvent(chat);
@@ -69,14 +69,14 @@ public class InProcessWireGameplayEventTransportTest
 		InProcessWireGameplayEventTransport transport = transport(downstream);
 
 		VitalsChangedEvent vitals = new VitalsChangedEvent(
-			"runelite",
+			"test-source",
 			VitalsChangedEvent.Kind.PRAYER,
 			50,
 			77
 		);
-		InventoryChangedEvent inventory = new InventoryChangedEvent("runelite", 12, 28);
+		InventoryChangedEvent inventory = new InventoryChangedEvent("test-source", 12, 28);
 		ToxicStatusChangedEvent toxic = new ToxicStatusChangedEvent(
-			"runelite",
+			"test-source",
 			ToxicStatusChangedEvent.Status.CLEAR
 		);
 
@@ -106,7 +106,7 @@ public class InProcessWireGameplayEventTransportTest
 	private static InProcessWireGameplayEventTransport transport(GameplayEventSink downstream)
 	{
 		return new InProcessWireGameplayEventTransport(
-			"runelite",
+			"test-source",
 			new TransportWireCodec(new Gson()),
 			EnumSet.allOf(SourceCapability.class),
 			downstream
