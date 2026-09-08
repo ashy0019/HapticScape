@@ -67,6 +67,7 @@ public class HapticScapePlugin extends Plugin
         LocalhostGameplayEventTransport transport = new LocalhostGameplayEventTransport(
             "runelite",
             codec,
+            RuneLiteGameplayBridge.CAPABILITIES,
             port
         );
         RuneLiteGameplayBridge bridge = new RuneLiteGameplayBridge(client, itemManager, transport);

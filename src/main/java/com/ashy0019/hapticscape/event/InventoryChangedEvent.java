@@ -8,7 +8,7 @@ import java.util.Objects;
  */
 public final class InventoryChangedEvent implements HapticScapeEvent
 {
-	public static final String TYPE = "inventory_changed";
+	public static final String TYPE = "inventory.occupancy";
 
 	private final String source;
 	private final int filledSlots;

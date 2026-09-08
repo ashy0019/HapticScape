@@ -9,7 +9,7 @@ import java.net.SocketException;
 import java.util.Objects;
 
 /**
- * Loopback-only receiver for the gameplay transport protocol.
+ * Loopback-only receiver for the game-agnostic local event transport.
  *
  * <p>One source connection is handled at a time. Each TCP connection gets a
  * fresh transport session and must negotiate hello before sending gameplay.</p>
@@ -44,7 +44,7 @@ public final class LocalhostGameplayEventServer implements AutoCloseable
 		catch (IOException ex)
 		{
 			throw new TransportProtocolException(
-				"Unable to bind local gameplay transport on "
+				"Unable to bind local event transport on "
 					+ LocalhostTransportEndpoint.HOST + ":" + port,
 				ex
 			);

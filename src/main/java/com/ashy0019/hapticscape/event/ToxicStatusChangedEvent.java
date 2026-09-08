@@ -8,7 +8,7 @@ import java.util.Objects;
  */
 public final class ToxicStatusChangedEvent implements HapticScapeEvent
 {
-	public static final String TYPE = "toxic_status_changed";
+	public static final String TYPE = "status.changed";
 
 	public enum Status
 	{

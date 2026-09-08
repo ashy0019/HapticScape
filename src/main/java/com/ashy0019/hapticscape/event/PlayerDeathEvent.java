@@ -5,7 +5,7 @@ import java.util.Objects;
 /** Source-neutral observation that the local player died. */
 public final class PlayerDeathEvent implements HapticScapeEvent
 {
-	public static final String TYPE = "player_death";
+	public static final String TYPE = "actor.death";
 
 	private final String source;
 

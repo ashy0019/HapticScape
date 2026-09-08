@@ -3,47 +3,74 @@ package com.ashy0019.hapticscape.protocol;
 import com.ashy0019.hapticscape.event.PlayerDeathEvent;
 import com.ashy0019.hapticscape.event.VitalsChangedEvent;
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import java.util.EnumSet;
+import java.util.Set;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class TransportWireCodecTest
 {
 	private final TransportWireCodec codec = new TransportWireCodec(new Gson());
+	private final Set<SourceCapability> capabilities = EnumSet.of(
+		SourceCapability.EXPERIENCE,
+		SourceCapability.RESOURCES,
+		SourceCapability.ACTOR_DEATH
+	);
 
 	@Test
-	public void writesStableTransportEnvelope()
+	public void writesStableTransportEnvelopeAndCapabilities()
 	{
 		String json = codec.encode(new TransportMessage.Hello(
 			"runelite",
 			EventProtocol.NAME,
-			EventProtocol.VERSION
+			EventProtocol.VERSION,
+			capabilities
 		));
 		JsonObject root = new JsonParser().parse(json).getAsJsonObject();
 
 		assertEquals(TransportProtocol.NAME, root.get("protocol").getAsString());
 		assertEquals(TransportProtocol.VERSION, root.get("version").getAsInt());
 		assertEquals("hello", root.get("kind").getAsString());
-		assertEquals("runelite", root.getAsJsonObject("payload").get("source").getAsString());
+		JsonObject payload = root.getAsJsonObject("payload");
+		assertEquals("runelite", payload.get("source").getAsString());
+		JsonArray advertised = payload.getAsJsonArray("capabilities");
+		assertEquals(3, advertised.size());
+		assertEquals("experience", advertised.get(0).getAsString());
+		assertEquals("resources", advertised.get(1).getAsString());
+		assertEquals("actor.death", advertised.get(2).getAsString());
 	}
 
 	@Test
 	public void roundTripsAllControlMessageKinds()
 	{
 		TransportMessage.Hello hello = (TransportMessage.Hello) codec.decode(codec.encode(
-			new TransportMessage.Hello("runelite", EventProtocol.NAME, EventProtocol.VERSION)
+			new TransportMessage.Hello(
+				"runelite",
+				EventProtocol.NAME,
+				EventProtocol.VERSION,
+				capabilities
+			)
 		));
 		assertEquals("runelite", hello.getSource());
 		assertEquals(EventProtocol.NAME, hello.getEventProtocol());
 		assertEquals(EventProtocol.VERSION, hello.getEventVersion());
+		assertEquals(capabilities, hello.getCapabilities());
 
 		TransportMessage.HelloAck ack = (TransportMessage.HelloAck) codec.decode(codec.encode(
-			new TransportMessage.HelloAck(EventProtocol.NAME, EventProtocol.VERSION)
+			new TransportMessage.HelloAck(
+				EventProtocol.NAME,
+				EventProtocol.VERSION,
+				capabilities
+			)
 		));
 		assertEquals(EventProtocol.VERSION, ack.getEventVersion());
+		assertEquals(capabilities, ack.getCapabilities());
 
 		TransportMessage.Reset reset = (TransportMessage.Reset) codec.decode(codec.encode(
 			new TransportMessage.Reset("runelite")
@@ -58,30 +85,33 @@ public class TransportWireCodecTest
 	}
 
 	@Test
-	public void roundTripsPublishedAndSeededEvents()
+	public void eventAndStateAreDifferentWireKinds()
 	{
-		TransportMessage.Event published = (TransportMessage.Event) codec.decode(codec.encode(
-			new TransportMessage.Event(
-				TransportMessage.EventOperation.PUBLISH,
-				new PlayerDeathEvent("runelite")
+		String eventJson = codec.encode(new TransportMessage.Event(
+			new PlayerDeathEvent("runelite")
+		));
+		String stateJson = codec.encode(new TransportMessage.State(
+			new VitalsChangedEvent(
+				"runelite",
+				VitalsChangedEvent.Kind.PRAYER,
+				50,
+				77
 			)
 		));
-		assertEquals(TransportMessage.EventOperation.PUBLISH, published.getOperation());
-		assertTrue(published.getEvent() instanceof PlayerDeathEvent);
 
-		TransportMessage.Event seeded = (TransportMessage.Event) codec.decode(codec.encode(
-			new TransportMessage.Event(
-				TransportMessage.EventOperation.SEED,
-				new VitalsChangedEvent(
-					"runelite",
-					VitalsChangedEvent.Kind.PRAYER,
-					50,
-					77
-				)
-			)
-		));
-		assertEquals(TransportMessage.EventOperation.SEED, seeded.getOperation());
-		assertTrue(seeded.getEvent() instanceof VitalsChangedEvent);
+		assertEquals(
+			"event",
+			new JsonParser().parse(eventJson).getAsJsonObject().get("kind").getAsString()
+		);
+		assertEquals(
+			"state",
+			new JsonParser().parse(stateJson).getAsJsonObject().get("kind").getAsString()
+		);
+
+		TransportMessage.Event event = (TransportMessage.Event) codec.decode(eventJson);
+		TransportMessage.State state = (TransportMessage.State) codec.decode(stateJson);
+		assertTrue(event.getEvent() instanceof PlayerDeathEvent);
+		assertTrue(state.getEvent() instanceof VitalsChangedEvent);
 	}
 
 	@Test(expected = TransportProtocolException.class)
@@ -94,15 +124,24 @@ public class TransportWireCodecTest
 	@Test(expected = TransportProtocolException.class)
 	public void rejectsFutureTransportVersion()
 	{
-		codec.decode("{\"protocol\":\"hapticscape-transport\",\"version\":2,"
+		codec.decode("{\"protocol\":\"hapticscape-local-source\",\"version\":2,"
 			+ "\"kind\":\"reset\",\"payload\":{\"source\":\"runelite\"}}");
 	}
 
 	@Test(expected = TransportProtocolException.class)
 	public void rejectsUnknownMessageKind()
 	{
-		codec.decode("{\"protocol\":\"hapticscape-transport\",\"version\":1,"
+		codec.decode("{\"protocol\":\"hapticscape-local-source\",\"version\":1,"
 			+ "\"kind\":\"future_magic\",\"payload\":{}}");
+	}
+
+	@Test(expected = TransportProtocolException.class)
+	public void rejectsUnknownCapability()
+	{
+		codec.decode("{\"protocol\":\"hapticscape-local-source\",\"version\":1,"
+			+ "\"kind\":\"hello\",\"payload\":{\"source\":\"test\","
+			+ "\"eventProtocol\":\"hapticscape-local-events\",\"eventVersion\":1,"
+			+ "\"capabilities\":[\"future.magic\"]}}");
 	}
 
 	@Test(expected = TransportProtocolException.class)

@@ -9,7 +9,7 @@ import java.util.Objects;
  */
 public final class LootReceivedEvent implements HapticScapeEvent
 {
-	public static final String TYPE = "loot_received";
+	public static final String TYPE = "loot.received";
 
 	private final String source;
 	private final int stackCount;

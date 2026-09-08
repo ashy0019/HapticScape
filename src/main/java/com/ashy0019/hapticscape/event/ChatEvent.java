@@ -12,7 +12,7 @@ import java.util.Objects;
  */
 public final class ChatEvent implements HapticScapeEvent
 {
-	public static final String TYPE = "chat";
+	public static final String TYPE = "chat.message";
 
 	public enum Kind
 	{

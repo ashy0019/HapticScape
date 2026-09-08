@@ -7,6 +7,7 @@ import static org.junit.Assert.assertTrue;
 import com.ashy0019.hapticscape.host.SourceMessageService;
 import com.ashy0019.hapticscape.music.AudioCaptureSource;
 import com.ashy0019.hapticscape.protocol.LocalhostGameplayEventTransport;
+import com.ashy0019.hapticscape.protocol.SourceCapability;
 import com.ashy0019.hapticscape.protocol.TransportWireCodec;
 import com.ashy0019.hapticscape.remote.SettingsStore;
 import com.ashy0019.hapticscape.remote.UnlockKeyProtector;
@@ -14,6 +15,7 @@ import com.ashy0019.hapticscape.storage.HapticScapeStoragePaths;
 import com.google.gson.Gson;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
 import okhttp3.OkHttpClient;
@@ -83,6 +85,7 @@ public class HapticScapeRuntimeTest
             try (LocalhostGameplayEventTransport transport = new LocalhostGameplayEventTransport(
                 "runelite",
                 new TransportWireCodec(gson),
+                EnumSet.allOf(SourceCapability.class),
                 runtime.getGameplayTransportPort()))
             {
                 // Constructor performs the real transport hello/ack handshake.

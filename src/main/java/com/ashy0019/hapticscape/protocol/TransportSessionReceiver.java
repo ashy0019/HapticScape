@@ -2,16 +2,20 @@ package com.ashy0019.hapticscape.protocol;
 
 import com.ashy0019.hapticscape.GameplayEventSink;
 import com.ashy0019.hapticscape.event.HapticScapeEvent;
+import java.util.Collections;
+import java.util.Set;
 import java.util.Objects;
 
 /**
- * Stateful receiver-side transport contract. A source must negotiate an event
- * protocol before gameplay or reset messages are accepted.
+ * Stateful receiver-side local event contract. A source must negotiate the
+ * event protocol and advertise capabilities before event/state/reset messages
+ * are accepted.
  */
 public final class TransportSessionReceiver
 {
 	private final GameplayEventDispatcher dispatcher;
 	private String source;
+	private Set<SourceCapability> capabilities = Collections.emptySet();
 
 	public TransportSessionReceiver(GameplayEventSink sink)
 	{
@@ -28,9 +32,14 @@ public final class TransportSessionReceiver
 		return source;
 	}
 
+	public Set<SourceCapability> getCapabilities()
+	{
+		return capabilities;
+	}
+
 	/**
 	 * Accepts one decoded transport message. Control messages may produce a
-	 * response; gameplay/seed/reset messages return {@code null} on success.
+	 * response; event/state/reset messages return {@code null} on success.
 	 */
 	public TransportMessage receive(TransportMessage message)
 	{
@@ -42,27 +51,38 @@ public final class TransportSessionReceiver
 
 		if (message instanceof TransportMessage.Event)
 		{
-			TransportMessage.Event eventMessage = (TransportMessage.Event) message;
-			HapticScapeEvent event = eventMessage.getEvent();
-			if (!source.equals(event.getSource()))
+			HapticScapeEvent event = ((TransportMessage.Event) message).getEvent();
+			TransportMessage.Error validation = validateEvent(event);
+			if (validation != null)
 			{
-				return error("source_mismatch", "Event source does not match negotiated source");
+				return validation;
 			}
 			try
 			{
-				if (eventMessage.getOperation() == TransportMessage.EventOperation.PUBLISH)
-				{
-					dispatcher.publish(event);
-				}
-				else
-				{
-					dispatcher.seed(event);
-				}
+				dispatcher.publish(event);
 				return null;
 			}
 			catch (EventProtocolException ex)
 			{
-				return error("invalid_event_operation", ex.getMessage());
+				return error("invalid_event", ex.getMessage());
+			}
+		}
+		if (message instanceof TransportMessage.State)
+		{
+			HapticScapeEvent event = ((TransportMessage.State) message).getEvent();
+			TransportMessage.Error validation = validateEvent(event);
+			if (validation != null)
+			{
+				return validation;
+			}
+			try
+			{
+				dispatcher.seed(event);
+				return null;
+			}
+			catch (EventProtocolException ex)
+			{
+				return error("invalid_state", ex.getMessage());
 			}
 		}
 		if (message instanceof TransportMessage.Reset)
@@ -105,7 +125,37 @@ public final class TransportSessionReceiver
 		}
 
 		source = hello.getSource();
-		return new TransportMessage.HelloAck(EventProtocol.NAME, EventProtocol.VERSION);
+		capabilities = hello.getCapabilities();
+		return new TransportMessage.HelloAck(
+			EventProtocol.NAME,
+			EventProtocol.VERSION,
+			capabilities
+		);
+	}
+
+	private TransportMessage.Error validateEvent(HapticScapeEvent event)
+	{
+		if (!source.equals(event.getSource()))
+		{
+			return error("source_mismatch", "Event source does not match negotiated source");
+		}
+		final SourceCapability required;
+		try
+		{
+			required = SourceCapability.forEvent(event);
+		}
+		catch (EventProtocolException ex)
+		{
+			return error("unsupported_event", ex.getMessage());
+		}
+		if (!capabilities.contains(required))
+		{
+			return error(
+				"capability_not_declared",
+				"Event requires undeclared source capability: " + required.getWireName()
+			);
+		}
+		return null;
 	}
 
 	private static TransportMessage.Error error(String code, String message)

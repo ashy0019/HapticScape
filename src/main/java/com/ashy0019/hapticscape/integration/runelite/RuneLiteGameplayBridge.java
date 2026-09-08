@@ -2,8 +2,12 @@ package com.ashy0019.hapticscape.integration.runelite;
 
 import com.ashy0019.hapticscape.GameplayEventSink;
 import com.ashy0019.hapticscape.event.XpEventTracker;
+import com.ashy0019.hapticscape.protocol.SourceCapability;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.Objects;
+import java.util.Set;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.ItemContainer;
@@ -25,6 +29,19 @@ import net.runelite.client.game.ItemStack;
  */
 public final class RuneLiteGameplayBridge
 {
+	public static final Set<SourceCapability> CAPABILITIES = Collections.unmodifiableSet(
+		EnumSet.of(
+			SourceCapability.EXPERIENCE,
+			SourceCapability.CHAT,
+			SourceCapability.RESOURCES,
+			SourceCapability.INVENTORY_OCCUPANCY,
+			SourceCapability.STATUS,
+			SourceCapability.LOOT,
+			SourceCapability.ACTOR_DEATH,
+			SourceCapability.NOTIFICATION
+		)
+	);
+
 	private final Client client;
 	private final GameplayEventSink sink;
 	private final XpEventTracker xpTracker = new XpEventTracker();

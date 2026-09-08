@@ -99,36 +99,36 @@ public class EventWireCodecTest
 	public void rejectsWrongProtocol()
 	{
 		codec.decode("{\"protocol\":\"something-else\",\"version\":1,"
-			+ "\"source\":\"runelite\",\"type\":\"player_death\",\"payload\":{}}");
+			+ "\"source\":\"runelite\",\"type\":\"actor.death\",\"payload\":{}}");
 	}
 
 	@Test(expected = EventProtocolException.class)
 	public void rejectsFutureVersion()
 	{
-		codec.decode("{\"protocol\":\"hapticscape-event\",\"version\":2,"
-			+ "\"source\":\"runelite\",\"type\":\"player_death\",\"payload\":{}}");
+		codec.decode("{\"protocol\":\"hapticscape-local-events\",\"version\":2,"
+			+ "\"source\":\"runelite\",\"type\":\"actor.death\",\"payload\":{}}");
 	}
 
 	@Test(expected = EventProtocolException.class)
 	public void rejectsUnknownEventType()
 	{
-		codec.decode("{\"protocol\":\"hapticscape-event\",\"version\":1,"
+		codec.decode("{\"protocol\":\"hapticscape-local-events\",\"version\":1,"
 			+ "\"source\":\"runelite\",\"type\":\"future_magic\",\"payload\":{}}");
 	}
 
 	@Test(expected = EventProtocolException.class)
 	public void rejectsMissingRequiredPayloadField()
 	{
-		codec.decode("{\"protocol\":\"hapticscape-event\",\"version\":1,"
-			+ "\"source\":\"runelite\",\"type\":\"inventory_changed\","
+		codec.decode("{\"protocol\":\"hapticscape-local-events\",\"version\":1,"
+			+ "\"source\":\"runelite\",\"type\":\"inventory.occupancy\","
 			+ "\"payload\":{\"filledSlots\":28}}");
 	}
 
 	@Test(expected = EventProtocolException.class)
 	public void rejectsWrongPayloadFieldType()
 	{
-		codec.decode("{\"protocol\":\"hapticscape-event\",\"version\":1,"
-			+ "\"source\":\"runelite\",\"type\":\"notification\","
+		codec.decode("{\"protocol\":\"hapticscape-local-events\",\"version\":1,"
+			+ "\"source\":\"runelite\",\"type\":\"notification.emitted\","
 			+ "\"payload\":{\"sourceFocused\":\"true\",\"sendWhenFocused\":false}}");
 	}
 

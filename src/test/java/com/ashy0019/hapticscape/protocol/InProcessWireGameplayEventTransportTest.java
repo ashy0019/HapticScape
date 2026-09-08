@@ -10,6 +10,7 @@ import com.ashy0019.hapticscape.event.ToxicStatusChangedEvent;
 import com.ashy0019.hapticscape.event.VitalsChangedEvent;
 import com.ashy0019.hapticscape.event.XpEvent;
 import com.google.gson.Gson;
+import java.util.EnumSet;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -107,6 +108,7 @@ public class InProcessWireGameplayEventTransportTest
 		return new InProcessWireGameplayEventTransport(
 			"runelite",
 			new TransportWireCodec(new Gson()),
+			EnumSet.allOf(SourceCapability.class),
 			downstream
 		);
 	}

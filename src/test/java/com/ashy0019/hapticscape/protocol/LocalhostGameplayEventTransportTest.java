@@ -10,6 +10,7 @@ import com.ashy0019.hapticscape.event.ToxicStatusChangedEvent;
 import com.ashy0019.hapticscape.event.VitalsChangedEvent;
 import com.ashy0019.hapticscape.event.XpEvent;
 import com.google.gson.Gson;
+import java.util.EnumSet;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.junit.Test;
@@ -27,7 +28,12 @@ public class LocalhostGameplayEventTransportTest
 		try (LocalhostGameplayEventServer server =
 			new LocalhostGameplayEventServer(codec, downstream, 0);
 			 LocalhostGameplayEventTransport transport =
-				 new LocalhostGameplayEventTransport("runelite", codec, server.getPort()))
+				 new LocalhostGameplayEventTransport(
+					"runelite",
+					codec,
+					EnumSet.allOf(SourceCapability.class),
+					server.getPort()
+				))
 		{
 			assertEquals(LocalhostTransportEndpoint.HOST, server.getHost());
 
@@ -56,7 +62,12 @@ public class LocalhostGameplayEventTransportTest
 		int port = firstServer.getPort();
 
 		try (LocalhostGameplayEventTransport transport =
-			new LocalhostGameplayEventTransport("runelite", codec, port))
+			new LocalhostGameplayEventTransport(
+				"runelite",
+				codec,
+				EnumSet.allOf(SourceCapability.class),
+				port
+			))
 		{
 			transport.onPlayerDeathEvent(new PlayerDeathEvent("runelite"));
 			assertTrue(firstSink.await());

@@ -9,7 +9,7 @@ import java.util.Objects;
  */
 public final class XpEvent implements HapticScapeEvent
 {
-	public static final String TYPE = "xp";
+	public static final String TYPE = "experience.changed";
 
 	private final String source;
 	private final String skillId;

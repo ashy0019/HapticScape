@@ -14,13 +14,15 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.Objects;
+import java.util.Set;
 
-/** Loopback TCP client that publishes neutral gameplay events to HapticScape. */
+/** Loopback TCP client that publishes source-neutral local events to HapticScape. */
 public final class LocalhostGameplayEventTransport implements GameplayEventSink, AutoCloseable
 {
 	private final Object ioLock = new Object();
 	private final String source;
 	private final TransportWireCodec codec;
+	private final Set<SourceCapability> capabilities;
 	private final int port;
 	private Socket socket;
 	private boolean closed;
@@ -28,10 +30,12 @@ public final class LocalhostGameplayEventTransport implements GameplayEventSink,
 	public LocalhostGameplayEventTransport(
 		String source,
 		TransportWireCodec codec,
+		Set<SourceCapability> capabilities,
 		int port)
 	{
 		this.source = TransportMessage.requireIdentifier(source, "source");
 		this.codec = Objects.requireNonNull(codec, "codec");
+		this.capabilities = TransportMessage.immutableCapabilities(capabilities);
 		if (port <= 0 || port > 65_535)
 		{
 			throw new IllegalArgumentException("port must be between 1 and 65535");
@@ -117,18 +121,12 @@ public final class LocalhostGameplayEventTransport implements GameplayEventSink,
 
 	private void publish(HapticScapeEvent event)
 	{
-		send(new TransportMessage.Event(
-			TransportMessage.EventOperation.PUBLISH,
-			requireSource(event)
-		));
+		send(new TransportMessage.Event(requireSource(event)));
 	}
 
 	private void seed(HapticScapeEvent event)
 	{
-		send(new TransportMessage.Event(
-			TransportMessage.EventOperation.SEED,
-			requireSource(event)
-		));
+		send(new TransportMessage.State(requireSource(event)));
 	}
 
 	private HapticScapeEvent requireSource(HapticScapeEvent event)
@@ -168,7 +166,7 @@ public final class LocalhostGameplayEventTransport implements GameplayEventSink,
 			{
 				closeSocketLocked();
 				throw new TransportProtocolException(
-					"Unable to send local gameplay transport frame after reconnect",
+					"Unable to send local event transport frame after reconnect",
 					retryFailure
 				);
 			}
@@ -191,13 +189,14 @@ public final class LocalhostGameplayEventTransport implements GameplayEventSink,
 			TransportMessage.Hello hello = new TransportMessage.Hello(
 				source,
 				EventProtocol.NAME,
-				EventProtocol.VERSION
+				EventProtocol.VERSION,
+				capabilities
 			);
 			LocalhostFrameIo.write(connected.getOutputStream(), codec.encode(hello));
 			String responseFrame = LocalhostFrameIo.read(connected.getInputStream());
 			if (responseFrame == null)
 			{
-				throw new TransportProtocolException("Local gameplay transport closed during hello");
+				throw new TransportProtocolException("Local event transport closed during hello");
 			}
 			TransportMessage response = codec.decode(responseFrame);
 			if (response instanceof TransportMessage.Error)
@@ -209,14 +208,15 @@ public final class LocalhostGameplayEventTransport implements GameplayEventSink,
 			}
 			if (!(response instanceof TransportMessage.HelloAck))
 			{
-				throw new TransportProtocolException("Local gameplay transport did not acknowledge hello");
+				throw new TransportProtocolException("Local event transport did not acknowledge hello");
 			}
 			TransportMessage.HelloAck ack = (TransportMessage.HelloAck) response;
 			if (!EventProtocol.NAME.equals(ack.getEventProtocol())
-				|| ack.getEventVersion() != EventProtocol.VERSION)
+				|| ack.getEventVersion() != EventProtocol.VERSION
+				|| !capabilities.equals(ack.getCapabilities()))
 			{
 				throw new TransportProtocolException(
-					"Local gameplay transport acknowledged incompatible event protocol"
+					"Local event transport acknowledged an incompatible source contract"
 				);
 			}
 			connected.setSoTimeout(0);
@@ -237,7 +237,7 @@ public final class LocalhostGameplayEventTransport implements GameplayEventSink,
 				throw (TransportProtocolException) ex;
 			}
 			throw new TransportProtocolException(
-				"Unable to connect local gameplay transport to "
+				"Unable to connect local event transport to "
 					+ LocalhostTransportEndpoint.HOST + ":" + port,
 				ex
 			);
@@ -248,7 +248,7 @@ public final class LocalhostGameplayEventTransport implements GameplayEventSink,
 	{
 		if (socket == null || socket.isClosed())
 		{
-			throw new IOException("Local gameplay transport socket is closed");
+			throw new IOException("Local event transport socket is closed");
 		}
 		LocalhostFrameIo.write(socket.getOutputStream(), frame);
 	}
@@ -257,7 +257,7 @@ public final class LocalhostGameplayEventTransport implements GameplayEventSink,
 	{
 		if (closed)
 		{
-			throw new TransportProtocolException("Local gameplay transport is closed");
+			throw new TransportProtocolException("Local event transport is closed");
 		}
 	}
 
