@@ -95,6 +95,17 @@ public class EventWireCodecTest
 		assertEquals("poisoned", toxic.get("status").getAsString());
 	}
 
+	@Test
+	public void acceptsLegacyEventProtocolIdentifierDuringMigration()
+	{
+		HapticScapeEvent decoded = codec.decode(
+			"{\"protocol\":\"hapticscape-local-events\",\"version\":1,"
+				+ "\"source\":\"test-source\",\"type\":\"actor.death\",\"payload\":{}}"
+		);
+
+		assertTrue(decoded instanceof PlayerDeathEvent);
+	}
+
 	@Test(expected = EventProtocolException.class)
 	public void rejectsWrongProtocol()
 	{
@@ -105,21 +116,21 @@ public class EventWireCodecTest
 	@Test(expected = EventProtocolException.class)
 	public void rejectsFutureVersion()
 	{
-		codec.decode("{\"protocol\":\"hapticscape-local-events\",\"version\":2,"
+		codec.decode("{\"protocol\":\"local-event-bridge-events\",\"version\":2,"
 			+ "\"source\":\"test-source\",\"type\":\"actor.death\",\"payload\":{}}");
 	}
 
 	@Test(expected = EventProtocolException.class)
 	public void rejectsUnknownEventType()
 	{
-		codec.decode("{\"protocol\":\"hapticscape-local-events\",\"version\":1,"
+		codec.decode("{\"protocol\":\"local-event-bridge-events\",\"version\":1,"
 			+ "\"source\":\"test-source\",\"type\":\"future_magic\",\"payload\":{}}");
 	}
 
 	@Test(expected = EventProtocolException.class)
 	public void rejectsMissingRequiredPayloadField()
 	{
-		codec.decode("{\"protocol\":\"hapticscape-local-events\",\"version\":1,"
+		codec.decode("{\"protocol\":\"local-event-bridge-events\",\"version\":1,"
 			+ "\"source\":\"test-source\",\"type\":\"inventory.occupancy\","
 			+ "\"payload\":{\"filledSlots\":28}}");
 	}
@@ -127,7 +138,7 @@ public class EventWireCodecTest
 	@Test(expected = EventProtocolException.class)
 	public void rejectsWrongPayloadFieldType()
 	{
-		codec.decode("{\"protocol\":\"hapticscape-local-events\",\"version\":1,"
+		codec.decode("{\"protocol\":\"local-event-bridge-events\",\"version\":1,"
 			+ "\"source\":\"test-source\",\"type\":\"notification.emitted\","
 			+ "\"payload\":{\"sourceFocused\":\"true\",\"sendWhenFocused\":false}}");
 	}

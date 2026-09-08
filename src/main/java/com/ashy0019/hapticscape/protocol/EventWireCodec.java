@@ -167,7 +167,7 @@ public final class EventWireCodec
 	public HapticScapeEvent decode(EventEnvelope envelope)
 	{
 		Objects.requireNonNull(envelope, "envelope");
-		if (!EventProtocol.NAME.equals(envelope.getProtocol()))
+		if (!EventProtocol.supports(envelope.getProtocol()))
 		{
 			throw new EventProtocolException(
 				"Unsupported event protocol: " + envelope.getProtocol()

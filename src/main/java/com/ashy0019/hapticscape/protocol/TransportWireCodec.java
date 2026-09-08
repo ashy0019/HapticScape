@@ -26,9 +26,19 @@ public final class TransportWireCodec
 
 	public String encode(TransportMessage message)
 	{
+		return encode(message, TransportProtocol.NAME);
+	}
+
+	public String encode(TransportMessage message, String protocolName)
+	{
 		Objects.requireNonNull(message, "message");
+		if (!TransportProtocol.supports(protocolName))
+		{
+			throw new TransportProtocolException("Unsupported transport protocol: " + protocolName);
+		}
+
 		JsonObject root = new JsonObject();
-		root.addProperty("protocol", TransportProtocol.NAME);
+		root.addProperty("protocol", protocolName);
 		root.addProperty("version", TransportProtocol.VERSION);
 		root.addProperty("kind", kindToWire(message.getKind()));
 		root.add("payload", payload(message));
@@ -41,6 +51,11 @@ public final class TransportWireCodec
 	}
 
 	public TransportMessage decode(String json)
+	{
+		return decodeFrame(json).getMessage();
+	}
+
+	public DecodedFrame decodeFrame(String json)
 	{
 		if (json == null)
 		{
@@ -69,7 +84,7 @@ public final class TransportWireCodec
 		JsonObject root = parsed.getAsJsonObject();
 		String protocol = requireString(root, "protocol");
 		int version = requireInt(root, "version");
-		if (!TransportProtocol.NAME.equals(protocol))
+		if (!TransportProtocol.supports(protocol))
 		{
 			throw new TransportProtocolException("Unsupported transport protocol: " + protocol);
 		}
@@ -82,38 +97,68 @@ public final class TransportWireCodec
 
 		TransportMessage.Kind kind = kindFromWire(requireString(root, "kind"));
 		JsonObject payload = requireObject(root, "payload");
+		final TransportMessage message;
 		switch (kind)
 		{
 			case HELLO:
-				return new TransportMessage.Hello(
+				message = new TransportMessage.Hello(
 					requireString(payload, "source"),
 					requireString(payload, "eventProtocol"),
 					requireInt(payload, "eventVersion"),
 					requireCapabilities(payload, "capabilities")
 				);
+				break;
 			case HELLO_ACK:
-				return new TransportMessage.HelloAck(
+				message = new TransportMessage.HelloAck(
 					requireString(payload, "eventProtocol"),
 					requireInt(payload, "eventVersion"),
 					requireCapabilities(payload, "capabilities")
 				);
+				break;
 			case EVENT:
-				return new TransportMessage.Event(
+				message = new TransportMessage.Event(
 					decodeEvent(requireObject(payload, "event"))
 				);
+				break;
 			case STATE:
-				return new TransportMessage.State(
+				message = new TransportMessage.State(
 					decodeEvent(requireObject(payload, "event"))
 				);
+				break;
 			case RESET:
-				return new TransportMessage.Reset(requireString(payload, "source"));
+				message = new TransportMessage.Reset(requireString(payload, "source"));
+				break;
 			case ERROR:
-				return new TransportMessage.Error(
+				message = new TransportMessage.Error(
 					requireString(payload, "code"),
 					requireString(payload, "message")
 				);
+				break;
 			default:
 				throw new TransportProtocolException("Unsupported transport message kind: " + kind);
+		}
+		return new DecodedFrame(protocol, message);
+	}
+
+	public static final class DecodedFrame
+	{
+		private final String protocol;
+		private final TransportMessage message;
+
+		private DecodedFrame(String protocol, TransportMessage message)
+		{
+			this.protocol = protocol;
+			this.message = message;
+		}
+
+		public String getProtocol()
+		{
+			return protocol;
+		}
+
+		public TransportMessage getMessage()
+		{
+			return message;
 		}
 	}
 

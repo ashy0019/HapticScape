@@ -102,6 +102,7 @@ public final class LocalhostGameplayEventServer implements AutoCloseable
 	{
 		socket.setTcpNoDelay(true);
 		TransportSessionReceiver receiver = new TransportSessionReceiver(downstream);
+		String negotiatedTransportProtocol = null;
 		while (!closed && !socket.isClosed())
 		{
 			String frame = LocalhostFrameIo.read(socket.getInputStream());
@@ -113,11 +114,31 @@ public final class LocalhostGameplayEventServer implements AutoCloseable
 			final TransportMessage request;
 			try
 			{
-				request = codec.decode(frame);
+				TransportWireCodec.DecodedFrame decoded = codec.decodeFrame(frame);
+				request = decoded.getMessage();
+				if (negotiatedTransportProtocol == null)
+				{
+					negotiatedTransportProtocol = decoded.getProtocol();
+				}
+				else if (!negotiatedTransportProtocol.equals(decoded.getProtocol()))
+				{
+					writeError(
+						socket,
+						negotiatedTransportProtocol,
+						"protocol_changed",
+						"Transport protocol identifier changed during the session"
+					);
+					return;
+				}
 			}
 			catch (RuntimeException ex)
 			{
-				writeError(socket, "invalid_frame", ex.getMessage());
+				writeError(
+					socket,
+					negotiatedTransportProtocol,
+					"invalid_frame",
+					ex.getMessage()
+				);
 				return;
 			}
 
@@ -128,12 +149,20 @@ public final class LocalhostGameplayEventServer implements AutoCloseable
 			}
 			catch (RuntimeException ex)
 			{
-				writeError(socket, "receiver_error", ex.getMessage());
+				writeError(
+					socket,
+					negotiatedTransportProtocol,
+					"receiver_error",
+					ex.getMessage()
+				);
 				return;
 			}
 			if (response != null)
 			{
-				LocalhostFrameIo.write(socket.getOutputStream(), codec.encode(response));
+				LocalhostFrameIo.write(
+					socket.getOutputStream(),
+					codec.encode(response, negotiatedTransportProtocol)
+				);
 				if (response instanceof TransportMessage.Error)
 				{
 					return;
@@ -142,13 +171,23 @@ public final class LocalhostGameplayEventServer implements AutoCloseable
 		}
 	}
 
-	private void writeError(Socket socket, String code, String message)
+	private void writeError(
+		Socket socket,
+		String protocolName,
+		String code,
+		String message)
 	{
 		try
 		{
+			String responseProtocol = protocolName == null
+				? TransportProtocol.NAME
+				: protocolName;
 			LocalhostFrameIo.write(
 				socket.getOutputStream(),
-				codec.encode(new TransportMessage.Error(code, message == null ? "" : message))
+				codec.encode(
+					new TransportMessage.Error(code, message == null ? "" : message),
+					responseProtocol
+				)
 			);
 		}
 		catch (IOException ignored)

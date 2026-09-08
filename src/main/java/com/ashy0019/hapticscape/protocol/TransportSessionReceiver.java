@@ -109,7 +109,7 @@ public final class TransportSessionReceiver
 		}
 
 		TransportMessage.Hello hello = (TransportMessage.Hello) message;
-		if (!EventProtocol.NAME.equals(hello.getEventProtocol()))
+		if (!EventProtocol.supports(hello.getEventProtocol()))
 		{
 			return error(
 				"unsupported_event_protocol",
@@ -127,7 +127,7 @@ public final class TransportSessionReceiver
 		source = hello.getSource();
 		capabilities = hello.getCapabilities();
 		return new TransportMessage.HelloAck(
-			EventProtocol.NAME,
+			hello.getEventProtocol(),
 			EventProtocol.VERSION,
 			capabilities
 		);

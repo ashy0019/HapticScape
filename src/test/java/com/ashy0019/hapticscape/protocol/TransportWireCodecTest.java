@@ -114,6 +114,19 @@ public class TransportWireCodecTest
 		assertTrue(state.getEvent() instanceof VitalsChangedEvent);
 	}
 
+	@Test
+	public void acceptsLegacyTransportIdentifierDuringMigration()
+	{
+		String json = codec.encode(
+			new TransportMessage.Reset("test-source"),
+			TransportProtocol.LEGACY_NAME
+		);
+		TransportWireCodec.DecodedFrame decoded = codec.decodeFrame(json);
+
+		assertEquals(TransportProtocol.LEGACY_NAME, decoded.getProtocol());
+		assertTrue(decoded.getMessage() instanceof TransportMessage.Reset);
+	}
+
 	@Test(expected = TransportProtocolException.class)
 	public void rejectsWrongTransportProtocol()
 	{

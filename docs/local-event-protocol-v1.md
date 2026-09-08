@@ -14,8 +14,17 @@ controls the source application.
 The default endpoint is TCP `127.0.0.1:41713`. Implementations must bind or
 connect through loopback only.
 
-Frames use the existing length-prefixed local framing implemented by
+Frames use bounded newline-delimited UTF-8 framing implemented by
 `LocalhostFrameIo`.
+
+### Compatibility aliases
+
+The standalone receiver accepts the historical v1 identifiers
+`hapticscape-local-source` and `hapticscape-local-events` during the transition
+to the generic names. When a legacy source connects, the receiver mirrors the
+legacy transport and event identifiers in `hello_ack`, allowing older bridge
+builds to keep working. New source implementations should emit only the generic
+identifiers documented below.
 
 ## Transport envelope
 
@@ -23,7 +32,7 @@ Every transport frame is a JSON object:
 
 ```json
 {
-  "protocol": "hapticscape-local-source",
+  "protocol": "local-event-bridge",
   "version": 1,
   "kind": "hello",
   "payload": {}
@@ -48,12 +57,12 @@ The first source message must be `hello`:
 
 ```json
 {
-  "protocol": "hapticscape-local-source",
+  "protocol": "local-event-bridge",
   "version": 1,
   "kind": "hello",
   "payload": {
     "source": "example-source",
-    "eventProtocol": "hapticscape-local-events",
+    "eventProtocol": "local-event-bridge-events",
     "eventVersion": 1,
     "capabilities": [
       "experience",
@@ -91,7 +100,7 @@ Events use a nested, source-neutral envelope:
 
 ```json
 {
-  "protocol": "hapticscape-local-events",
+  "protocol": "local-event-bridge-events",
   "version": 1,
   "source": "example-source",
   "type": "experience.changed",
@@ -121,7 +130,7 @@ behavior.
 {
   "kind": "event",
   "payload": {
-    "event": { "...": "hapticscape-local-events envelope" }
+    "event": { "...": "local-event-bridge-events envelope" }
   }
 }
 ```
@@ -133,7 +142,7 @@ that a new gameplay occurrence just happened.
 {
   "kind": "state",
   "payload": {
-    "event": { "...": "hapticscape-local-events envelope" }
+    "event": { "...": "local-event-bridge-events envelope" }
   }
 }
 ```
@@ -148,7 +157,7 @@ longer valid:
 
 ```json
 {
-  "protocol": "hapticscape-local-source",
+  "protocol": "local-event-bridge",
   "version": 1,
   "kind": "reset",
   "payload": {

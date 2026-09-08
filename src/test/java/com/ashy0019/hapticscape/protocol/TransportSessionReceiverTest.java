@@ -49,6 +49,24 @@ public class TransportSessionReceiverTest
 	}
 
 	@Test
+	public void acceptsLegacyEventProtocolAndMirrorsItInHelloAck()
+	{
+		TransportSessionReceiver receiver = new TransportSessionReceiver(new RecordingSink());
+		TransportMessage response = receiver.receive(new TransportMessage.Hello(
+			"legacy-source",
+			EventProtocol.LEGACY_NAME,
+			EventProtocol.VERSION,
+			CAPABILITIES
+		));
+
+		assertTrue(response instanceof TransportMessage.HelloAck);
+		assertEquals(
+			EventProtocol.LEGACY_NAME,
+			((TransportMessage.HelloAck) response).getEventProtocol()
+		);
+	}
+
+	@Test
 	public void rejectsUnsupportedEventVersion()
 	{
 		TransportSessionReceiver receiver = new TransportSessionReceiver(new RecordingSink());
