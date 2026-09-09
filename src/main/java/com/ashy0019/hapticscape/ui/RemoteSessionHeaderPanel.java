@@ -21,7 +21,7 @@ final class RemoteSessionHeaderPanel extends JPanel
 	private static final int STACK_BREAKPOINT = 680;
 
 	private final JLabel roleLabel = new JLabel();
-	private final SidebarTextLabel statusLabel = new SidebarTextLabel("");
+	private final WrappedTextLabel statusLabel = new WrappedTextLabel("");
 	private final JPanel details = new JPanel(new GridBagLayout());
 	private final JPanel actions = new JPanel(new GridBagLayout());
 	private int layoutMode = -1;

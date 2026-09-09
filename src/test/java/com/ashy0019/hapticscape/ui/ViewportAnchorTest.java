@@ -9,7 +9,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 
-public class SidebarViewportAnchorTest
+public class ViewportAnchorTest
 {
 	@Test
 	public void holdsCapturedPositionThroughQueuedLayout() throws Exception
@@ -26,7 +26,7 @@ public class SidebarViewportAnchorTest
 				500
 			);
 			scrollPane.setVerticalScrollBar(scrollBar);
-			SidebarViewportAnchor anchor = SidebarViewportAnchor.capture(scrollPane);
+			ViewportAnchor anchor = ViewportAnchor.capture(scrollPane);
 			anchor.holdThroughLayout(() -> true);
 			scrollBar.setValue(0);
 			assertEquals(120, scrollBar.getValue());
@@ -64,7 +64,7 @@ public class SidebarViewportAnchorTest
 				500
 			);
 			scrollPane.setVerticalScrollBar(scrollBar);
-			SidebarViewportAnchor anchor = SidebarViewportAnchor.capture(scrollPane);
+			ViewportAnchor anchor = ViewportAnchor.capture(scrollPane);
 			scrollBar.setValue(35);
 			anchor.holdThroughLayout(() -> false);
 			scrollBarReference.set(scrollBar);

@@ -7,7 +7,7 @@ import javax.swing.JPanel;
 /** Read-only summary of the limits the participant currently enforces. */
 final class RemotePermissionSummaryPanel extends JPanel
 {
-	private final SidebarTextLabel summary = new SidebarTextLabel("");
+	private final WrappedTextLabel summary = new WrappedTextLabel("");
 
 	RemotePermissionSummaryPanel()
 	{

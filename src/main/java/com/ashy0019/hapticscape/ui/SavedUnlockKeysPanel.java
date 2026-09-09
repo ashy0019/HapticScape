@@ -38,13 +38,13 @@ final class SavedUnlockKeysPanel extends JPanel
 	private final TextClipboard clipboard;
 	private final JPanel summaryView = new JPanel(new BorderLayout(8, 0));
 	private final JPanel managerView = new JPanel(new BorderLayout(0, 7));
-	private final SidebarTextLabel summaryStatus = new SidebarTextLabel("");
-	private final SidebarTextLabel managerStatus = new SidebarTextLabel("");
+	private final WrappedTextLabel summaryStatus = new WrappedTextLabel("");
+	private final WrappedTextLabel managerStatus = new WrappedTextLabel("");
 	private final JButton manageButton = new JButton("Manage");
 	private final JButton backButton = new JButton("Back");
 	private final DefaultListModel<SavedUnlockKey> keyModel = new DefaultListModel<>();
 	private final JList<SavedUnlockKey> keyList = new JList<>(keyModel);
-	private final SidebarTextLabel detailLabel = new SidebarTextLabel("No key selected");
+	private final WrappedTextLabel detailLabel = new WrappedTextLabel("No key selected");
 	private final JLabel createdLabel = metadataLabel("");
 	private final JLabel lastUsedLabel = metadataLabel("");
 	private final JTextArea note = new JTextArea(4, 20);
@@ -72,7 +72,7 @@ final class SavedUnlockKeysPanel extends JPanel
 	{
 		JPanel text = new JPanel();
 		text.setLayout(new BoxLayout(text, BoxLayout.Y_AXIS));
-		SidebarTextLabel explanation = new SidebarTextLabel(
+		WrappedTextLabel explanation = new WrappedTextLabel(
 			"Accepted post-session unlock keys are protected by Windows. "
 				+ "Invitations and session keys are never saved."
 		);

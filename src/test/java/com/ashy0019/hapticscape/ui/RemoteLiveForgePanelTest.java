@@ -324,7 +324,7 @@ public class RemoteLiveForgePanelTest
 		private boolean closed;
 
 		@Override
-		public Registration installSidebarScrollRouting(JScrollPane pageScrollPane, Component eventRoot)
+		public Registration installPageScrollRouting(JScrollPane pageScrollPane, Component eventRoot)
 		{
 			return () -> { };
 		}

@@ -64,7 +64,7 @@ final class RemoteActionsPanel extends JPanel
 	private final JCheckBox desktopNotification = new JCheckBox("Desktop notification", true);
 	private final JCheckBox localChatbox = new JCheckBox("Local chatbox notice");
 	private final JButton sendMessageButton = new JButton("Send message");
-	private final SidebarTextLabel actionStatus = new SidebarTextLabel(
+	private final WrappedTextLabel actionStatus = new WrappedTextLabel(
 		"Ready for remote actions"
 	);
 	private boolean controllerValuesInitialized;
@@ -117,7 +117,7 @@ final class RemoteActionsPanel extends JPanel
 		setLayout(new BorderLayout(0, 6));
 		setBorder(BorderFactory.createTitledBorder("Actions"));
 
-		SidebarTextLabel explanation = new SidebarTextLabel(
+		WrappedTextLabel explanation = new WrappedTextLabel(
 			"The participant's permissions and safety limits remain authoritative."
 		);
 		add(explanation, BorderLayout.NORTH);

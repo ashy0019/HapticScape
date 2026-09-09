@@ -59,10 +59,10 @@ final class RemotePairingPanel extends JPanel
 	private final JPanel discordPanel = new JPanel();
 	private final JPanel discordLinkSetup = new JPanel();
 	private final JLabel discordStatus = new JLabel("Discord is not linked");
-	private final SidebarTextLabel connectionStatus = new SidebarTextLabel(
+	private final WrappedTextLabel connectionStatus = new WrappedTextLabel(
 		"Ready to connect"
 	);
-	private final SidebarTextLabel waitingStatus = new SidebarTextLabel(
+	private final WrappedTextLabel waitingStatus = new WrappedTextLabel(
 		"Creating secure connection code..."
 	);
 	private final JTextField discordLinkCode = new JTextField();
@@ -212,7 +212,7 @@ final class RemotePairingPanel extends JPanel
 		controllerPanel.setName("remoteControlPartner");
 		controllerPanel.setLayout(new BoxLayout(controllerPanel, BoxLayout.Y_AXIS));
 		controllerPanel.setBorder(BorderFactory.createTitledBorder("Control a partner"));
-		PanelUi.addVerticalComponent(controllerPanel, new SidebarTextLabel(
+		PanelUi.addVerticalComponent(controllerPanel, new WrappedTextLabel(
 			"Create a temporary encrypted connection code and send it privately to your partner."
 		));
 		JPanel createRow = new JPanel(new GridLayout(1, 1));
@@ -229,7 +229,7 @@ final class RemotePairingPanel extends JPanel
 		participantPanel.setName("remoteJoinPartner");
 		participantPanel.setLayout(new BoxLayout(participantPanel, BoxLayout.Y_AXIS));
 		participantPanel.setBorder(BorderFactory.createTitledBorder("Let a partner control you"));
-		PanelUi.addVerticalComponent(participantPanel, new SidebarTextLabel(
+		PanelUi.addVerticalComponent(participantPanel, new WrappedTextLabel(
 			"Paste the temporary connection code your partner sent you."
 		));
 		connectionCodeInput.setToolTipText(
@@ -261,7 +261,7 @@ final class RemotePairingPanel extends JPanel
 
 		discordLinkSetup.setName("remoteDiscordLinkSetup");
 		discordLinkSetup.setLayout(new BoxLayout(discordLinkSetup, BoxLayout.Y_AXIS));
-		SidebarTextLabel explanation = new SidebarTextLabel(
+		WrappedTextLabel explanation = new WrappedTextLabel(
 			"Link this client once to receive consent-gated requests from Discord."
 		);
 		explanation.setBorder(BorderFactory.createEmptyBorder(5, 0, 4, 0));
@@ -294,7 +294,7 @@ final class RemotePairingPanel extends JPanel
 		connectionStatus.setName("remoteConnectionStatus");
 		connectionStatus.setBorder(BorderFactory.createTitledBorder("Remote Play"));
 		PanelUi.addVerticalComponent(connectView, connectionStatus);
-		SidebarTextLabel heading = new SidebarTextLabel(
+		WrappedTextLabel heading = new WrappedTextLabel(
 			"Start a private session with a temporary code, or accept a linked Discord request."
 		);
 		heading.setBorder(BorderFactory.createEmptyBorder(2, 2, 7, 2));
@@ -341,7 +341,7 @@ final class RemotePairingPanel extends JPanel
 		allowHorizontalShrink(waitingButtons);
 		PanelUi.addVerticalComponent(waitingView, waitingButtons);
 
-		SidebarTextLabel hint = new SidebarTextLabel(
+		WrappedTextLabel hint = new WrappedTextLabel(
 			"Keep this window open while your partner joins. The code is temporary and single-use."
 		);
 		hint.setBorder(BorderFactory.createEmptyBorder(7, 1, 0, 1));

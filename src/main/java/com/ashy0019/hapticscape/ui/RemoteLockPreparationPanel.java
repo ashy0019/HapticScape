@@ -15,7 +15,7 @@ import javax.swing.JPanel;
 final class RemoteLockPreparationPanel extends JPanel
 {
 	private final JLabel stateLabel = new JLabel();
-	private final SidebarTextLabel detailLabel = new SidebarTextLabel("");
+	private final WrappedTextLabel detailLabel = new WrappedTextLabel("");
 	private final JButton openSubjectButton = new JButton("Open Subject settings");
 	private final JButton requestButton = new JButton("Generate key & request");
 	private final JButton cancelButton = new JButton("Cancel request");

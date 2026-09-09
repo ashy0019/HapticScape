@@ -7,7 +7,7 @@ import javax.swing.JScrollPane;
 /** Host-owned process-wide UI hooks used by the desktop HapticScape surface. */
 public interface GlobalUiHooks
 {
-	Registration installSidebarScrollRouting(JScrollPane pageScrollPane, Component eventRoot);
+	Registration installPageScrollRouting(JScrollPane pageScrollPane, Component eventRoot);
 
 	Registration onGestureEnd(Runnable listener);
 
@@ -48,7 +48,7 @@ public interface GlobalUiHooks
 			private final Registration registration = () -> { };
 
 			@Override
-			public Registration installSidebarScrollRouting(
+			public Registration installPageScrollRouting(
 				JScrollPane pageScrollPane,
 				Component eventRoot)
 			{

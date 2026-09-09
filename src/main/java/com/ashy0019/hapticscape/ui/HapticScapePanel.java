@@ -157,7 +157,6 @@ public final class HapticScapePanel extends JPanel
 	private final WorkspaceShell workspaceShell = new WorkspaceShell();
 	private final JScrollPane pageScrollPane;
 	private final GlobalUiHooks.Registration pageScrollRouting;
-	private final SidebarActionFocusGuard sidebarActionFocusGuard;
 	private final RoguePanel roguePanel;
 	private final RogueLauncherPanel rogueLauncher;
 	private boolean rogueModeUnlocked;
@@ -550,8 +549,7 @@ public final class HapticScapePanel extends JPanel
 		add(contentHost, BorderLayout.CENTER);
 		// The host owns the page viewport and supplies the surrounding scroll pane.
 		pageScrollPane.getVerticalScrollBar().setUnitIncrement(16);
-		pageScrollRouting = globalUiHooks.installSidebarScrollRouting(pageScrollPane, this);
-		sidebarActionFocusGuard = SidebarActionFocusGuard.install(this);
+		pageScrollRouting = globalUiHooks.installPageScrollRouting(pageScrollPane, this);
 		contentLayout.show(contentHost, NORMAL_CARD);
 
 		if (Boolean.parseBoolean(settingsStore.get(HapticScapeSettingKeys.ROGUE_UNLOCKED)))
@@ -1083,7 +1081,6 @@ public final class HapticScapePanel extends JPanel
 
 	public void close()
 	{
-		sidebarActionFocusGuard.close();
 		pageScrollRouting.close();
 		remoteSessionManager.removeListener(this);
 		settingsLockService.removeListener(this);
@@ -1406,7 +1403,7 @@ public final class HapticScapePanel extends JPanel
 		RemoteSessionSnapshot current = remoteSessionManager.getSnapshot();
 		if (current.isParticipantControlled() || isSubjectWorkspaceActive(current))
 		{
-			SidebarViewportAnchor viewportAnchor = SidebarViewportAnchor.capture(
+			ViewportAnchor viewportAnchor = ViewportAnchor.capture(
 				pageScrollPane
 			);
 			viewportAnchor.holdThroughLayout(() ->
@@ -1637,7 +1634,7 @@ public final class HapticScapePanel extends JPanel
 			appliedRemoteSessionSnapshot,
 			snapshot
 		);
-		SidebarViewportAnchor viewportAnchor = SidebarViewportAnchor.capture(
+		ViewportAnchor viewportAnchor = ViewportAnchor.capture(
 			pageScrollPane
 		);
 		if (preserveControllerViewport)

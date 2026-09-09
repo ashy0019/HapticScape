@@ -47,7 +47,7 @@ final class RemotePermissionsPanel extends JPanel
 		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
 		setBorder(BorderFactory.createTitledBorder("Your remote permissions"));
 
-		SidebarTextLabel explanation = new SidebarTextLabel(
+		WrappedTextLabel explanation = new WrappedTextLabel(
 			"Only you can change these controls. They cannot be locked or changed remotely."
 		);
 		PanelUi.addVerticalComponent(this, explanation);

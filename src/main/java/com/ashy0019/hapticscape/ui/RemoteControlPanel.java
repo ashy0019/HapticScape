@@ -121,7 +121,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		setLayout(new GridBagLayout());
 		setBorder(BorderFactory.createEmptyBorder(0, 4, 8, 4));
 
-		SidebarTextLabel privacy = new SidebarTextLabel(
+		WrappedTextLabel privacy = new WrappedTextLabel(
 			"Remote settings are end-to-end encrypted. Relay operators can see connection IPs."
 		);
 		privacy.setBorder(BorderFactory.createEmptyBorder(2, 2, 6, 2));
@@ -252,7 +252,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		JTextField keyField = new JTextField(new String(unlockKey));
 		keyField.setEditable(false);
 		keyField.setHorizontalAlignment(JTextField.CENTER);
-		SidebarTextLabel explanation = new SidebarTextLabel(
+		WrappedTextLabel explanation = new WrappedTextLabel(
 			"HapticScape will save this unlock key only if the participant accepts "
 				+ "the lock. The saved copy is encrypted by Windows for your account."
 		);
@@ -309,12 +309,12 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 			);
 			return;
 		}
-		SidebarTextLabel explanation = new SidebarTextLabel(
+		WrappedTextLabel explanation = new WrappedTextLabel(
 			"The controller requests a persistent lock on the settings listed below. "
 				+ "Their final values will stay locked after this session ends. Only the "
 				+ "controller's generated key can unlock this bundle normally."
 		);
-		SidebarTextLabel safety = new SidebarTextLabel(
+		WrappedTextLabel safety = new WrappedTextLabel(
 			"Emergency Off, End Session, Intiface controls, remote permissions, "
 				+ "Forge, Music, and developer recovery remain available."
 		);

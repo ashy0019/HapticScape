@@ -49,7 +49,7 @@ final class RemoteLiveForgePanel extends JPanel
 	private final JLabel limitLabel = new JLabel();
 	private final JProgressBar limitBar = new JProgressBar(0, 100);
 	private final JButton stopButton = new JButton("Stop Output");
-	private final SidebarTextLabel warning = new SidebarTextLabel("");
+	private final WrappedTextLabel warning = new WrappedTextLabel("");
 	private final Timer sampleTimer = new Timer(SAMPLE_INTERVAL_MILLIS, event -> sample());
 	private final JPanel layoutPanel = new JPanel(new GridBagLayout());
 
@@ -122,7 +122,7 @@ final class RemoteLiveForgePanel extends JPanel
 		JPanel controlPanel = new JPanel(new BorderLayout(0, 5));
 		controlPanel.setName("remoteLiveControl");
 		controlPanel.setBorder(BorderFactory.createTitledBorder("Live control"));
-		SidebarTextLabel explanation = new SidebarTextLabel(
+		WrappedTextLabel explanation = new WrappedTextLabel(
 			"Hold and move inside the graph. Height controls intensity while time moves continuously."
 		);
 		explanation.setBorder(BorderFactory.createEmptyBorder(0, 0, 2, 0));
@@ -134,7 +134,7 @@ final class RemoteLiveForgePanel extends JPanel
 		canvas.setBorder(BorderFactory.createLineBorder(new Color(91, 74, 49)));
 		controlPanel.add(canvas, BorderLayout.CENTER);
 
-		SidebarTextLabel releaseHelp = new SidebarTextLabel(
+		WrappedTextLabel releaseHelp = new WrappedTextLabel(
 			"Release to fade smoothly to zero. Leaving Live ends the gesture."
 		);
 		releaseHelp.setBorder(BorderFactory.createEmptyBorder(2, 0, 0, 0));

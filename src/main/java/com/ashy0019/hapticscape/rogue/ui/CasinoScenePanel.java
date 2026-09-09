@@ -508,7 +508,7 @@ public final class CasinoScenePanel extends JPanel
 	private static void drawDealer(Graphics2D g, int x, int y)
 	{
 		// Slim, flirtatious Rogue's Den waitress. Keep the shapes simple and
-		// readable at native sidebar scale: long dirty-blonde hair does most of
+		// readable at the default compact scale: long dirty-blonde hair does most of
 		// the silhouette work, while the face and draped blouse stay deliberately
 		// low-detail so she still belongs beside the blockier RSC-style patrons.
 		Color hairShadow = new Color(105, 74, 42);

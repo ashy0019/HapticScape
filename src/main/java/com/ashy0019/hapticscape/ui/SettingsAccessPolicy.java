@@ -5,7 +5,7 @@ import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteSessionState;
 import java.util.Objects;
 
-/** Resolves the single settings-access mode that the sidebar must display. */
+/** Resolves the single settings-access mode that the application must display. */
 final class SettingsAccessPolicy
 {
 	enum Mode
