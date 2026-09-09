@@ -135,9 +135,9 @@ final class SavedUnlockKeysPanel extends JPanel
 			}
 		});
 		JScrollPane listScroll = new JScrollPane(keyList);
+		listScroll.setName("savedUnlockKeyScroll");
 		listScroll.setBorder(BorderFactory.createTitledBorder("Keys"));
-		listScroll.setPreferredSize(new Dimension(240, 190));
-		listScroll.setMinimumSize(new Dimension(0, 120));
+		PanelUi.setFlexibleWidthHeightHint(listScroll, 190, 120);
 
 		JPanel details = new JPanel();
 		details.setName("savedUnlockKeyDetails");
@@ -145,9 +145,9 @@ final class SavedUnlockKeysPanel extends JPanel
 		details.setBorder(BorderFactory.createTitledBorder("Details"));
 		detailLabel.setName("savedUnlockKeyLabel");
 		detailLabel.setFont(detailLabel.getFont().deriveFont(Font.BOLD));
-		PanelUi.addVerticalComponent(details, detailLabel);
-		PanelUi.addVerticalComponent(details, createdLabel);
-		PanelUi.addVerticalComponent(details, lastUsedLabel);
+		PanelUi.addPreferredHeightComponent(details, detailLabel);
+		PanelUi.addPreferredHeightComponent(details, createdLabel);
+		PanelUi.addPreferredHeightComponent(details, lastUsedLabel);
 		note.setName("savedUnlockKeyNote");
 		note.setEditable(false);
 		note.setFocusable(false);
@@ -156,7 +156,7 @@ final class SavedUnlockKeysPanel extends JPanel
 		JScrollPane noteScroll = new JScrollPane(note);
 		noteScroll.setBorder(BorderFactory.createTitledBorder("Note"));
 		allowHorizontalShrink(noteScroll);
-		PanelUi.addVerticalComponent(details, noteScroll);
+		PanelUi.addPreferredHeightComponent(details, noteScroll);
 
 		configureCompactButton(copyButton);
 		configureCompactButton(editButton);
@@ -172,7 +172,7 @@ final class SavedUnlockKeysPanel extends JPanel
 		actions.add(editButton);
 		actions.add(forgetButton);
 		allowHorizontalShrink(actions);
-		PanelUi.addVerticalComponent(details, actions);
+		PanelUi.addPreferredHeightComponent(details, actions);
 
 		SavedUnlockKeyVaultWorkspacePanel workspace =
 			new SavedUnlockKeyVaultWorkspacePanel(listScroll, details);
@@ -314,9 +314,9 @@ final class SavedUnlockKeysPanel extends JPanel
 		updatedNote.setWrapStyleWord(true);
 		JPanel content = new JPanel();
 		content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
-		PanelUi.addVerticalComponent(content, labeledRow("Label", label));
-		PanelUi.addVerticalComponent(content, new JLabel("Note (optional)"));
-		PanelUi.addVerticalComponent(content, new JScrollPane(updatedNote));
+		PanelUi.addPreferredHeightComponent(content, labeledRow("Label", label));
+		PanelUi.addPreferredHeightComponent(content, new JLabel("Note (optional)"));
+		PanelUi.addPreferredHeightComponent(content, new JScrollPane(updatedNote));
 		int choice = JOptionPane.showConfirmDialog(
 			this,
 			content,

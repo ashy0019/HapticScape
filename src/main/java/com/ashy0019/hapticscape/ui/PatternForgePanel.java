@@ -199,12 +199,12 @@ final class PatternForgePanel extends JPanel
 		JPanel beatDurationRow = new JPanel(new BorderLayout(8, 0));
 		beatDurationRow.add(new JLabel("Beat length (ms)"), BorderLayout.CENTER);
 		beatDurationRow.add(beatDurationSpinner, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(playbackPanel, beatDurationRow);
+		PanelUi.addPreferredHeightComponent(playbackPanel, beatDurationRow);
 
 		JPanel beatCountRow = new JPanel(new BorderLayout(8, 0));
 		beatCountRow.add(new JLabel("Repeat"), BorderLayout.CENTER);
 		beatCountRow.add(beatCountSpinner, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(playbackPanel, beatCountRow);
+		PanelUi.addPreferredHeightComponent(playbackPanel, beatCountRow);
 
 		JPanel saveStateRow = new JPanel(new BorderLayout());
 		playbackSummaryLabel.setToolTipText(
@@ -213,12 +213,12 @@ final class PatternForgePanel extends JPanel
 		saveStateRow.add(playbackSummaryLabel, BorderLayout.WEST);
 		saveStateRow.add(saveStateLabel, BorderLayout.EAST);
 		saveStateRow.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));
-		PanelUi.addVerticalComponent(playbackPanel, saveStateRow);
+		PanelUi.addPreferredHeightComponent(playbackPanel, saveStateRow);
 
 		JPanel actionButtons = new JPanel(new GridLayout(1, 2, 4, 0));
 		actionButtons.add(previewButton);
 		actionButtons.add(saveButton);
-		PanelUi.addVerticalComponent(playbackPanel, actionButtons);
+		PanelUi.addPreferredHeightComponent(playbackPanel, actionButtons);
 
 		JPanel libraryHost = host(libraryPanel, 270);
 		JPanel shapeHost = host(shapePanel, 540);

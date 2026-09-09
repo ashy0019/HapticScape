@@ -173,30 +173,30 @@ final class ClickerPanel extends JPanel
 		JPanel clickOutputPanel = new JPanel();
 		clickOutputPanel.setLayout(new BoxLayout(clickOutputPanel, BoxLayout.Y_AXIS));
 		clickOutputPanel.setBorder(BorderFactory.createTitledBorder("Click output"));
-		PanelUi.addVerticalComponent(clickOutputPanel, clickSettingsBlockHeader);
-		PanelUi.addVerticalComponent(clickOutputPanel, enabledCheckBox);
-		PanelUi.addVerticalComponent(clickOutputPanel, row("Volume", volumeValue));
-		PanelUi.addVerticalComponent(clickOutputPanel, volumeSlider);
+		PanelUi.addPreferredHeightComponent(clickOutputPanel, clickSettingsBlockHeader);
+		PanelUi.addPreferredHeightComponent(clickOutputPanel, enabledCheckBox);
+		PanelUi.addPreferredHeightComponent(clickOutputPanel, row("Volume", volumeValue));
+		PanelUi.addPreferredHeightComponent(clickOutputPanel, volumeSlider);
 		JPanel testRow = new JPanel(new BorderLayout());
 		testRow.add(testButton, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(clickOutputPanel, testRow);
+		PanelUi.addPreferredHeightComponent(clickOutputPanel, testRow);
 		JLabel description = new JLabel("Independent of Intiface and haptic devices.");
 		description.setToolTipText("Click playback is ordinary local audio");
-		PanelUi.addVerticalComponent(clickOutputPanel, description);
+		PanelUi.addPreferredHeightComponent(clickOutputPanel, description);
 
 		JPanel xpSettingsPanel = new JPanel();
 		xpSettingsPanel.setLayout(new BoxLayout(xpSettingsPanel, BoxLayout.Y_AXIS));
 		xpSettingsPanel.setBorder(BorderFactory.createTitledBorder("XP clicks"));
 		JLabel skillHint = new JLabel("Choose skills in XP + Skills → Clicks.");
 		skillHint.setToolTipText("Each skill has separate Haptics and Clicks switches");
-		PanelUi.addVerticalComponent(xpSettingsPanel, skillHint);
-		PanelUi.addVerticalComponent(
+		PanelUi.addPreferredHeightComponent(xpSettingsPanel, skillHint);
+		PanelUi.addPreferredHeightComponent(
 			xpSettingsPanel,
 			row("Minimum XP gain", minimumXpSpinner)
 		);
-		PanelUi.addVerticalComponent(xpSettingsPanel, levelUpCheckBox);
-		PanelUi.addVerticalComponent(xpSettingsPanel, milestoneCheckBox);
-		PanelUi.addVerticalComponent(xpSettingsPanel, level99CheckBox);
+		PanelUi.addPreferredHeightComponent(xpSettingsPanel, levelUpCheckBox);
+		PanelUi.addPreferredHeightComponent(xpSettingsPanel, milestoneCheckBox);
+		PanelUi.addPreferredHeightComponent(xpSettingsPanel, level99CheckBox);
 
 		JPanel outputHost = host(clickOutputPanel, 300);
 		JPanel xpHost = host(xpSettingsPanel, 330);

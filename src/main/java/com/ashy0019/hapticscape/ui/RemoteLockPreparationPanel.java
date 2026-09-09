@@ -46,9 +46,9 @@ final class RemoteLockPreparationPanel extends JPanel
 		actions.add(requestButton);
 		actions.add(cancelButton);
 
-		PanelUi.addVerticalComponent(this, stateLabel);
+		PanelUi.addPreferredHeightComponent(this, stateLabel);
 		PanelUi.addFlexibleVerticalComponent(this, detailLabel);
-		PanelUi.addVerticalComponent(this, actions);
+		PanelUi.addPreferredHeightComponent(this, actions);
 		openSubjectButton.addActionListener(event -> openSubjectSettings.run());
 		requestButton.addActionListener(event -> requestLock.run());
 		cancelButton.addActionListener(event -> cancelLock.run());

@@ -423,7 +423,7 @@ final class AlertsPanel extends JPanel
 		JPanel panel = new JPanel();
 		panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
 		panel.setBorder(BorderFactory.createTitledBorder("Generic defaults"));
-		PanelUi.addVerticalComponent(panel, genericBlockHeader);
+		PanelUi.addPreferredHeightComponent(panel, genericBlockHeader);
 
 		genericEnabledCheckBox.setSelected(genericEnabled);
 		genericEnabledCheckBox.setToolTipText(
@@ -439,29 +439,29 @@ final class AlertsPanel extends JPanel
 		);
 		genericIntensityValueLabel.setText(genericIntensityPercent + "%");
 
-		PanelUi.addVerticalComponent(panel, genericEnabledCheckBox);
-		PanelUi.addVerticalComponent(panel, genericClickEnabledCheckBox);
-		PanelUi.addVerticalComponent(panel, respectFocusCheckBox);
+		PanelUi.addPreferredHeightComponent(panel, genericEnabledCheckBox);
+		PanelUi.addPreferredHeightComponent(panel, genericClickEnabledCheckBox);
+		PanelUi.addPreferredHeightComponent(panel, respectFocusCheckBox);
 
 		JPanel intensityHeader = new JPanel(new BorderLayout());
 		intensityHeader.add(new JLabel("Intensity"), BorderLayout.WEST);
 		intensityHeader.add(genericIntensityValueLabel, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(panel, intensityHeader);
-		PanelUi.addVerticalComponent(panel, genericIntensitySlider);
+		PanelUi.addPreferredHeightComponent(panel, intensityHeader);
+		PanelUi.addPreferredHeightComponent(panel, genericIntensitySlider);
 
 		JPanel patternRow = new JPanel(new BorderLayout(8, 0));
 		patternRow.add(new JLabel("Pattern"), BorderLayout.CENTER);
 		patternRow.add(genericPatternComboBox, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(panel, patternRow);
+		PanelUi.addPreferredHeightComponent(panel, patternRow);
 
 		JPanel durationRow = new JPanel(new BorderLayout(8, 0));
 		durationRow.add(new JLabel(PanelUi.DURATION_LABEL), BorderLayout.CENTER);
 		durationRow.add(genericDurationSpinner, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(panel, durationRow);
+		PanelUi.addPreferredHeightComponent(panel, durationRow);
 
 		JPanel testRow = new JPanel(new BorderLayout());
 		testRow.add(testGenericButton, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(panel, testRow);
+		PanelUi.addPreferredHeightComponent(panel, testRow);
 		return panel;
 	}
 
@@ -474,25 +474,25 @@ final class AlertsPanel extends JPanel
 			selectedCategoryLabel.getFont().deriveFont(Font.BOLD)
 		);
 		selectedCategoryLabel.setBorder(BorderFactory.createEmptyBorder(2, 2, 5, 2));
-		PanelUi.addVerticalComponent(panel, selectedCategoryLabel);
-		PanelUi.addVerticalComponent(panel, specificBlockHeader);
+		PanelUi.addPreferredHeightComponent(panel, selectedCategoryLabel);
+		PanelUi.addPreferredHeightComponent(panel, specificBlockHeader);
 		specificClickEnabledCheckBox.setToolTipText(
 			"Play one click for the selected semantic alert"
 		);
-		PanelUi.addVerticalComponent(panel, specificClickEnabledCheckBox);
+		PanelUi.addPreferredHeightComponent(panel, specificClickEnabledCheckBox);
 
 		JPanel behaviorRow = new JPanel(new BorderLayout(8, 0));
 		behaviorRow.add(new JLabel("Haptics"), BorderLayout.CENTER);
 		behaviorRow.add(behaviorComboBox, BorderLayout.EAST);
 		PanelUi.setFixedWidth(behaviorComboBox, PanelUi.SELECTOR_CONTROL_WIDTH);
-		PanelUi.addVerticalComponent(panel, behaviorRow);
+		PanelUi.addPreferredHeightComponent(panel, behaviorRow);
 		behaviorHintLabel.setEnabled(false);
 		behaviorHintLabel.setBorder(BorderFactory.createEmptyBorder(3, 2, 4, 2));
-		PanelUi.addVerticalComponent(panel, behaviorHintLabel);
+		PanelUi.addPreferredHeightComponent(panel, behaviorHintLabel);
 
 		triggerRow.add(triggerLabel, BorderLayout.CENTER);
 		triggerRow.add(triggerSpinner, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(panel, triggerRow);
+		PanelUi.addPreferredHeightComponent(panel, triggerRow);
 
 		customProfilePanel.setLayout(
 			new BoxLayout(customProfilePanel, BoxLayout.Y_AXIS)
@@ -501,23 +501,23 @@ final class AlertsPanel extends JPanel
 		JPanel intensityHeader = new JPanel(new BorderLayout());
 		intensityHeader.add(new JLabel("Intensity"), BorderLayout.WEST);
 		intensityHeader.add(specificIntensityValueLabel, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(customProfilePanel, intensityHeader);
-		PanelUi.addVerticalComponent(customProfilePanel, specificIntensitySlider);
+		PanelUi.addPreferredHeightComponent(customProfilePanel, intensityHeader);
+		PanelUi.addPreferredHeightComponent(customProfilePanel, specificIntensitySlider);
 
 		JPanel patternRow = new JPanel(new BorderLayout(8, 0));
 		patternRow.add(new JLabel("Pattern"), BorderLayout.CENTER);
 		patternRow.add(specificPatternComboBox, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(customProfilePanel, patternRow);
+		PanelUi.addPreferredHeightComponent(customProfilePanel, patternRow);
 
 		JPanel durationRow = new JPanel(new BorderLayout(8, 0));
 		durationRow.add(new JLabel(PanelUi.DURATION_LABEL), BorderLayout.CENTER);
 		durationRow.add(specificDurationSpinner, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(customProfilePanel, durationRow);
+		PanelUi.addPreferredHeightComponent(customProfilePanel, durationRow);
 		PanelUi.addFlexibleVerticalComponent(panel, customProfilePanel);
 
 		JPanel testRow = new JPanel(new BorderLayout());
 		testRow.add(testSpecificButton, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(panel, testRow);
+		PanelUi.addPreferredHeightComponent(panel, testRow);
 		return panel;
 	}
 

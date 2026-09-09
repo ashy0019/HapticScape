@@ -82,12 +82,30 @@ final class PanelUi
 		component.setMaximumSize(fixedSize);
 	}
 
-	static void addVerticalComponent(JPanel panel, JComponent component)
+	/**
+	 * Keeps a component at its current preferred height while allowing its width
+	 * to follow the surrounding BoxLayout. Use this only for controls whose height
+	 * is intentionally stable after construction.
+	 */
+	static void addPreferredHeightComponent(JPanel panel, JComponent component)
 	{
 		Dimension preferredSize = component.getPreferredSize();
 		component.setAlignmentX(Component.LEFT_ALIGNMENT);
 		component.setMaximumSize(new Dimension(Integer.MAX_VALUE, preferredSize.height));
 		panel.add(component);
+	}
+
+	/**
+	 * Supplies useful vertical space without imposing a preferred or minimum
+	 * width on a component inside a responsive workspace.
+	 */
+	static void setFlexibleWidthHeightHint(
+		JComponent component,
+		int preferredHeight,
+		int minimumHeight)
+	{
+		component.setPreferredSize(new Dimension(0, preferredHeight));
+		component.setMinimumSize(new Dimension(0, minimumHeight));
 	}
 
 	/**

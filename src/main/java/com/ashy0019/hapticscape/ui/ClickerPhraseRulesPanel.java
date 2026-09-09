@@ -14,7 +14,6 @@ import com.ashy0019.hapticscape.remote.SettingsLockTarget;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
-import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
@@ -175,7 +174,8 @@ final class ClickerPhraseRulesPanel extends JPanel
 		ruleList.setCellRenderer(new PhraseRuleRenderer());
 		ruleList.setFixedCellHeight(29);
 		JScrollPane scrollPane = new JScrollPane(ruleList);
-		scrollPane.setPreferredSize(new Dimension(300, 210));
+		scrollPane.setName("phraseRuleScroll");
+		PanelUi.setFlexibleWidthHeightHint(scrollPane, 210, 120);
 		scrollPane.setToolTipText(
 			"Shift-click a rule during Remote Play to select its post-session lock."
 		);
@@ -193,25 +193,26 @@ final class ClickerPhraseRulesPanel extends JPanel
 		editorPanel.setLayout(new BoxLayout(editorPanel, BoxLayout.Y_AXIS));
 		editorPanel.setBorder(BorderFactory.createTitledBorder("Rule editor"));
 		editorTitle.setBorder(BorderFactory.createEmptyBorder(2, 2, 4, 2));
-		PanelUi.addVerticalComponent(editorPanel, editorTitle);
-		PanelUi.addVerticalComponent(editorPanel, editorEnabled);
+		PanelUi.addPreferredHeightComponent(editorPanel, editorTitle);
+		PanelUi.addPreferredHeightComponent(editorPanel, editorEnabled);
 		PanelUi.setFixedWidth(editorMode, PanelUi.SELECTOR_CONTROL_WIDTH);
-		PanelUi.addVerticalComponent(editorPanel, row("Match", editorMode));
-		PanelUi.addVerticalComponent(editorPanel, new JLabel("Phrase or regular expression"));
+		PanelUi.addPreferredHeightComponent(editorPanel, row("Match", editorMode));
+		PanelUi.addPreferredHeightComponent(editorPanel, new JLabel("Phrase or regular expression"));
 		editorExpression.setLineWrap(false);
 		JScrollPane expressionScroll = new JScrollPane(editorExpression);
-		expressionScroll.setPreferredSize(new Dimension(330, 112));
-		PanelUi.addVerticalComponent(editorPanel, expressionScroll);
+		expressionScroll.setName("phraseExpressionScroll");
+		PanelUi.setFlexibleWidthHeightHint(expressionScroll, 112, 80);
+		PanelUi.addPreferredHeightComponent(editorPanel, expressionScroll);
 		JLabel hint = new JLabel("Contains/Exact ignore case; Regex uses Java syntax.");
 		hint.setToolTipText(
 			"Regex uses find(). Add ^...$ for a whole-message match or (?i) for case-insensitive matching."
 		);
-		PanelUi.addVerticalComponent(editorPanel, hint);
+		PanelUi.addPreferredHeightComponent(editorPanel, hint);
 
 		JPanel actions = new JPanel(new GridLayout(1, 2, 4, 0));
 		actions.add(saveButton);
 		actions.add(cancelButton);
-		PanelUi.addVerticalComponent(editorPanel, actions);
+		PanelUi.addPreferredHeightComponent(editorPanel, actions);
 	}
 
 	private void configureListeners()

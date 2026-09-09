@@ -168,52 +168,52 @@ final class MusicPanel extends JPanel
 	private JPanel capturePanel()
 	{
 		JPanel panel = verticalSection("Capture", "musicCaptureSection");
-		PanelUi.addVerticalComponent(panel, row("State", captureStateLabel));
+		PanelUi.addPreferredHeightComponent(panel, row("State", captureStateLabel));
 		JPanel sourceRow = row("Source", new JLabel("Default system output"));
 		sourceRow.setToolTipText("Captures the Windows default output device");
-		PanelUi.addVerticalComponent(panel, sourceRow);
+		PanelUi.addPreferredHeightComponent(panel, sourceRow);
 		panel.add(Box.createVerticalStrut(6));
-		PanelUi.addVerticalComponent(panel, outputMeter);
+		PanelUi.addPreferredHeightComponent(panel, outputMeter);
 
 		statusLabel.setBorder(BorderFactory.createEmptyBorder(5, 1, 5, 1));
-		PanelUi.addVerticalComponent(panel, statusLabel);
+		PanelUi.addPreferredHeightComponent(panel, statusLabel);
 		JPanel buttonRow = new JPanel(new GridLayout(1, 1));
 		buttonRow.add(enabledButton);
-		PanelUi.addVerticalComponent(panel, buttonRow);
+		PanelUi.addPreferredHeightComponent(panel, buttonRow);
 
 		JLabel privacy = new JLabel("Analyzed locally; audio is never recorded.");
 		privacy.setToolTipText("Audio samples remain in memory on this computer");
 		privacy.setBorder(BorderFactory.createEmptyBorder(6, 1, 0, 1));
-		PanelUi.addVerticalComponent(panel, privacy);
+		PanelUi.addPreferredHeightComponent(panel, privacy);
 		return panel;
 	}
 
 	private JPanel responsePanel()
 	{
 		JPanel panel = verticalSection("Response", "musicResponseSection");
-		PanelUi.addVerticalComponent(panel, row("Feel", responseComboBox));
+		PanelUi.addPreferredHeightComponent(panel, row("Feel", responseComboBox));
 		responseHint.setBorder(BorderFactory.createEmptyBorder(5, 1, 7, 1));
-		PanelUi.addVerticalComponent(panel, responseHint);
-		PanelUi.addVerticalComponent(panel, row("Sensitivity", sensitivityValue));
+		PanelUi.addPreferredHeightComponent(panel, responseHint);
+		PanelUi.addPreferredHeightComponent(panel, row("Sensitivity", sensitivityValue));
 		sensitivitySlider.setToolTipText(
 			"Raises or lowers how strongly HapticScape reacts to captured audio"
 		);
-		PanelUi.addVerticalComponent(panel, sensitivitySlider);
+		PanelUi.addPreferredHeightComponent(panel, sensitivitySlider);
 		return panel;
 	}
 
 	private JPanel outputPanel()
 	{
 		JPanel panel = verticalSection("Output range", "musicOutputSection");
-		PanelUi.addVerticalComponent(panel, row("Active range", rangeValue));
+		PanelUi.addPreferredHeightComponent(panel, row("Active range", rangeValue));
 		panel.add(Box.createVerticalStrut(5));
-		PanelUi.addVerticalComponent(panel, row("Minimum", minimumValue));
+		PanelUi.addPreferredHeightComponent(panel, row("Minimum", minimumValue));
 		minimumSlider.setToolTipText("Lowest non-silent haptic intensity");
-		PanelUi.addVerticalComponent(panel, minimumSlider);
+		PanelUi.addPreferredHeightComponent(panel, minimumSlider);
 		panel.add(Box.createVerticalStrut(5));
-		PanelUi.addVerticalComponent(panel, row("Maximum", maximumValue));
+		PanelUi.addPreferredHeightComponent(panel, row("Maximum", maximumValue));
 		maximumSlider.setToolTipText("Highest haptic intensity music sync may request");
-		PanelUi.addVerticalComponent(panel, maximumSlider);
+		PanelUi.addPreferredHeightComponent(panel, maximumSlider);
 		return panel;
 	}
 

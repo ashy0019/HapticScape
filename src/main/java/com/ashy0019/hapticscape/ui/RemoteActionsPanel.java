@@ -127,7 +127,7 @@ final class RemoteActionsPanel extends JPanel
 
 		pattern.setName("remotePattern");
 		PanelUi.setFixedWidth(pattern, 118);
-		PanelUi.addVerticalComponent(hapticControls, row("Pattern", pattern));
+		PanelUi.addPreferredHeightComponent(hapticControls, row("Pattern", pattern));
 
 		intensity.setName("remoteIntensity");
 		intensity.setPaintTicks(false);
@@ -139,12 +139,12 @@ final class RemoteActionsPanel extends JPanel
 		intensityRow.add(intensityValue, BorderLayout.EAST);
 		allowHorizontalShrink(intensityRow);
 		allowHorizontalShrink(intensity);
-		PanelUi.addVerticalComponent(hapticControls, intensityRow);
+		PanelUi.addPreferredHeightComponent(hapticControls, intensityRow);
 
 		duration.setName("remoteDuration");
 		PanelUi.setFixedWidth(duration, 70);
 		duration.setToolTipText("Requested duration in milliseconds");
-		PanelUi.addVerticalComponent(hapticControls, row("Duration", duration));
+		PanelUi.addPreferredHeightComponent(hapticControls, row("Duration", duration));
 
 		buzzButton.setName("remoteBuzz");
 		stopButton.setName("remoteStop");
@@ -155,17 +155,17 @@ final class RemoteActionsPanel extends JPanel
 		hapticButtons.add(buzzButton);
 		hapticButtons.add(stopButton);
 		allowHorizontalShrink(hapticButtons);
-		PanelUi.addVerticalComponent(hapticControls, hapticButtons);
+		PanelUi.addPreferredHeightComponent(hapticControls, hapticButtons);
 
 		clickButton.setName("remoteClick");
 		configureCompactButton(clickButton);
-		PanelUi.addVerticalComponent(communicationControls, clickButton);
+		PanelUi.addPreferredHeightComponent(communicationControls, clickButton);
 
 		JPanel messageHeader = new JPanel(new BorderLayout(6, 0));
 		messageHeader.add(new JLabel("Message"), BorderLayout.WEST);
 		messageHeader.add(messageLength, BorderLayout.EAST);
 		allowHorizontalShrink(messageHeader);
-		PanelUi.addVerticalComponent(communicationControls, messageHeader);
+		PanelUi.addPreferredHeightComponent(communicationControls, messageHeader);
 
 		message.setName("remoteMessage");
 		message.setLineWrap(true);
@@ -177,7 +177,7 @@ final class RemoteActionsPanel extends JPanel
 		JScrollPane messageScroll = new JScrollPane(message);
 		messageScroll.setName("remoteMessageScroll");
 		allowHorizontalShrink(messageScroll);
-		PanelUi.addVerticalComponent(communicationControls, messageScroll);
+		PanelUi.addPreferredHeightComponent(communicationControls, messageScroll);
 
 		desktopNotification.setName("remoteDesktopDestination");
 		localChatbox.setName("remoteChatboxDestination");
@@ -185,12 +185,12 @@ final class RemoteActionsPanel extends JPanel
 		localChatbox.setToolTipText(
 			"Show a local-only HapticScape console line; nothing is sent to Jagex"
 		);
-		PanelUi.addVerticalComponent(communicationControls, desktopNotification);
-		PanelUi.addVerticalComponent(communicationControls, localChatbox);
+		PanelUi.addPreferredHeightComponent(communicationControls, desktopNotification);
+		PanelUi.addPreferredHeightComponent(communicationControls, localChatbox);
 
 		sendMessageButton.setName("remoteSendMessage");
 		configureCompactButton(sendMessageButton);
-		PanelUi.addVerticalComponent(communicationControls, sendMessageButton);
+		PanelUi.addPreferredHeightComponent(communicationControls, sendMessageButton);
 
 		RemoteActionWorkspacePanel workspace = new RemoteActionWorkspacePanel(
 			hapticControls,

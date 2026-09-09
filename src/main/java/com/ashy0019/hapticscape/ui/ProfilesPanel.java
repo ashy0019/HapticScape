@@ -116,36 +116,36 @@ final class ProfilesPanel extends JPanel
 		PanelUi.setFixedWidth(durationSpinner, PanelUi.NUMERIC_CONTROL_WIDTH);
 		intensityValueLabel.setText(global.getIntensityPercent() + "%");
 
-		PanelUi.addVerticalComponent(this, selectedSkillLabel);
-		PanelUi.addVerticalComponent(this, profileBlockHeader);
-		PanelUi.addVerticalComponent(this, useGlobalCheckBox);
+		PanelUi.addPreferredHeightComponent(this, selectedSkillLabel);
+		PanelUi.addPreferredHeightComponent(this, profileBlockHeader);
+		PanelUi.addPreferredHeightComponent(this, useGlobalCheckBox);
 		add(Box.createVerticalStrut(6));
 
 		JPanel thresholdRow = new JPanel(new BorderLayout(8, 0));
 		thresholdRow.add(new JLabel("Minimum XP gain"), BorderLayout.CENTER);
 		thresholdRow.add(minimumXpSpinner, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(this, thresholdRow);
+		PanelUi.addPreferredHeightComponent(this, thresholdRow);
 
 		JPanel intensityHeader = new JPanel(new BorderLayout());
 		intensityHeader.add(new JLabel("Intensity"), BorderLayout.WEST);
 		intensityHeader.add(intensityValueLabel, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(this, intensityHeader);
-		PanelUi.addVerticalComponent(this, intensitySlider);
+		PanelUi.addPreferredHeightComponent(this, intensityHeader);
+		PanelUi.addPreferredHeightComponent(this, intensitySlider);
 
 		JPanel patternRow = new JPanel(new BorderLayout(8, 0));
 		patternRow.add(new JLabel("Pattern"), BorderLayout.CENTER);
 		patternRow.add(patternComboBox, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(this, patternRow);
+		PanelUi.addPreferredHeightComponent(this, patternRow);
 
 		JPanel durationRow = new JPanel(new BorderLayout(8, 0));
 		durationRow.add(new JLabel(PanelUi.DURATION_LABEL), BorderLayout.CENTER);
 		durationRow.add(durationSpinner, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(this, durationRow);
+		PanelUi.addPreferredHeightComponent(this, durationRow);
 
 		JPanel testRow = new JPanel(new BorderLayout());
 		testButton.setToolTipText("Preview the selected skill's effective XP settings");
 		testRow.add(testButton, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(this, testRow);
+		PanelUi.addPreferredHeightComponent(this, testRow);
 
 		useGlobalLockBinding = new LockableCheckBoxBinding(
 			useGlobalCheckBox,

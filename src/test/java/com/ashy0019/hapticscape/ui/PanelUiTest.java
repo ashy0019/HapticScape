@@ -4,6 +4,7 @@ import java.awt.Dimension;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.BoxLayout;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.SwingUtilities;
 import org.junit.Test;
@@ -13,6 +14,25 @@ import static org.junit.Assert.assertTrue;
 
 public class PanelUiTest
 {
+	@Test
+	public void flexibleWidthHeightHintDoesNotImposeOldWorkspaceWidths()
+		throws Exception
+	{
+		AtomicReference<Dimension> preferredSize = new AtomicReference<>();
+		AtomicReference<Dimension> minimumSize = new AtomicReference<>();
+
+		SwingUtilities.invokeAndWait(() ->
+		{
+			JScrollPane scrollPane = new JScrollPane();
+			PanelUi.setFlexibleWidthHeightHint(scrollPane, 210, 120);
+			preferredSize.set(scrollPane.getPreferredSize());
+			minimumSize.set(scrollPane.getMinimumSize());
+		});
+
+		assertEquals(new Dimension(0, 210), preferredSize.get());
+		assertEquals(new Dimension(0, 120), minimumSize.get());
+	}
+
 	@Test
 	public void compactTabsKeepTheirLabelsReadable() throws Exception
 	{

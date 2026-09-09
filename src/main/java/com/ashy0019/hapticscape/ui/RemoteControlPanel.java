@@ -147,7 +147,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		controllerSide.setName("remoteControllerSubjectWorkspace");
 		controllerSide.setLayout(new BoxLayout(controllerSide, BoxLayout.Y_AXIS));
 		PanelUi.addFlexibleVerticalComponent(controllerSide, permissionSummary);
-		PanelUi.addVerticalComponent(controllerSide, controllerTools);
+		PanelUi.addPreferredHeightComponent(controllerSide, controllerTools);
 		PanelUi.addFlexibleVerticalComponent(controllerSide, lockPreparationPanel);
 		controllerDashboard = new RemoteControllerDashboardPanel(
 			actionsPanel,
@@ -258,15 +258,15 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		);
 		JPanel content = new JPanel();
 		content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
-		PanelUi.addVerticalComponent(content, explanation);
-		PanelUi.addVerticalComponent(
+		PanelUi.addPreferredHeightComponent(content, explanation);
+		PanelUi.addPreferredHeightComponent(
 			content,
 			new JLabel(targets.size() + (targets.size() == 1
 				? " setting will be locked:"
 				: " settings will be locked:"))
 		);
-		PanelUi.addVerticalComponent(content, createTargetList(targets));
-		PanelUi.addVerticalComponent(content, keyField);
+		PanelUi.addPreferredHeightComponent(content, createTargetList(targets));
+		PanelUi.addPreferredHeightComponent(content, keyField);
 		try
 		{
 			Object[] options = {"Copy key & request", "Cancel"};
@@ -320,9 +320,9 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		);
 		JPanel content = new JPanel();
 		content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
-		PanelUi.addVerticalComponent(content, explanation);
-		PanelUi.addVerticalComponent(content, createTargetList(proposal.getTargets()));
-		PanelUi.addVerticalComponent(content, safety);
+		PanelUi.addPreferredHeightComponent(content, explanation);
+		PanelUi.addPreferredHeightComponent(content, createTargetList(proposal.getTargets()));
+		PanelUi.addPreferredHeightComponent(content, safety);
 		int choice = JOptionPane.showConfirmDialog(
 			this,
 			content,

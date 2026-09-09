@@ -476,7 +476,7 @@ public final class HapticScapePanel extends JPanel
 
 		JList<DeviceInfo> deviceList = new JList<>(deviceModel);
 		JScrollPane scrollPane = new JScrollPane(deviceList);
-		scrollPane.setPreferredSize(new Dimension(0, 140));
+		PanelUi.setFlexibleWidthHeightHint(scrollPane, 140, 90);
 		scrollPane.setBorder(BorderFactory.createTitledBorder("Devices"));
 
 		connectButton.addActionListener(event ->
@@ -969,50 +969,50 @@ public final class HapticScapePanel extends JPanel
 		JPanel settings = new JPanel();
 		settings.setLayout(new BoxLayout(settings, BoxLayout.Y_AXIS));
 		settings.setBorder(BorderFactory.createTitledBorder("Feedback"));
-		PanelUi.addVerticalComponent(settings, feedbackBlockHeader);
+		PanelUi.addPreferredHeightComponent(settings, feedbackBlockHeader);
 
 		JPanel thresholdRow = new JPanel(new BorderLayout(8, 0));
 		thresholdRow.add(new JLabel("Minimum XP gain"), BorderLayout.CENTER);
 		thresholdRow.add(minimumXpSpinner, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(settings, thresholdRow);
+		PanelUi.addPreferredHeightComponent(settings, thresholdRow);
 
 		JPanel intensityHeader = new JPanel(new BorderLayout());
 		intensityHeader.add(new JLabel("Intensity"), BorderLayout.WEST);
 		intensityHeader.add(intensityValueLabel, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(settings, intensityHeader);
-		PanelUi.addVerticalComponent(settings, intensitySlider);
+		PanelUi.addPreferredHeightComponent(settings, intensityHeader);
+		PanelUi.addPreferredHeightComponent(settings, intensitySlider);
 
 		JPanel patternRow = new JPanel(new BorderLayout(8, 0));
 		patternRow.add(new JLabel("Pattern"), BorderLayout.CENTER);
 		patternRow.add(patternComboBox, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(settings, patternRow);
+		PanelUi.addPreferredHeightComponent(settings, patternRow);
 
 		JPanel durationRow = new JPanel(new BorderLayout(8, 0));
 		durationRow.add(new JLabel(PanelUi.DURATION_LABEL), BorderLayout.CENTER);
 		durationRow.add(durationSpinner, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(settings, durationRow);
+		PanelUi.addPreferredHeightComponent(settings, durationRow);
 
 		JPanel levelUpRow = new JPanel(new BorderLayout(8, 0));
 		levelUpRow.add(levelUpCheckBox, BorderLayout.CENTER);
 		levelUpRow.add(levelUpPatternComboBox, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(settings, levelUpRow);
+		PanelUi.addPreferredHeightComponent(settings, levelUpRow);
 
 		JPanel levelUpTestRow = new JPanel(new BorderLayout());
 		levelUpTestRow.add(testLevelUpButton, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(settings, levelUpTestRow);
+		PanelUi.addPreferredHeightComponent(settings, levelUpTestRow);
 
 		JPanel milestoneRow = new JPanel(new BorderLayout(8, 0));
 		milestoneRow.add(milestoneCheckBox, BorderLayout.CENTER);
 		milestoneRow.add(milestonePatternComboBox, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(settings, milestoneRow);
+		PanelUi.addPreferredHeightComponent(settings, milestoneRow);
 
 		level99Row.add(level99CheckBox, BorderLayout.CENTER);
-		PanelUi.addVerticalComponent(settings, level99Row);
+		PanelUi.addPreferredHeightComponent(settings, level99Row);
 
 		developerControlsRow.add(previewLevel99Button);
 		developerControlsRow.add(resetRogueDiscoveryButton);
 		developerControlsRow.add(clearSettingsLockButton);
-		PanelUi.addVerticalComponent(settings, developerControlsRow);
+		PanelUi.addPreferredHeightComponent(settings, developerControlsRow);
 		return settings;
 	}
 

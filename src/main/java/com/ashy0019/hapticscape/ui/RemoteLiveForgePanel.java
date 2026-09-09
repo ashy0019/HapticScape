@@ -117,7 +117,7 @@ final class RemoteLiveForgePanel extends JPanel
 		permissionLabel.setPreferredSize(new Dimension(82, permissionLabel.getPreferredSize().height));
 		heading.add(permissionLabel, BorderLayout.EAST);
 		allowHorizontalShrink(heading);
-		PanelUi.addVerticalComponent(sessionPanel, heading);
+		PanelUi.addPreferredHeightComponent(sessionPanel, heading);
 
 		JPanel controlPanel = new JPanel(new BorderLayout(0, 5));
 		controlPanel.setName("remoteLiveControl");
@@ -154,21 +154,21 @@ final class RemoteLiveForgePanel extends JPanel
 		limitPanel.setPreferredSize(new Dimension(0, limitPanelHeight));
 		limitPanel.setMinimumSize(new Dimension(0, limitPanelHeight));
 		limitPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, limitPanelHeight));
-		PanelUi.addVerticalComponent(sessionPanel, limitPanel);
+		PanelUi.addPreferredHeightComponent(sessionPanel, limitPanel);
 
 		stopButton.setName("remoteLiveStop");
 		stopButton.setText("Stop output");
 		stopButton.setToolTipText("Stop all remote haptic output immediately");
 		stopButton.setAlignmentX(Component.LEFT_ALIGNMENT);
 		stopButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, stopButton.getPreferredSize().height));
-		PanelUi.addVerticalComponent(sessionPanel, stopButton);
+		PanelUi.addPreferredHeightComponent(sessionPanel, stopButton);
 
 		warning.setName("remoteLiveWarning");
 		warning.setBorder(BorderFactory.createEmptyBorder(5, 0, 0, 0));
 		warning.setPreferredSize(new Dimension(180, WARNING_HEIGHT));
 		warning.setMinimumSize(new Dimension(0, WARNING_HEIGHT));
 		warning.setMaximumSize(new Dimension(Integer.MAX_VALUE, WARNING_HEIGHT));
-		PanelUi.addVerticalComponent(sessionPanel, warning);
+		PanelUi.addPreferredHeightComponent(sessionPanel, warning);
 
 		JPanel controlHost = host(controlPanel, 620);
 		JPanel sessionHost = host(sessionPanel, 270);
