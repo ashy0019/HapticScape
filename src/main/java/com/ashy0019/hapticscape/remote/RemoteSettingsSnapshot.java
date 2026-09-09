@@ -69,6 +69,8 @@ public final class RemoteSettingsSnapshot
 	private final boolean clickerGenericNotificationEnabled;
 	private final String clickerAlertSettings;
 	private final String clickerPhraseRules;
+	private final boolean startWithWindows;
+	private final boolean startMinimized;
 
 	private RemoteSettingsSnapshot(RemoteSettingsSource config)
 	{
@@ -107,6 +109,8 @@ public final class RemoteSettingsSnapshot
 		clickerGenericNotificationEnabled = config.clickerGenericNotificationEnabled();
 		clickerAlertSettings = config.clickerAlertSettings();
 		clickerPhraseRules = config.clickerPhraseRules();
+		startWithWindows = config.startWithWindows();
+		startMinimized = config.startMinimized();
 	}
 
 	public static RemoteSettingsSnapshot capture(RemoteSettingsSource config)
@@ -225,7 +229,19 @@ public final class RemoteSettingsSnapshot
 			HapticScapeSettingKeys.CLICKER_PHRASE_RULES,
 			getClickerPhraseRules().toConfigValue()
 		);
+		values.put(HapticScapeSettingKeys.START_WITH_WINDOWS, startWithWindows);
+		values.put(HapticScapeSettingKeys.START_MINIMIZED, startMinimized);
 		return Collections.unmodifiableMap(values);
+	}
+
+	public boolean isStartWithWindows()
+	{
+		return startWithWindows;
+	}
+
+	public boolean isStartMinimized()
+	{
+		return startMinimized;
 	}
 
 	public void validate()

@@ -17,6 +17,8 @@ import com.ashy0019.hapticscape.remote.DiscordJoinConsentHandler;
 import com.ashy0019.hapticscape.remote.DiscordJoinRequest;
 import com.ashy0019.hapticscape.remote.DiscordPairingBridge;
 import com.ashy0019.hapticscape.remote.SettingsStore;
+import com.ashy0019.hapticscape.remote.SettingsLockCatalog;
+import com.ashy0019.hapticscape.remote.SettingsLockService;
 import com.ashy0019.hapticscape.ui.HapticScapePanel;
 import java.awt.Dimension;
 import java.awt.EventQueue;
@@ -30,8 +32,10 @@ import java.util.concurrent.CompletableFuture;
 import javax.imageio.ImageIO;
 import javax.swing.BorderFactory;
 import javax.swing.JFrame;
+import javax.swing.JOptionPane;
 import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 
 /** Hosts the reusable HapticScape Swing panel in a standalone desktop window. */
 public final class HapticScapeDesktopWindow implements AutoCloseable
@@ -40,6 +44,7 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 	static final int DEFAULT_WINDOW_HEIGHT = 900;
 	static final int MINIMUM_WINDOW_WIDTH = 480;
 	static final int MINIMUM_WINDOW_HEIGHT = 640;
+	static final int UNAUTHORIZED_EXIT_FLUSH_MILLIS = 750;
 
 	private final HapticScapeRuntime runtime;
 	private final JFrame frame = new JFrame("HapticScape");
@@ -47,6 +52,11 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 	private final HapticScapePanel panel;
 	private final DesktopSourceMessageService sourceMessages;
 	private final Runnable closeAction;
+	private final SettingsLockService settingsLockService;
+	private final ProtectedExitAuditStore protectedExitAudit;
+	private ProtectedExitDialog protectedExitDialog;
+	private boolean exitScheduled;
+	private boolean trayAvailable;
 
 	public HapticScapeDesktopWindow(
 		HapticScapeRuntime runtime,
@@ -54,11 +64,19 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 		SkillCatalog skillCatalog,
 		SettingsStore settingsStore,
 		DesktopSourceMessageService sourceMessages,
+		ProtectedExitAuditStore protectedExitAudit,
+		String windowTitle,
 		Runnable closeAction)
 	{
 		this.runtime = Objects.requireNonNull(runtime, "runtime");
 		this.sourceMessages = Objects.requireNonNull(sourceMessages, "sourceMessages");
 		this.closeAction = Objects.requireNonNull(closeAction, "closeAction");
+		this.settingsLockService = runtime.getSettingsLockService();
+		this.protectedExitAudit = Objects.requireNonNull(
+			protectedExitAudit,
+			"protectedExitAudit"
+		);
+		frame.setTitle(Objects.requireNonNull(windowTitle, "windowTitle"));
 		Objects.requireNonNull(settings, "settings");
 		Objects.requireNonNull(skillCatalog, "skillCatalog");
 		Objects.requireNonNull(settingsStore, "settingsStore");
@@ -109,7 +127,14 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 			@Override
 			public void windowClosing(WindowEvent event)
 			{
-				HapticScapeDesktopWindow.this.closeAction.run();
+				if (trayAvailable)
+				{
+					frame.setVisible(false);
+				}
+				else
+				{
+					requestClose();
+				}
 			}
 		});
 		loadWindowIcon();
@@ -119,10 +144,125 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 		sourceMessages.setListener(this::showSourceMessage);
 	}
 
+	private void requestClose()
+	{
+		if (exitScheduled)
+		{
+			return;
+		}
+		if (!settingsLockService.isLocked(SettingsLockCatalog.PROTECTED_EXIT))
+		{
+			protectedExitAudit.markAuthorizedEnd();
+			closeAction.run();
+			return;
+		}
+		if (protectedExitDialog != null && protectedExitDialog.isDisplayable())
+		{
+			protectedExitDialog.toFront();
+			return;
+		}
+		protectedExitDialog = new ProtectedExitDialog(
+			frame,
+			settingsLockService,
+			this::authorizedExit,
+			this::unauthorizedExit,
+			this::emergencyOff
+		);
+		protectedExitDialog.setVisible(true);
+	}
+
+	private void authorizedExit()
+	{
+		protectedExitAudit.markAuthorizedEnd();
+		closeAction.run();
+	}
+
+	private void unauthorizedExit()
+	{
+		exitScheduled = true;
+		protectedExitAudit.markUnauthorizedEnd();
+		runtime.stopAll();
+		// WebSocket.send confirms that the message was queued, not that OkHttp put
+		// it on the wire. Keep the runtime alive briefly so close() cannot tear the
+		// transport down before the controller receives the flag. The durable flag
+		// remains as a fallback if delivery still fails.
+		boolean queued = runtime.getRemoteSessionManager().reportUnauthorizedEnd(
+			"Unauthorized end"
+		);
+		if (!queued)
+		{
+			closeAction.run();
+			return;
+		}
+		Timer flushTimer = new Timer(
+			UNAUTHORIZED_EXIT_FLUSH_MILLIS,
+			event -> closeAction.run()
+		);
+		flushTimer.setRepeats(false);
+		flushTimer.start();
+	}
+
+	private void emergencyOff()
+	{
+		runtime.stopAll();
+		runtime.getRemoteSessionManager().emergencyPause();
+	}
+
 	public void show()
 	{
 		requireEventDispatchThread();
 		frame.setVisible(true);
+	}
+
+	void setTrayAvailable(boolean available)
+	{
+		trayAvailable = available;
+	}
+
+	void hideToTray()
+	{
+		if (trayAvailable)
+		{
+			frame.setVisible(false);
+		}
+	}
+
+	void restoreFromTray()
+	{
+		frame.setVisible(true);
+		frame.setState(JFrame.NORMAL);
+		frame.toFront();
+		frame.requestFocus();
+	}
+
+	void requestCloseFromTray()
+	{
+		requestClose();
+	}
+
+	void showUnauthorizedEndWarning(String message)
+	{
+		Runnable showWarning = () ->
+		{
+			frame.setVisible(true);
+			frame.setState(JFrame.NORMAL);
+			frame.toFront();
+			frame.requestFocus();
+			JOptionPane.showMessageDialog(
+				frame,
+				Objects.requireNonNull(message, "message"),
+				"Unauthorized end",
+				JOptionPane.WARNING_MESSAGE
+			);
+		};
+		if (SwingUtilities.isEventDispatchThread())
+		{
+			showWarning.run();
+		}
+		else
+		{
+			SwingUtilities.invokeLater(showWarning);
+		}
 	}
 
 	public DiscordJoinConsentHandler createDiscordJoinConsentHandler()
@@ -298,6 +438,11 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 	@Override
 	public void close()
 	{
+		if (protectedExitDialog != null)
+		{
+			protectedExitDialog.dispose();
+			protectedExitDialog = null;
+		}
 		sourceMessages.setListener(null);
 		panel.close();
 		frame.dispose();

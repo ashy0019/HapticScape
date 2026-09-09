@@ -42,4 +42,17 @@ public class DesktopStoragePathsTest
 			DesktopStoragePaths.deepLinkInboxPath("local-app-data", "home")
 		);
 	}
+
+	@Test
+	public void namedProfilesReceiveIndependentStorageTrees()
+	{
+		assertEquals(
+			Paths.get("local-app-data", "HapticScape", "profiles", "controller"),
+			DesktopStoragePaths.applicationDataDirectory(
+				"local-app-data",
+				"home",
+				"controller"
+			)
+		);
+	}
 }

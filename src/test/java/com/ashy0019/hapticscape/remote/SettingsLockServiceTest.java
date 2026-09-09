@@ -212,6 +212,27 @@ public class SettingsLockServiceTest
 		assertFalse(service.isLocked(SettingsLockCatalog.CLICKER_ENABLED));
 	}
 
+	@Test
+	public void protectedActionAuthorizationDoesNotRemoveTheLock()
+	{
+		SettingsLockService service = new SettingsLockService(
+			new Gson(),
+			temporaryFolder.getRoot().toPath().resolve("protected-exit-lock.json")
+		);
+		char[] password = "protected exit password".toCharArray();
+		service.arm(service.createProposal(
+			password,
+			Collections.singleton(SettingsLockCatalog.PROTECTED_EXIT)
+		));
+
+		assertFalse(service.authorizes(
+			SettingsLockCatalog.PROTECTED_EXIT,
+			"wrong password".toCharArray()
+		));
+		assertTrue(service.authorizes(SettingsLockCatalog.PROTECTED_EXIT, password));
+		assertTrue(service.isLocked(SettingsLockCatalog.PROTECTED_EXIT));
+	}
+
 	@Test(expected = IllegalStateException.class)
 	public void childLockPreventsOverlappingSectionLock()
 	{
@@ -260,6 +281,7 @@ public class SettingsLockServiceTest
 			SettingsLockService service = new SettingsLockService(gson, path);
 			assertTrue(service.getSnapshot().isLegacyFullLock());
 			assertTrue(service.isLocked(SettingsLockCatalog.LEVEL_UP_HAPTICS));
+			assertFalse(service.isLocked(SettingsLockCatalog.PROTECTED_EXIT));
 			assertFalse(service.canEditLocally(HapticScapeSettingKeys.CLICKER_ENABLED));
 			assertTrue(service.unlock(password));
 		}

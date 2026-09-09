@@ -23,4 +23,8 @@ public interface RemoteSessionListener
 	default void onRemoteActionAcknowledged(RemoteActionAcknowledgement acknowledgement)
 	{
 	}
+
+	default void onUnauthorizedEnd(String reason)
+	{
+	}
 }

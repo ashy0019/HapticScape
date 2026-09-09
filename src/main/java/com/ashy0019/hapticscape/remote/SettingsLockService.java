@@ -265,6 +265,34 @@ public final class SettingsLockService
 		}
 	}
 
+	/** Verifies a lock password for one protected action without removing the lock. */
+	public synchronized boolean authorizes(
+		SettingsLockTarget target,
+		char[] password)
+	{
+		SettingsLockTarget requiredTarget = Objects.requireNonNull(target, "target");
+		char[] copy = Arrays.copyOf(
+			Objects.requireNonNull(password, "password"),
+			password.length
+		);
+		try
+		{
+			for (SettingsLockProposal lock : locks)
+			{
+				if (SettingsLockCatalog.isCoveredBy(lock.getTargets(), requiredTarget)
+					&& lock.verifies(copy))
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+		finally
+		{
+			Arrays.fill(copy, '\0');
+		}
+	}
+
 	public synchronized void clearAllLocks()
 	{
 		store.clear();

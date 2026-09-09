@@ -61,12 +61,16 @@ public class SettingsBackedRemoteStoresTest
 			true,
 			false,
 			true,
+			true,
+			true,
 			42,
-			900
+			900,
+			30_000
 		);
 
 		assertEquals(requested, store.save(requested));
-		assertEquals(9, writes.size());
+		assertEquals(10, writes.size());
+		assertTrue(writes.contains("remoteProtectedExitAllowed"));
 		assertTrue(writes.contains("remoteMaximumIntensityPercent"));
 	}
 
@@ -124,6 +128,8 @@ public class SettingsBackedRemoteStoresTest
 		values.put("clickerGenericNotificationEnabled", false);
 		values.put("clickerAlertSettings", "");
 		values.put("clickerPhraseRules", "");
+		values.put("startWithWindows", false);
+		values.put("startMinimized", false);
 		return values;
 	}
 
@@ -136,6 +142,7 @@ public class SettingsBackedRemoteStoresTest
 		values.put("remoteClicksAllowed", true);
 		values.put("remoteDesktopNotificationsAllowed", true);
 		values.put("remoteLocalChatboxMessagesAllowed", false);
+		values.put("remoteProtectedExitAllowed", false);
 		values.put("remoteMaximumIntensityPercent", 60);
 		values.put("remoteMaximumDurationMillis", 3_000);
 		values.put("remoteMaximumLiveDurationMillis", 30_000);

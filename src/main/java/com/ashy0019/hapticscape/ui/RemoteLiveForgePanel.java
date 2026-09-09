@@ -223,8 +223,6 @@ final class RemoteLiveForgePanel extends JPanel
 			&& session.getState() != RemoteSessionState.LOCAL;
 		boolean connected = session.getState() == RemoteSessionState.ACTIVE
 			|| session.getState() == RemoteSessionState.PEER_EMERGENCY_PAUSED;
-		setVisible(controller && connected);
-
 		boolean allowed = permissions.isLiveHapticsAllowed()
 			&& permissions.getMaximumIntensityPercent() > 0;
 		boolean active = controller
@@ -263,7 +261,7 @@ final class RemoteLiveForgePanel extends JPanel
 			setWarning("");
 		}
 
-		if (!isVisible() || !workspaceActive)
+		if (!controller || !connected || !workspaceActive)
 		{
 			sampleTimer.stop();
 			canvas.clear();
@@ -608,7 +606,11 @@ final class RemoteLiveForgePanel extends JPanel
 
 		private boolean needsAnimation()
 		{
-			return held || displayedIntensity > 0;
+			// Keep sampling the released gesture while its history is visible. The
+			// zero-valued samples draw the same flat baseline the original plugin
+			// showed after the controller let go, instead of stopping immediately
+			// when the haptic decay reaches zero.
+			return held || displayedIntensity > 0 || !samples.isEmpty();
 		}
 
 		private void clear()
@@ -692,7 +694,7 @@ final class RemoteLiveForgePanel extends JPanel
 			graphics.fill(new Polygon(x, y, x.length));
 			graphics.setColor(CURVE);
 			graphics.setStroke(new BasicStroke(2.5f));
-			for (int point = 1; point < count; point++)
+			for (int point = 1; point <= count; point++)
 			{
 				graphics.drawLine(x[point], y[point], x[point + 1], y[point + 1]);
 			}

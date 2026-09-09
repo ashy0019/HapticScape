@@ -17,7 +17,11 @@ import com.ashy0019.hapticscape.protocol.LocalhostTransportEndpoint;
 import com.ashy0019.hapticscape.remote.DiscordDeepLinkInbox;
 import com.ashy0019.hapticscape.remote.DiscordPairingBridge;
 import com.ashy0019.hapticscape.remote.SettingsStore;
+import com.ashy0019.hapticscape.remote.RemoteSessionListener;
+import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
+import com.ashy0019.hapticscape.remote.SettingsLockCatalog;
 import com.ashy0019.hapticscape.storage.FileSettingsStore;
+import com.ashy0019.hapticscape.HapticScapeSettingKeys;
 import com.ashy0019.hapticscape.storage.HapticScapeStoragePaths;
 import com.google.gson.Gson;
 import java.lang.reflect.InvocationTargetException;
@@ -28,12 +32,25 @@ import okhttp3.OkHttpClient;
 /** Owns the standalone desktop host lifecycle around the neutral HapticScape runtime. */
 public final class HapticScapeDesktopApplication implements AutoCloseable
 {
+	private final DesktopLaunchOptions launchOptions;
 	private final AtomicBoolean closed = new AtomicBoolean();
 	private OkHttpClient httpClient;
 	private AwtDesktopNotificationService desktopNotifications;
 	private HapticScapeRuntime runtime;
 	private HapticScapeDesktopWindow window;
 	private DiscordDeepLinkInbox deepLinkInbox;
+	private ProtectedExitAuditStore protectedExitAudit;
+	private WindowsStartupService startupService;
+
+	public HapticScapeDesktopApplication()
+	{
+		this(DesktopLaunchOptions.defaults());
+	}
+
+	public HapticScapeDesktopApplication(DesktopLaunchOptions launchOptions)
+	{
+		this.launchOptions = java.util.Objects.requireNonNull(launchOptions, "launchOptions");
+	}
 
 	public void start()
 	{
@@ -43,8 +60,10 @@ public final class HapticScapeDesktopApplication implements AutoCloseable
 		}
 
 		SkillCatalog skillCatalog = OldSchoolRuneScapeSkillCatalog.get();
-		HapticScapeStoragePaths storagePaths = DesktopStoragePaths.hapticScapeStoragePaths();
-		SettingsStore settingsStore = new FileSettingsStore(storagePaths.getSettingsPath());
+		HapticScapeStoragePaths storagePaths = DesktopStoragePaths.hapticScapeStoragePaths(
+			launchOptions.getProfile()
+		);
+		FileSettingsStore settingsStore = new FileSettingsStore(storagePaths.getSettingsPath());
 		HapticScapeSettingsSource settings = new SettingsBackedHapticScapeSettings(
 			settingsStore,
 			skillCatalog
@@ -53,6 +72,23 @@ public final class HapticScapeDesktopApplication implements AutoCloseable
 		Gson gson = new Gson();
 		desktopNotifications = new AwtDesktopNotificationService("HapticScape");
 		DesktopSourceMessageService sourceMessages = new DesktopSourceMessageService();
+		protectedExitAudit = new ProtectedExitAuditStore(
+			storagePaths.getProtectedExitStatePath()
+		);
+		startupService = new WindowsStartupService();
+		Runnable reconcileStartup = () -> startupService.apply(
+			booleanSetting(settingsStore, HapticScapeSettingKeys.START_WITH_WINDOWS),
+			booleanSetting(settingsStore, HapticScapeSettingKeys.START_MINIMIZED)
+		);
+		settingsStore.addChangeListener((key, value) ->
+		{
+			if (HapticScapeSettingKeys.START_WITH_WINDOWS.equals(key)
+				|| HapticScapeSettingKeys.START_MINIMIZED.equals(key))
+			{
+				reconcileStartup.run();
+			}
+		});
+		reconcileStartup.run();
 
 		runtime = new HapticScapeRuntime(new HapticScapeRuntimeDependencies(
 			httpClient,
@@ -67,23 +103,75 @@ public final class HapticScapeDesktopApplication implements AutoCloseable
 			DesktopAudioCaptureSources::systemOutput,
 			DesktopSecretProtectors.savedUnlockKeys(),
 			DesktopSecretProtectors.discordCredentials(),
-			LocalhostTransportEndpoint.DEFAULT_PORT
+			launchOptions.getGameplayPort()
 		));
 
 		try
 		{
 			runtime.start();
-			createAndShowWindow(settings, skillCatalog, settingsStore, sourceMessages);
+			protectedExitAudit.beginRun(
+				runtime.getSettingsLockService().isLocked(SettingsLockCatalog.PROTECTED_EXIT)
+			);
+			runtime.getSettingsLockService().addListener(snapshot ->
+				protectedExitAudit.setProtectionActive(
+					snapshot.isLocked(SettingsLockCatalog.PROTECTED_EXIT)
+				)
+			);
+			wireProtectedExitAudit();
+			createWindow(settings, skillCatalog, settingsStore, sourceMessages);
+			boolean trayInstalled = desktopNotifications.installApplicationMenu(
+				window::restoreFromTray,
+				window::requestCloseFromTray
+			);
+			window.setTrayAvailable(trayInstalled);
+			if (!launchOptions.isMinimized() || !trayInstalled)
+			{
+				showWindow();
+			}
 			wireDiscordDeepLinks();
 		}
 		catch (RuntimeException failure)
 		{
+			if (protectedExitAudit != null)
+			{
+				protectedExitAudit.markAuthorizedEnd();
+			}
 			close();
 			throw failure;
 		}
 	}
 
-	private void createAndShowWindow(
+	private void wireProtectedExitAudit()
+	{
+		runtime.getRemoteSessionManager().addListener(new RemoteSessionListener()
+		{
+			@Override
+			public void onRemoteSessionChanged(RemoteSessionSnapshot snapshot)
+			{
+				if (protectedExitAudit.hasPendingUnauthorizedEnd()
+					&& runtime.getRemoteSessionManager().reportUnauthorizedEnd(
+						"Unauthorized end"
+					))
+				{
+					protectedExitAudit.clearPendingUnauthorizedEnd();
+				}
+			}
+
+			@Override
+			public void onUnauthorizedEnd(String reason)
+			{
+				String message = "The participant exited without the protected-exit password.";
+				desktopNotifications.notify("Unauthorized end: " + message);
+				HapticScapeDesktopWindow currentWindow = window;
+				if (currentWindow != null)
+				{
+					currentWindow.showUnauthorizedEndWarning(message);
+				}
+			}
+		});
+	}
+
+	private void createWindow(
 		HapticScapeSettingsSource settings,
 		SkillCatalog skillCatalog,
 		SettingsStore settingsStore,
@@ -97,9 +185,10 @@ public final class HapticScapeDesktopApplication implements AutoCloseable
 				skillCatalog,
 				settingsStore,
 				sourceMessages,
+				protectedExitAudit,
+				launchOptions.getWindowTitle(),
 				this::closeAndExit
 			);
-			window.show();
 		};
 		if (SwingUtilities.isEventDispatchThread())
 		{
@@ -126,13 +215,46 @@ public final class HapticScapeDesktopApplication implements AutoCloseable
 		}
 	}
 
+	private static boolean booleanSetting(SettingsStore store, String key)
+	{
+		return Boolean.parseBoolean(store.get(key));
+	}
+
 	private void wireDiscordDeepLinks()
 	{
 		DiscordPairingBridge bridge = runtime.getDiscordPairingBridge();
 		bridge.setJoinConsentHandler(window.createDiscordJoinConsentHandler());
-		deepLinkInbox = DesktopDiscordDeepLinkInbox.getInstance();
+		deepLinkInbox = DesktopDiscordDeepLinkInbox.forProfile(launchOptions.getProfile());
 		deepLinkInbox.start();
 		deepLinkInbox.setHandler(bridge::acceptDeepLink);
+	}
+
+	private void showWindow()
+	{
+		Runnable show = () -> window.show();
+		if (SwingUtilities.isEventDispatchThread())
+		{
+			show.run();
+			return;
+		}
+		try
+		{
+			SwingUtilities.invokeAndWait(show);
+		}
+		catch (InterruptedException interrupted)
+		{
+			Thread.currentThread().interrupt();
+			throw new IllegalStateException("Interrupted while showing HapticScape", interrupted);
+		}
+		catch (InvocationTargetException failure)
+		{
+			Throwable cause = failure.getCause();
+			if (cause instanceof RuntimeException)
+			{
+				throw (RuntimeException) cause;
+			}
+			throw new IllegalStateException("Unable to show HapticScape", cause);
+		}
 	}
 
 	private void closeAndExit()

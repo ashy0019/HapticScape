@@ -21,4 +21,11 @@ public class HapticScapeDesktopWindowSizingTest
 				< HapticScapeDesktopWindow.DEFAULT_WINDOW_HEIGHT
 		);
 	}
+
+	@Test
+	public void unauthorizedExitAllowsTheQueuedFlagToFlush()
+	{
+		assertTrue(HapticScapeDesktopWindow.UNAUTHORIZED_EXIT_FLUSH_MILLIS >= 500);
+		assertTrue(HapticScapeDesktopWindow.UNAUTHORIZED_EXIT_FLUSH_MILLIS <= 2_000);
+	}
 }

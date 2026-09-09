@@ -43,4 +43,6 @@ public interface RemoteSettingsSource
 	boolean clickerGenericNotificationEnabled();
 	String clickerAlertSettings();
 	String clickerPhraseRules();
+	default boolean startWithWindows() { return false; }
+	default boolean startMinimized() { return false; }
 }

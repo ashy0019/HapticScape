@@ -106,7 +106,9 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		this.lockPreparationPanel = new RemoteLockPreparationPanel(
 			editSubjectSettingsAction,
 			this::armSettingsLock,
-			sessionManager::cancelSettingsLock
+			sessionManager::cancelSettingsLock,
+			() -> settingsLockDraft.toggle(SettingsLockCatalog.PROTECTED_EXIT),
+			() -> settingsLockDraft.toggle(SettingsLockCatalog.STARTUP_BEHAVIOR)
 		);
 		this.pairingPanel = new RemotePairingPanel(
 			config,
@@ -300,6 +302,14 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 
 	private void confirmSettingsLockProposal(SettingsLockProposal proposal)
 	{
+		if ((proposal.getTargets().contains(SettingsLockCatalog.PROTECTED_EXIT)
+			|| proposal.getTargets().contains(SettingsLockCatalog.STARTUP_BEHAVIOR))
+			&& !sessionManager.getVisiblePermissions().isProtectedExitAllowed())
+		{
+			sessionManager.declinePendingSettingsLock();
+			showError("Protected startup/exit requests are not permitted on this client.");
+			return;
+		}
 		if (!phraseTargetsExist(proposal.getTargets()))
 		{
 			sessionManager.declinePendingSettingsLock();
@@ -316,7 +326,8 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		);
 		WrappedTextLabel safety = new WrappedTextLabel(
 			"Emergency Off, End Session, Intiface controls, remote permissions, "
-				+ "Forge, Music, and developer recovery remain available."
+				+ "Forge, Music, and developer recovery remain available. Protected "
+				+ "exit still permits a flagged passwordless exit after 10 seconds."
 		);
 		JPanel content = new JPanel();
 		content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
@@ -427,6 +438,9 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 			settingsLockDraft.size(),
 			controllerActive,
 			permissions.isSettingsAllowed(),
+			settingsLockDraft.contains(SettingsLockCatalog.PROTECTED_EXIT),
+			settingsLockDraft.contains(SettingsLockCatalog.STARTUP_BEHAVIOR),
+			permissions.isProtectedExitAllowed(),
 			sessionManager.isSavedUnlockKeyVaultAvailable(),
 			sessionManager.getSavedUnlockKeyVaultMessage()
 		);

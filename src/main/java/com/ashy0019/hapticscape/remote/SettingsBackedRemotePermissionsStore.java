@@ -44,6 +44,10 @@ public final class SettingsBackedRemotePermissionsStore implements RemotePermiss
 			requested.isLocalChatboxMessagesAllowed()
 		);
 		settingsWriter.set(
+			HapticScapeSettingKeys.REMOTE_PROTECTED_EXIT_ALLOWED,
+			requested.isProtectedExitAllowed()
+		);
+		settingsWriter.set(
 			HapticScapeSettingKeys.REMOTE_MAXIMUM_INTENSITY_PERCENT,
 			requested.getMaximumIntensityPercent()
 		);

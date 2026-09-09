@@ -28,6 +28,7 @@ public class SettingsBackedHapticScapeSettingsTest
         assertEquals(HapticScapeSettingsSource.DEFAULT_REMOTE_RELAY_URL, settings.remoteRelayUrl());
         assertTrue(settings.remoteSettingsAllowed());
         assertFalse(settings.remoteLiveHapticsAllowed());
+        assertFalse(settings.remoteProtectedExitAllowed());
         assertEquals(30_000, settings.remoteMaximumLiveDurationMillis());
     }
 
