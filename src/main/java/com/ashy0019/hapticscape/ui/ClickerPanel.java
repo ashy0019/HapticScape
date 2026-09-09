@@ -10,6 +10,13 @@ import com.ashy0019.hapticscape.remote.SettingsLockCatalog;
 import com.ashy0019.hapticscape.remote.SettingsLockService;
 import com.ashy0019.hapticscape.remote.SettingsLockTarget;
 import java.awt.BorderLayout;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import javax.swing.BorderFactory;
@@ -24,8 +31,12 @@ import javax.swing.SpinnerNumberModel;
 
 final class ClickerPanel extends JPanel
 {
+	private static final int WIDE_BREAKPOINT = 1250;
+	private static final int MEDIUM_BREAKPOINT = 760;
+
 	private final SettingsChangeSink settingsSink;
 	private final Consumer<ClickerSettings> settingsListener;
+	private final JPanel layoutPanel = new JPanel(new GridBagLayout());
 	private final JCheckBox enabledCheckBox = new JCheckBox("Enable clicker");
 	private final JSlider volumeSlider = new JSlider(
 		ClickerSettings.MINIMUM_VOLUME_PERCENT,
@@ -53,6 +64,7 @@ final class ClickerPanel extends JPanel
 	private boolean updating;
 	private boolean remoteReadOnly;
 	private boolean previewAllowed = true;
+	private int layoutMode = -1;
 
 	ClickerPanel(
 		HapticScapeSettingsSource config,
@@ -76,8 +88,9 @@ final class ClickerPanel extends JPanel
 			editingRemoteSubject,
 			lockSelectionEnabled
 		);
-		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
-		setBorder(BorderFactory.createEmptyBorder(5, 4, 4, 4));
+		setName("clicksWorkspace");
+		setLayout(new BorderLayout());
+		setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
 		settings = new ClickerSettings(
 			config.clickerEnabled(),
@@ -157,35 +170,47 @@ final class ClickerPanel extends JPanel
 			lockSelectionEnabled
 		);
 
-		JPanel clickSettingsPanel = new JPanel();
-		clickSettingsPanel.setLayout(new BoxLayout(clickSettingsPanel, BoxLayout.Y_AXIS));
-		clickSettingsPanel.setBorder(BorderFactory.createTitledBorder("Click settings"));
-		PanelUi.addVerticalComponent(clickSettingsPanel, clickSettingsBlockHeader);
-		PanelUi.addVerticalComponent(clickSettingsPanel, enabledCheckBox);
-		PanelUi.addVerticalComponent(clickSettingsPanel, row("Volume", volumeValue));
-		PanelUi.addVerticalComponent(clickSettingsPanel, volumeSlider);
+		JPanel clickOutputPanel = new JPanel();
+		clickOutputPanel.setLayout(new BoxLayout(clickOutputPanel, BoxLayout.Y_AXIS));
+		clickOutputPanel.setBorder(PanelUi.createSectionBorder("Click output"));
+		PanelUi.addPreferredHeightComponent(clickOutputPanel, clickSettingsBlockHeader);
+		PanelUi.addPreferredHeightComponent(clickOutputPanel, enabledCheckBox);
+		PanelUi.addPreferredHeightComponent(clickOutputPanel, row("Volume", volumeValue));
+		PanelUi.addPreferredHeightComponent(clickOutputPanel, volumeSlider);
+		JPanel testRow = new JPanel(new BorderLayout());
+		testRow.add(testButton, BorderLayout.EAST);
+		PanelUi.addPreferredHeightComponent(clickOutputPanel, testRow);
+		JLabel description = new JLabel("Independent of Intiface and haptic devices.");
+		description.setToolTipText("Click playback is ordinary local audio");
+		PanelUi.addPreferredHeightComponent(clickOutputPanel, description);
 
-		JPanel xpSettings = new JPanel();
-		xpSettings.setLayout(new BoxLayout(xpSettings, BoxLayout.Y_AXIS));
-		xpSettings.setBorder(BorderFactory.createTitledBorder("XP clicks"));
-		JLabel skillHint = new JLabel("Select skills under Skills → Clicker.");
-		skillHint.setToolTipText("The Skills tab stores separate Haptics and Clicker selections");
-		PanelUi.addVerticalComponent(xpSettings, skillHint);
-		PanelUi.addVerticalComponent(
-			xpSettings,
+		JPanel xpSettingsPanel = new JPanel();
+		xpSettingsPanel.setLayout(new BoxLayout(xpSettingsPanel, BoxLayout.Y_AXIS));
+		xpSettingsPanel.setBorder(PanelUi.createSectionBorder("XP clicks"));
+		JLabel skillHint = new JLabel("Choose skills in XP + Skills → Clicks.");
+		skillHint.setToolTipText("Each skill has separate Haptics and Clicks switches");
+		PanelUi.addPreferredHeightComponent(xpSettingsPanel, skillHint);
+		PanelUi.addPreferredHeightComponent(
+			xpSettingsPanel,
 			row("Minimum XP gain", minimumXpSpinner)
 		);
-		PanelUi.addVerticalComponent(xpSettings, levelUpCheckBox);
-		PanelUi.addVerticalComponent(xpSettings, milestoneCheckBox);
-		PanelUi.addVerticalComponent(xpSettings, level99CheckBox);
-		PanelUi.addVerticalComponent(clickSettingsPanel, xpSettings);
-		PanelUi.addVerticalComponent(this, clickSettingsPanel);
-		PanelUi.addVerticalComponent(this, phraseRulesPanel);
-		PanelUi.addVerticalComponent(this, testButton);
+		PanelUi.addPreferredHeightComponent(xpSettingsPanel, levelUpCheckBox);
+		PanelUi.addPreferredHeightComponent(xpSettingsPanel, milestoneCheckBox);
+		PanelUi.addPreferredHeightComponent(xpSettingsPanel, level99CheckBox);
 
-		JLabel description = new JLabel("Works without Intiface or a connected device.");
-		description.setToolTipText("Click playback is independent of haptic feedback");
-		PanelUi.addVerticalComponent(this, description);
+		JPanel outputHost = host(clickOutputPanel, 300);
+		JPanel xpHost = host(xpSettingsPanel, 330);
+		JPanel phrasesHost = host(phraseRulesPanel, 680);
+		add(layoutPanel, BorderLayout.NORTH);
+		addComponentListener(new ComponentAdapter()
+		{
+			@Override
+			public void componentResized(ComponentEvent event)
+			{
+				reflow(outputHost, xpHost, phrasesHost);
+			}
+		});
+		reflow(outputHost, xpHost, phrasesHost);
 
 		refreshLabel();
 		refreshEnabledState();
@@ -422,6 +447,105 @@ final class ClickerPanel extends JPanel
 	private void persist(SettingsLockTarget target, String key, Object value)
 	{
 		settingsSink.set(target, key, value);
+	}
+
+	private void reflow(
+		Component output,
+		Component xp,
+		Component phrases)
+	{
+		int desired = layoutModeForWidth(getWidth());
+		if (desired == layoutMode)
+		{
+			return;
+		}
+		layoutMode = desired;
+		layoutPanel.removeAll();
+		if (layoutMode == 3)
+		{
+			addSection(output, 0, 0, 1, 1, 0.0, 0.0, GridBagConstraints.HORIZONTAL);
+			addSection(xp, 1, 0, 1, 1, 0.0, 0.0, GridBagConstraints.HORIZONTAL);
+			addSection(phrases, 2, 0, 1, 1, 0.0, 0.0, GridBagConstraints.HORIZONTAL);
+			addRemainder(3, 0);
+		}
+		else if (layoutMode == 2)
+		{
+			addSection(output, 0, 0, 1, 1, 0.48, 0.0, GridBagConstraints.HORIZONTAL);
+			addSection(xp, 1, 0, 1, 1, 0.52, 0.0, GridBagConstraints.HORIZONTAL);
+			addSection(phrases, 0, 1, 2, 1, 1.0, 0.0, GridBagConstraints.HORIZONTAL);
+		}
+		else
+		{
+			addSection(output, 0, 0, 1, 1, 1.0, 0.0, GridBagConstraints.HORIZONTAL);
+			addSection(xp, 0, 1, 1, 1, 1.0, 0.0, GridBagConstraints.HORIZONTAL);
+			addSection(phrases, 0, 2, 1, 1, 1.0, 0.0, GridBagConstraints.HORIZONTAL);
+		}
+		layoutPanel.revalidate();
+		layoutPanel.repaint();
+	}
+
+	static int layoutModeForWidth(int width)
+	{
+		return width >= WIDE_BREAKPOINT ? 3 : width >= MEDIUM_BREAKPOINT ? 2 : 1;
+	}
+
+	private void addSection(
+		Component component,
+		int x,
+		int y,
+		int width,
+		int height,
+		double weightX,
+		double weightY,
+		int fill)
+	{
+		GridBagConstraints constraints = new GridBagConstraints();
+		constraints.gridx = x;
+		constraints.gridy = y;
+		constraints.gridwidth = width;
+		constraints.gridheight = height;
+		constraints.weightx = weightX;
+		constraints.weighty = weightY;
+		constraints.fill = fill;
+		constraints.anchor = GridBagConstraints.NORTHWEST;
+		constraints.insets = new Insets(0, 0, 7, 7);
+		layoutPanel.add(component, constraints);
+	}
+
+	private void addRemainder(int x, int y)
+	{
+		GridBagConstraints constraints = new GridBagConstraints();
+		constraints.gridx = x;
+		constraints.gridy = y;
+		constraints.weightx = 1.0;
+		constraints.fill = GridBagConstraints.HORIZONTAL;
+		layoutPanel.add(new JPanel(), constraints);
+	}
+
+	private static JPanel host(Component component, int preferredWidth)
+	{
+		JPanel host = new WidthHintPanel(preferredWidth);
+		host.add(component, BorderLayout.NORTH);
+		return host;
+	}
+
+	/** Width stays orderly on a large desktop without freezing dynamic height. */
+	private static final class WidthHintPanel extends JPanel
+	{
+		private final int preferredWidth;
+
+		private WidthHintPanel(int preferredWidth)
+		{
+			super(new BorderLayout());
+			this.preferredWidth = preferredWidth;
+		}
+
+		@Override
+		public Dimension getPreferredSize()
+		{
+			Dimension preferred = super.getPreferredSize();
+			return new Dimension(Math.max(preferredWidth, preferred.width), preferred.height);
+		}
 	}
 
 	private static LockableCheckBoxBinding binding(

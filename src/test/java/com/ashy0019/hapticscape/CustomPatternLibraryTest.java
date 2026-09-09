@@ -52,6 +52,18 @@ public class CustomPatternLibraryTest
 	}
 
 	@Test
+	public void oldShortBeatDurationsMigrateToTheNewUsableMinimum()
+	{
+		CustomPatternLibrary restored = CustomPatternLibrary.fromConfigValue(
+			"v4|2|1=Fast legacy,50,1,0,100,0"
+		);
+
+		assertEquals("Fast legacy", entry(restored, 1).getName());
+		assertEquals(250, entry(restored, 1).getBeatDurationMillis());
+		assertEquals(new CustomPattern(0, 100, 0), entry(restored, 1).getPattern());
+	}
+
+	@Test
 	public void deletedIdsAreNotReusedAfterRoundTrip()
 	{
 		CustomPatternLibrary library = CustomPatternLibrary.defaults()

@@ -42,23 +42,23 @@ final class UpdatesPanel extends JPanel
 		checkNowButton.setEnabled(false);
 
 		JPanel choices = new JPanel(new GridLayout(0, 1, 0, 2));
-		choices.setBorder(BorderFactory.createTitledBorder("Startup behavior"));
+		choices.setBorder(PanelUi.createSectionBorder("Startup behavior"));
 		choices.add(automaticUpdates);
 		choices.add(updateNotifications);
-		PanelUi.addVerticalComponent(this, choices);
+		PanelUi.addPreferredHeightComponent(this, choices);
 
 		JLabel privacy = new JLabel(
 			"With both options off, startup does not contact GitHub.");
 		privacy.setToolTipText(
 			"Check now only requests public release metadata; it does not send game or account data");
-		PanelUi.addVerticalComponent(this, privacy);
+		PanelUi.addPreferredHeightComponent(this, privacy);
 
 		JPanel currentVersion = new JPanel(new BorderLayout(6, 0));
 		currentVersion.add(new JLabel("Installed version"), BorderLayout.WEST);
 		currentVersion.add(new JLabel(HapticScapeVersion.current()), BorderLayout.EAST);
-		PanelUi.addVerticalComponent(this, currentVersion);
-		PanelUi.addVerticalComponent(this, checkNowButton);
-		PanelUi.addVerticalComponent(this, statusLabel);
+		PanelUi.addPreferredHeightComponent(this, currentVersion);
+		PanelUi.addPreferredHeightComponent(this, checkNowButton);
+		PanelUi.addPreferredHeightComponent(this, statusLabel);
 
 		automaticUpdates.addActionListener(event -> saveSelections());
 		updateNotifications.addActionListener(event -> saveSelections());

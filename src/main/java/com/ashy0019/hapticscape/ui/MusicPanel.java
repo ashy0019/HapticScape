@@ -6,22 +6,24 @@ import com.ashy0019.hapticscape.music.MusicResponse;
 import com.ashy0019.hapticscape.music.MusicSyncSettings;
 import com.ashy0019.hapticscape.music.MusicSyncSnapshot;
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.util.function.Consumer;
 import javax.swing.BorderFactory;
+import javax.swing.Box;
 import javax.swing.BoxLayout;
-import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JProgressBar;
 import javax.swing.JSlider;
+import javax.swing.JToggleButton;
 import javax.swing.SwingUtilities;
 
 final class MusicPanel extends JPanel
 {
 	private final SettingsChangeSink settingsSink;
 	private final Consumer<MusicSyncSettings> settingsListener;
-	private final JCheckBox enabledCheckBox = new JCheckBox("Sync to system audio");
+	private final JToggleButton enabledButton = new JToggleButton("Start music sync");
 	private final JComboBox<MusicResponse> responseComboBox =
 		new JComboBox<>(MusicResponse.values());
 	private final JSlider sensitivitySlider = new JSlider(25, 200);
@@ -30,10 +32,16 @@ final class MusicPanel extends JPanel
 	private final JLabel sensitivityValue = new JLabel();
 	private final JLabel minimumValue = new JLabel();
 	private final JLabel maximumValue = new JLabel();
+	private final JLabel rangeValue = new JLabel();
+	private final JLabel responseHint = new JLabel();
+	private final JLabel captureStateLabel = new JLabel("Off");
 	private final JLabel statusLabel = new JLabel("Music sync is off");
 	private final JProgressBar outputMeter = new JProgressBar(0, 100);
 	private boolean updating;
 	private boolean remoteReadOnly;
+	private MusicSyncSnapshot.State displayedState = MusicSyncSnapshot.State.DISABLED;
+	private String displayedMessage = "Music sync is off";
+	private int displayedLevel;
 
 	MusicPanel(
 		HapticScapeSettingsSource config,
@@ -42,12 +50,18 @@ final class MusicPanel extends JPanel
 	{
 		this.settingsSink = settingsSink;
 		this.settingsListener = settingsListener;
-		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
-		setBorder(BorderFactory.createEmptyBorder(5, 4, 4, 4));
+		setName("musicSyncWorkspace");
+		setLayout(new BorderLayout());
+		setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
-		enabledCheckBox.setSelected(config.musicSyncEnabled());
+		enabledButton.setName("musicSyncToggle");
+		enabledButton.setSelected(config.musicSyncEnabled());
+		responseComboBox.setName("musicResponse");
 		responseComboBox.setSelectedItem(parseResponse(config.musicResponse()));
 		PanelUi.setFixedWidth(responseComboBox, PanelUi.SELECTOR_CONTROL_WIDTH);
+		sensitivitySlider.setName("musicSensitivity");
+		minimumSlider.setName("musicMinimumIntensity");
+		maximumSlider.setName("musicMaximumIntensity");
 		sensitivitySlider.setValue(clamp(config.musicSensitivityPercent(), 25, 200));
 		minimumSlider.setValue(clamp(config.musicMinimumIntensityPercent(), 0, 100));
 		maximumSlider.setValue(clamp(config.musicMaximumIntensityPercent(), 0, 100));
@@ -56,19 +70,20 @@ final class MusicPanel extends JPanel
 			minimumSlider.setValue(maximumSlider.getValue());
 		}
 
-		PanelUi.addVerticalComponent(this, enabledCheckBox);
-		PanelUi.addVerticalComponent(this, row("Response", responseComboBox));
-		addSlider("Sensitivity", sensitivitySlider, sensitivityValue);
-		addSlider("Minimum", minimumSlider, minimumValue);
-		addSlider("Maximum", maximumSlider, maximumValue);
-
+		captureStateLabel.setName("musicCaptureState");
+		statusLabel.setName("musicCaptureDetail");
+		outputMeter.setName("musicOutputMeter");
 		outputMeter.setStringPainted(true);
 		outputMeter.setString("Output 0%");
-		PanelUi.addVerticalComponent(this, outputMeter);
-		PanelUi.addVerticalComponent(this, statusLabel);
-		JLabel privacy = new JLabel("FFT stays local; no audio is recorded.");
-		privacy.setToolTipText("Analyzes the Windows output mix in memory only");
-		PanelUi.addVerticalComponent(this, privacy);
+		PanelUi.reserveSingleLineTextHeight(outputMeter, 2);
+
+		ResponsiveColumnsPanel sections = new ResponsiveColumnsPanel(
+			capturePanel(),
+			responsePanel(),
+			outputPanel()
+		);
+		sections.setName("musicSyncSections");
+		add(sections, BorderLayout.CENTER);
 
 		refreshLabels();
 		refreshEnabledState();
@@ -78,7 +93,7 @@ final class MusicPanel extends JPanel
 	MusicSyncSettings getSettings()
 	{
 		return new MusicSyncSettings(
-			enabledCheckBox.isSelected(),
+			enabledButton.isSelected(),
 			(MusicResponse) responseComboBox.getSelectedItem(),
 			sensitivitySlider.getValue(),
 			minimumSlider.getValue(),
@@ -91,7 +106,7 @@ final class MusicPanel extends JPanel
 		updating = true;
 		try
 		{
-			enabledCheckBox.setSelected(displayed.isEnabled());
+			enabledButton.setSelected(displayed.isEnabled());
 			responseComboBox.setSelectedItem(displayed.getResponse());
 			sensitivitySlider.setValue(displayed.getSensitivityPercent());
 			minimumSlider.setValue(displayed.getMinimumIntensityPercent());
@@ -113,11 +128,11 @@ final class MusicPanel extends JPanel
 
 	void disableMusicSync()
 	{
-		if (!enabledCheckBox.isSelected())
+		if (!enabledButton.isSelected())
 		{
 			return;
 		}
-		enabledCheckBox.setSelected(false);
+		enabledButton.setSelected(false);
 		persist(HapticScapeSettingKeys.MUSIC_SYNC_ENABLED, false);
 		refreshEnabledState();
 		settingsListener.accept(getSettings());
@@ -130,25 +145,97 @@ final class MusicPanel extends JPanel
 			SwingUtilities.invokeLater(() -> updateSnapshot(snapshot));
 			return;
 		}
-		statusLabel.setText(snapshot.getMessage());
-		outputMeter.setValue(snapshot.getLevelPercent());
-		outputMeter.setString("Output " + snapshot.getLevelPercent() + "%");
+		if (snapshot.getState() != displayedState)
+		{
+			displayedState = snapshot.getState();
+			captureStateLabel.setText(stateText(displayedState));
+			refreshEnabledState();
+		}
+		if (!snapshot.getMessage().equals(displayedMessage))
+		{
+			displayedMessage = snapshot.getMessage();
+			statusLabel.setText(displayedMessage);
+			statusLabel.setToolTipText(displayedMessage);
+		}
+		if (snapshot.getLevelPercent() != displayedLevel)
+		{
+			displayedLevel = snapshot.getLevelPercent();
+			outputMeter.setValue(displayedLevel);
+			outputMeter.setString("Output " + displayedLevel + "%");
+		}
+	}
+
+	private JPanel capturePanel()
+	{
+		JPanel panel = verticalSection("Capture", "musicCaptureSection");
+		PanelUi.addPreferredHeightComponent(panel, row("State", captureStateLabel));
+		JPanel sourceRow = row("Source", new JLabel("Default system output"));
+		sourceRow.setToolTipText("Captures the Windows default output device");
+		PanelUi.addPreferredHeightComponent(panel, sourceRow);
+		panel.add(Box.createVerticalStrut(6));
+		PanelUi.addPreferredHeightComponent(panel, outputMeter);
+
+		statusLabel.setBorder(BorderFactory.createEmptyBorder(5, 1, 5, 1));
+		PanelUi.addPreferredHeightComponent(panel, statusLabel);
+		PanelUi.addPreferredHeightComponent(panel, enabledButton);
+
+		JLabel privacy = new JLabel("Analyzed locally; audio is never recorded.");
+		privacy.setToolTipText("Audio samples remain in memory on this computer");
+		privacy.setBorder(BorderFactory.createEmptyBorder(6, 1, 0, 1));
+		PanelUi.addPreferredHeightComponent(panel, privacy);
+		return panel;
+	}
+
+	private JPanel responsePanel()
+	{
+		JPanel panel = verticalSection("Response", "musicResponseSection");
+		PanelUi.addPreferredHeightComponent(panel, row("Feel", responseComboBox));
+		responseHint.setBorder(BorderFactory.createEmptyBorder(5, 1, 7, 1));
+		PanelUi.addPreferredHeightComponent(panel, responseHint);
+		PanelUi.addPreferredHeightComponent(panel, row("Sensitivity", sensitivityValue));
+		sensitivitySlider.setToolTipText(
+			"Raises or lowers how strongly HapticScape reacts to captured audio"
+		);
+		PanelUi.addPreferredHeightComponent(panel, sensitivitySlider);
+		return panel;
+	}
+
+	private JPanel outputPanel()
+	{
+		JPanel panel = verticalSection("Output range", "musicOutputSection");
+		PanelUi.addPreferredHeightComponent(panel, row("Active range", rangeValue));
+		panel.add(Box.createVerticalStrut(5));
+		PanelUi.addPreferredHeightComponent(panel, row("Minimum", minimumValue));
+		minimumSlider.setToolTipText("Lowest non-silent haptic intensity");
+		PanelUi.addPreferredHeightComponent(panel, minimumSlider);
+		panel.add(Box.createVerticalStrut(5));
+		PanelUi.addPreferredHeightComponent(panel, row("Maximum", maximumValue));
+		maximumSlider.setToolTipText("Highest haptic intensity music sync may request");
+		PanelUi.addPreferredHeightComponent(panel, maximumSlider);
+		return panel;
 	}
 
 	private void configureListeners()
 	{
-		enabledCheckBox.addActionListener(event ->
+		enabledButton.addActionListener(event ->
 		{
 			if (updating || remoteReadOnly)
 			{
 				return;
 			}
-			persist(HapticScapeSettingKeys.MUSIC_SYNC_ENABLED, enabledCheckBox.isSelected());
+			if (displayedState == MusicSyncSnapshot.State.ERROR)
+			{
+				// Capture is already stopped. Keep the setting enabled so this click
+				// retries opening the source instead of requiring Stop, then Start.
+				enabledButton.setSelected(true);
+			}
+			persist(HapticScapeSettingKeys.MUSIC_SYNC_ENABLED, enabledButton.isSelected());
 			refreshEnabledState();
 			fireSettings();
 		});
 		responseComboBox.addActionListener(event ->
 		{
+			refreshResponseHint();
 			if (updating || remoteReadOnly)
 			{
 				return;
@@ -217,36 +304,50 @@ final class MusicPanel extends JPanel
 		});
 	}
 
-	private void addSlider(String name, JSlider slider, JLabel value)
-	{
-		PanelUi.addVerticalComponent(this, row(name, value));
-		PanelUi.addVerticalComponent(this, slider);
-	}
-
-	private static JPanel row(String name, java.awt.Component control)
-	{
-		JPanel row = new JPanel(new BorderLayout(8, 0));
-		row.add(new JLabel(name), BorderLayout.CENTER);
-		row.add(control, BorderLayout.EAST);
-		return row;
-	}
-
 	private void refreshLabels()
 	{
 		sensitivityValue.setText(sensitivitySlider.getValue() + "%");
 		minimumValue.setText(minimumSlider.getValue() + "%");
 		maximumValue.setText(maximumSlider.getValue() + "%");
+		rangeValue.setText(minimumSlider.getValue() + "–" + maximumSlider.getValue() + "%");
+		refreshResponseHint();
+	}
+
+	private void refreshResponseHint()
+	{
+		MusicResponse response = (MusicResponse) responseComboBox.getSelectedItem();
+		if (response == MusicResponse.SMOOTH)
+		{
+			responseHint.setText("Even movement with gradual changes.");
+		}
+		else if (response == MusicResponse.PUNCHY)
+		{
+			responseHint.setText("Fast attacks with pronounced hits.");
+		}
+		else
+		{
+			responseHint.setText("Balanced motion with clear rhythm.");
+		}
 	}
 
 	private void refreshEnabledState()
 	{
 		boolean editable = !remoteReadOnly;
-		boolean enabled = enabledCheckBox.isSelected();
-		enabledCheckBox.setEnabled(editable);
-		responseComboBox.setEnabled(editable && enabled);
-		sensitivitySlider.setEnabled(editable && enabled);
-		minimumSlider.setEnabled(editable && enabled);
-		maximumSlider.setEnabled(editable && enabled);
+		enabledButton.setEnabled(editable);
+		if (displayedState == MusicSyncSnapshot.State.ERROR && enabledButton.isSelected())
+		{
+			enabledButton.setText("Retry music sync");
+		}
+		else
+		{
+			enabledButton.setText(enabledButton.isSelected()
+				? "Stop music sync"
+				: "Start music sync");
+		}
+		responseComboBox.setEnabled(editable);
+		sensitivitySlider.setEnabled(editable);
+		minimumSlider.setEnabled(editable);
+		maximumSlider.setEnabled(editable);
 	}
 
 	private void fireSettings()
@@ -257,6 +358,40 @@ final class MusicPanel extends JPanel
 	private void persist(String key, Object value)
 	{
 		settingsSink.set(key, value);
+	}
+
+	private static JPanel verticalSection(String title, String name)
+	{
+		JPanel panel = new JPanel();
+		panel.setName(name);
+		panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+		panel.setBorder(PanelUi.createSectionBorder(title));
+		panel.setAlignmentY(Component.TOP_ALIGNMENT);
+		return panel;
+	}
+
+	private static JPanel row(String name, Component control)
+	{
+		JPanel row = new JPanel(new BorderLayout(8, 0));
+		row.add(new JLabel(name), BorderLayout.CENTER);
+		row.add(control, BorderLayout.EAST);
+		return row;
+	}
+
+	private static String stateText(MusicSyncSnapshot.State state)
+	{
+		switch (state)
+		{
+			case STARTING:
+				return "Starting";
+			case RUNNING:
+				return "Listening";
+			case ERROR:
+				return "Needs attention";
+			case DISABLED:
+			default:
+				return "Off";
+		}
 	}
 
 	private static MusicResponse parseResponse(String value)

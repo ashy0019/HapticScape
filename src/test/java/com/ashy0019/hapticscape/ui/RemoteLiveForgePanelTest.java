@@ -35,6 +35,7 @@ public class RemoteLiveForgePanelTest
 			onEdt(() ->
 			{
 				panel.apply(activeController(), permissions);
+				panel.setWorkspaceActive(true);
 				JComponent canvas = component(panel, "remoteLiveCanvas", JComponent.class);
 				canvas.setSize(188, 180);
 				canvas.dispatchEvent(mouse(canvas, MouseEvent.MOUSE_PRESSED, 90, 10));
@@ -74,10 +75,6 @@ public class RemoteLiveForgePanelTest
 				);
 				return null;
 			});
-			assertTrue(
-				"Preferred width was " + panel.getPreferredSize().width,
-				panel.getPreferredSize().width <= 202
-			);
 		}
 		finally
 		{
@@ -99,6 +96,7 @@ public class RemoteLiveForgePanelTest
 			onEdt(() ->
 			{
 				panel.apply(activeController(), RemotePermissions.defaults());
+				panel.setWorkspaceActive(true);
 				return null;
 			});
 			assertFalse(component(panel, "remoteLiveCanvas", JComponent.class).isEnabled());
@@ -144,6 +142,7 @@ public class RemoteLiveForgePanelTest
 			onEdt(() ->
 			{
 				panel.apply(activeController(), livePermissions(60));
+				panel.setWorkspaceActive(true);
 				JComponent canvas = component(panel, "remoteLiveCanvas", JComponent.class);
 				canvas.setSize(188, 180);
 				canvas.dispatchEvent(mouse(canvas, MouseEvent.MOUSE_PRESSED, 90, 10));
@@ -167,6 +166,47 @@ public class RemoteLiveForgePanelTest
 			});
 		}
 		assertTrue(hooks.closed);
+	}
+
+	@Test
+	public void leavingForgeModeReleasesStreaming() throws Exception
+	{
+		RecordingDispatcher dispatcher = new RecordingDispatcher();
+		RemoteLiveForgePanel panel = onEdt(() -> new RemoteLiveForgePanel(dispatcher));
+		try
+		{
+			onEdt(() ->
+			{
+				panel.apply(activeController(), livePermissions(60));
+				panel.setWorkspaceActive(true);
+				JComponent canvas = component(panel, "remoteLiveCanvas", JComponent.class);
+				canvas.setSize(188, 180);
+				canvas.dispatchEvent(mouse(canvas, MouseEvent.MOUSE_PRESSED, 90, 10));
+				assertTrue(panel.isSampling());
+				panel.endGestureForNavigation();
+				panel.setWorkspaceActive(false);
+				return null;
+			});
+			assertEquals(1, dispatcher.beginCount);
+			assertEquals(1, dispatcher.endCount);
+			assertFalse(onEdt(panel::isSampling));
+		}
+		finally
+		{
+			onEdt(() ->
+			{
+				panel.close();
+				return null;
+			});
+		}
+	}
+
+	@Test
+	public void liveLayoutUsesTheAvailableStandaloneWidth()
+	{
+		assertEquals(1, RemoteLiveForgePanel.layoutModeForWidth(500));
+		assertEquals(1, RemoteLiveForgePanel.layoutModeForWidth(799));
+		assertEquals(2, RemoteLiveForgePanel.layoutModeForWidth(800));
 	}
 
 	private static RemotePermissions livePermissions(int maximumIntensity)
@@ -284,7 +324,7 @@ public class RemoteLiveForgePanelTest
 		private boolean closed;
 
 		@Override
-		public Registration installSidebarScrollRouting(JScrollPane pageScrollPane, Component eventRoot)
+		public Registration installPageScrollRouting(JScrollPane pageScrollPane, Component eventRoot)
 		{
 			return () -> { };
 		}

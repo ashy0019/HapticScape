@@ -32,7 +32,7 @@ public class HapticPatternSelectionTest
 	{
 		CustomPatternLibrary library = CustomPatternLibrary.defaults()
 			.addBlankPattern()
-			.withPattern(2, new CustomPattern(100, 0), 100, 3);
+			.withPattern(2, new CustomPattern(100, 0), 250, 3);
 		HapticPattern pattern = HapticPatternSelection.custom(2).createPattern(
 			library,
 			0.5,
@@ -47,14 +47,14 @@ public class HapticPatternSelectionTest
 		assertEquals(1.0, pattern.getSteps().get(0).getIntensity(), 0.0001);
 		assertEquals(0.0, pattern.getSteps().get(1).getIntensity(), 0.0001);
 		assertEquals(1.0, pattern.getSteps().get(2).getIntensity(), 0.0001);
-		assertEquals(300, durationMillis);
+		assertEquals(750, durationMillis);
 	}
 
 	@Test
 	public void customSelectionIgnoresProfileIntensityAndDuration()
 	{
 		CustomPatternLibrary library = CustomPatternLibrary.defaults()
-			.withPattern(1, new CustomPattern(80, 20), 150, 2);
+			.withPattern(1, new CustomPattern(80, 20), 250, 2);
 
 		HapticPattern pattern = HapticPatternSelection.custom(1).createPattern(
 			library,
@@ -64,7 +64,7 @@ public class HapticPatternSelectionTest
 
 		assertEquals(0.80, pattern.getSteps().get(0).getIntensity(), 0.0001);
 		assertEquals(0.20, pattern.getSteps().get(1).getIntensity(), 0.0001);
-		assertEquals(300, pattern.getSteps().stream()
+		assertEquals(500, pattern.getSteps().stream()
 			.map(HapticPattern.Step::getDuration)
 			.mapToLong(Duration::toMillis)
 			.sum());
@@ -74,7 +74,7 @@ public class HapticPatternSelectionTest
 	public void customPatternSupportsSeventyTwoBeats()
 	{
 		CustomPatternLibrary library = CustomPatternLibrary.defaults()
-			.withPattern(1, new CustomPattern(100, 0), 50, 72);
+			.withPattern(1, new CustomPattern(100, 0), 250, 72);
 
 		HapticPattern pattern = HapticPatternSelection.custom(1).createPattern(
 			library,
@@ -82,8 +82,8 @@ public class HapticPatternSelectionTest
 			Duration.ofMillis(500)
 		);
 
-		assertEquals(72, pattern.getSteps().size());
-		assertEquals(3_600, pattern.getSteps().stream()
+		assertEquals(144, pattern.getSteps().size());
+		assertEquals(18_000, pattern.getSteps().stream()
 			.map(HapticPattern.Step::getDuration)
 			.mapToLong(Duration::toMillis)
 			.sum());

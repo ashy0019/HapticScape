@@ -12,18 +12,18 @@ import com.ashy0019.hapticscape.remote.SettingsLockCatalog;
 import com.ashy0019.hapticscape.remote.SettingsLockService;
 import com.ashy0019.hapticscape.remote.SettingsLockTarget;
 import java.awt.BorderLayout;
-import java.awt.Component;
+import java.awt.Font;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
-import javax.swing.DefaultListCellRenderer;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
-import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
@@ -34,7 +34,8 @@ final class ProfilesPanel extends JPanel
 	private final SettingsChangeSink settingsSink;
 	private final Supplier<XpFeedbackSettings> globalSettingsSupplier;
 	private final Supplier<CustomPatternLibrary> customPatternsSupplier;
-	private final JComboBox<SkillDescriptor> skillComboBox;
+	private final Map<String, SkillDescriptor> skillsById = new LinkedHashMap<>();
+	private final JLabel selectedSkillLabel = new JLabel();
 	private final JCheckBox useGlobalCheckBox = new JCheckBox("Use global XP settings");
 	private final JSpinner minimumXpSpinner;
 	private final JSlider intensitySlider;
@@ -70,38 +71,20 @@ final class ProfilesPanel extends JPanel
 		this.settingsSink = settingsSink;
 		this.globalSettingsSupplier = globalSettingsSupplier;
 		this.customPatternsSupplier = customPatternsSupplier;
+		setName("skillProfileEditor");
 		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
-		setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+		setBorder(PanelUi.createSectionBorder("Skill override"));
 
 		SkillDescriptor[] skills = skillCatalog.getSkills().toArray(new SkillDescriptor[0]);
-		skillComboBox = new JComboBox<>(skills);
-		skillComboBox.setRenderer(new DefaultListCellRenderer()
+		for (SkillDescriptor skill : skills)
 		{
-			@Override
-			public Component getListCellRendererComponent(
-				JList<?> list,
-				Object value,
-				int index,
-				boolean isSelected,
-				boolean cellHasFocus)
-			{
-				super.getListCellRendererComponent(
-					list,
-					value,
-					index,
-					isSelected,
-					cellHasFocus
-				);
-				setText(value instanceof SkillDescriptor
-					? ((SkillDescriptor) value).getDisplayName()
-					: "");
-				return this;
-			}
-		});
-		PanelUi.setFixedWidth(skillComboBox, PanelUi.SELECTOR_CONTROL_WIDTH);
+			skillsById.put(skill.getId(), skill);
+		}
 		selectedSkill = skills[0];
+		selectedSkillLabel.setFont(selectedSkillLabel.getFont().deriveFont(Font.BOLD));
+		selectedSkillLabel.setBorder(BorderFactory.createEmptyBorder(2, 2, 5, 2));
 		profileBlockHeader = new LockableSectionHeader(
-			"Selected skill settings",
+			"XP feedback",
 			() -> SettingsLockCatalog.profileBlock(selectedSkill.getId()),
 			lockDraft,
 			lockService,
@@ -133,50 +116,37 @@ final class ProfilesPanel extends JPanel
 		PanelUi.setFixedWidth(durationSpinner, PanelUi.NUMERIC_CONTROL_WIDTH);
 		intensityValueLabel.setText(global.getIntensityPercent() + "%");
 
-		JPanel skillRow = new JPanel(new BorderLayout(8, 0));
-		skillRow.add(new JLabel("Skill"), BorderLayout.CENTER);
-		skillRow.add(skillComboBox, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(this, skillRow);
-		PanelUi.addVerticalComponent(this, profileBlockHeader);
-		PanelUi.addVerticalComponent(this, useGlobalCheckBox);
+		PanelUi.addPreferredHeightComponent(this, selectedSkillLabel);
+		PanelUi.addPreferredHeightComponent(this, profileBlockHeader);
+		PanelUi.addPreferredHeightComponent(this, useGlobalCheckBox);
 		add(Box.createVerticalStrut(6));
 
 		JPanel thresholdRow = new JPanel(new BorderLayout(8, 0));
 		thresholdRow.add(new JLabel("Minimum XP gain"), BorderLayout.CENTER);
 		thresholdRow.add(minimumXpSpinner, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(this, thresholdRow);
+		PanelUi.addPreferredHeightComponent(this, thresholdRow);
 
 		JPanel intensityHeader = new JPanel(new BorderLayout());
 		intensityHeader.add(new JLabel("Intensity"), BorderLayout.WEST);
 		intensityHeader.add(intensityValueLabel, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(this, intensityHeader);
-		PanelUi.addVerticalComponent(this, intensitySlider);
+		PanelUi.addPreferredHeightComponent(this, intensityHeader);
+		PanelUi.addPreferredHeightComponent(this, intensitySlider);
 
 		JPanel patternRow = new JPanel(new BorderLayout(8, 0));
 		patternRow.add(new JLabel("Pattern"), BorderLayout.CENTER);
 		patternRow.add(patternComboBox, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(this, patternRow);
+		PanelUi.addPreferredHeightComponent(this, patternRow);
 
 		JPanel durationRow = new JPanel(new BorderLayout(8, 0));
 		durationRow.add(new JLabel(PanelUi.DURATION_LABEL), BorderLayout.CENTER);
 		durationRow.add(durationSpinner, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(this, durationRow);
+		PanelUi.addPreferredHeightComponent(this, durationRow);
 
 		JPanel testRow = new JPanel(new BorderLayout());
 		testButton.setToolTipText("Preview the selected skill's effective XP settings");
 		testRow.add(testButton, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(this, testRow);
+		PanelUi.addPreferredHeightComponent(this, testRow);
 
-		skillComboBox.addActionListener(event ->
-		{
-			SkillDescriptor selected = (SkillDescriptor) skillComboBox.getSelectedItem();
-			if (selected != null)
-			{
-				selectedSkill = selected;
-				profileBlockHeader.refresh();
-				loadSelectedProfile();
-			}
-		});
 		useGlobalLockBinding = new LockableCheckBoxBinding(
 			useGlobalCheckBox,
 			() -> SettingsLockCatalog.profileUsesGlobal(selectedSkill.getId()),
@@ -212,6 +182,22 @@ final class ProfilesPanel extends JPanel
 		testButton.addActionListener(event -> testAction.run());
 		loadSelectedProfile();
 		setConnected(false);
+	}
+
+	void selectSkill(SkillDescriptor skill)
+	{
+		if (skill == null)
+		{
+			return;
+		}
+		SkillDescriptor known = skillsById.get(skill.getId());
+		if (known == null)
+		{
+			return;
+		}
+		selectedSkill = known;
+		profileBlockHeader.refresh();
+		loadSelectedProfile();
 	}
 
 	XpFeedbackSettings getSettings(String skillId)
@@ -324,6 +310,10 @@ final class ProfilesPanel extends JPanel
 			return;
 		}
 		XpFeedbackSettings override = profiles.getOverride(selectedSkill.getId()).orElse(null);
+		selectedSkillLabel.setText(selectedSkill.getDisplayName());
+		selectedSkillLabel.setToolTipText(
+			"XP feedback settings for " + selectedSkill.getDisplayName()
+		);
 		XpFeedbackSettings displayed = override == null
 			? globalSettingsSupplier.get()
 			: override;
@@ -383,8 +373,6 @@ final class ProfilesPanel extends JPanel
 		HapticPatternSelection pattern =
 			(HapticPatternSelection) patternComboBox.getSelectedItem();
 		boolean externallyScaled = pattern == null || !pattern.isCustom();
-		// Skill selection is navigation only and remains available in remote mode.
-		skillComboBox.setEnabled(true);
 		useGlobalLockBinding.refresh();
 		useGlobalCheckBox.setEnabled(blockEditable && !useGlobalLockBinding.isEditLocked());
 		minimumXpSpinner.setEnabled(blockEditable && overridden);

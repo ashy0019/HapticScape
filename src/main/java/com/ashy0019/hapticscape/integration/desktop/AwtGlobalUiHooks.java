@@ -25,13 +25,13 @@ import javax.swing.text.JTextComponent;
 public final class AwtGlobalUiHooks implements GlobalUiHooks
 {
 	@Override
-	public Registration installSidebarScrollRouting(
+	public Registration installPageScrollRouting(
 		JScrollPane pageScrollPane,
 		Component eventRoot)
 	{
 		Objects.requireNonNull(pageScrollPane, "pageScrollPane");
 		Objects.requireNonNull(eventRoot, "eventRoot");
-		return new SidebarScrollRegistration(pageScrollPane, eventRoot);
+		return new PageScrollRegistration(pageScrollPane, eventRoot);
 	}
 
 	@Override
@@ -106,14 +106,14 @@ public final class AwtGlobalUiHooks implements GlobalUiHooks
 		};
 	}
 
-	private static final class SidebarScrollRegistration
+	private static final class PageScrollRegistration
 		implements AWTEventListener, Registration
 	{
 		private final JScrollPane pageScrollPane;
 		private final Component eventRoot;
 		private boolean closed;
 
-		private SidebarScrollRegistration(JScrollPane pageScrollPane, Component eventRoot)
+		private PageScrollRegistration(JScrollPane pageScrollPane, Component eventRoot)
 		{
 			this.pageScrollPane = pageScrollPane;
 			this.eventRoot = eventRoot;
@@ -144,12 +144,14 @@ public final class AwtGlobalUiHooks implements GlobalUiHooks
 			}
 
 			JScrollPane nested = nestedScrollPane(wheelEvent.getComponent());
-			JScrollPane destination = wheelEvent.isControlDown()
-				&& nested != null
-				&& canScroll(nested, wheelEvent)
-				? nested
-				: pageScrollPane;
-			scroll(wheelEvent, destination);
+			if (nested != null && canScroll(nested, wheelEvent))
+			{
+				// Wheel events dispatched to a text or list child do not reliably
+				// bubble to its enclosing scroll pane, so route this explicitly.
+				scroll(wheelEvent, nested);
+				return;
+			}
+			scroll(wheelEvent, pageScrollPane);
 		}
 
 		@Override

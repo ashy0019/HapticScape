@@ -162,7 +162,7 @@ public class RemoteActionsPanelTest
 	}
 
 	@Test
-	public void messageLimitAcknowledgementAndSidebarWidthStayCompact() throws Exception
+	public void messageLimitAcknowledgementAndMinimumWidthStayResponsive() throws Exception
 	{
 		RecordingDispatcher dispatcher = new RecordingDispatcher();
 		RemoteActionsPanel panel = onEdt(() -> new RemoteActionsPanel(dispatcher));
@@ -194,10 +194,7 @@ public class RemoteActionsPanelTest
 		assertTrue(status.getText().contains("42%, 900 ms"));
 		assertEquals(statusHeights[0], statusHeights[1]);
 		assertEquals(statusHeights[0], statusHeights[2]);
-		assertTrue(
-			"Preferred width was " + panel.getPreferredSize().width,
-			panel.getPreferredSize().width <= 202
-		);
+		assertEquals(0, panel.getMinimumSize().width);
 	}
 
 	@Test

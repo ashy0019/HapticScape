@@ -8,21 +8,21 @@ import javax.swing.SwingUtilities;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 
-/** Holds the host sidebar position through a queued Swing layout transaction. */
-final class SidebarViewportAnchor
+/** Holds the application page position through a queued Swing layout transaction. */
+final class ViewportAnchor
 {
 	private final JScrollBar scrollBar;
 	private final int position;
 
-	private SidebarViewportAnchor(JScrollBar scrollBar)
+	private ViewportAnchor(JScrollBar scrollBar)
 	{
 		this.scrollBar = scrollBar;
 		this.position = scrollBar.getValue();
 	}
 
-	static SidebarViewportAnchor capture(JScrollPane scrollPane)
+	static ViewportAnchor capture(JScrollPane scrollPane)
 	{
-		return new SidebarViewportAnchor(
+		return new ViewportAnchor(
 			Objects.requireNonNull(scrollPane, "scrollPane").getVerticalScrollBar()
 		);
 	}

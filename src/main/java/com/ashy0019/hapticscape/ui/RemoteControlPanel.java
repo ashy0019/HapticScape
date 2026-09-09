@@ -26,7 +26,6 @@ import com.ashy0019.hapticscape.remote.SettingsLockTarget;
 import com.ashy0019.hapticscape.remote.SettingsStore;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
-import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
@@ -52,22 +51,22 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 	private final HapticScapeSettingsSource config;
 	private final RemoteSessionManager sessionManager;
 	private final TextClipboard clipboard;
-	private final SidebarTextLabel statusText = new SidebarTextLabel("Local control");
 	private final JButton emergencyButton = new JButton("EMERGENCY OFF");
 	private final JButton resumeButton = new JButton("Resume");
 	private final JButton endButton = new JButton("End session");
-	private final JPanel settingsLockPanel = new JPanel();
-	private final SidebarTextLabel settingsLockStatusText = new SidebarTextLabel(
-		"No post-session lock requested"
-	);
-	private final JLabel settingsLockSelectionText = new JLabel("Selected lock targets: 0");
-	private final JButton armSettingsLockButton = new JButton("Generate unlock key");
-	private final JButton cancelSettingsLockButton = new JButton("Cancel lock");
+	private final JButton editSubjectButton = new JButton("Edit subject settings");
+	private final JButton openLiveForgeButton = new JButton("Open Live Forge");
+	private final RemoteSessionHeaderPanel sessionHeader;
+	private final JPanel controllerTools = new JPanel(new GridLayout(0, 1, 0, 4));
+	private final JPanel controllerSide = new JPanel();
+	private final RemoteControllerDashboardPanel controllerDashboard;
+	private final RemotePermissionSummaryPanel permissionSummary =
+		new RemotePermissionSummaryPanel();
+	private final RemoteLockPreparationPanel lockPreparationPanel;
 	private final RemotePairingPanel pairingPanel;
 	private final SavedUnlockKeysPanel savedUnlockKeysPanel;
 	private final RemotePermissionsPanel permissionsPanel;
 	private final RemoteActionsPanel actionsPanel;
-	private final RemoteLiveForgePanel liveForgePanel;
 	private final SettingsLockDraft settingsLockDraft;
 	private final Runnable settingsLockDraftListener;
 	private int nextLayoutRow;
@@ -82,7 +81,9 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		RemoteSessionManager sessionManager,
 		RemotePairingService pairingService,
 		DiscordPairingBridge discordPairingBridge,
-		SettingsLockDraft settingsLockDraft)
+		SettingsLockDraft settingsLockDraft,
+		Runnable editSubjectSettingsAction,
+		Runnable openLiveForgeAction)
 	{
 		this.config = config;
 		this.clipboard = clipboard;
@@ -92,7 +93,21 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		this.savedUnlockKeysPanel = new SavedUnlockKeysPanel(sessionManager, clipboard);
 		this.permissionsPanel = new RemotePermissionsPanel(sessionManager);
 		this.actionsPanel = new RemoteActionsPanel(sessionManager);
-		this.liveForgePanel = new RemoteLiveForgePanel(sessionManager, globalUiHooks);
+		this.sessionHeader = new RemoteSessionHeaderPanel(
+			emergencyButton,
+			resumeButton,
+			endButton
+		);
+		emergencyButton.setName("remoteEmergency");
+		resumeButton.setName("remoteResume");
+		endButton.setName("remoteEndSession");
+		java.util.Objects.requireNonNull(editSubjectSettingsAction, "editSubjectSettingsAction");
+		java.util.Objects.requireNonNull(openLiveForgeAction, "openLiveForgeAction");
+		this.lockPreparationPanel = new RemoteLockPreparationPanel(
+			editSubjectSettingsAction,
+			this::armSettingsLock,
+			sessionManager::cancelSettingsLock
+		);
 		this.pairingPanel = new RemotePairingPanel(
 			config,
 			settingsStore,
@@ -101,76 +116,54 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 			sessionManager,
 			pairingService,
 			discordPairingBridge,
-			statusText::setPlainText,
 			this::showError
 		);
 		setLayout(new GridBagLayout());
 		setBorder(BorderFactory.createEmptyBorder(0, 4, 8, 4));
 
-		SidebarTextLabel privacy = new SidebarTextLabel(
-			"Settings are end-to-end encrypted. Peers do not connect directly, "
-				+ "but the relay operator can see each client's IP."
+		WrappedTextLabel privacy = new WrappedTextLabel(
+			"Remote settings are end-to-end encrypted. Relay operators can see connection IPs."
 		);
 		privacy.setBorder(BorderFactory.createEmptyBorder(2, 2, 6, 2));
 		privacy.setToolTipText(
 			"Settings are encrypted before relay transport. If your partner operates the relay, they may be able to see connection metadata such as your IP address."
 		);
-		addSection(privacy);
-
 		addSection(pairingPanel);
 
-		JPanel session = new JPanel(new BorderLayout(8, 0));
-		session.setBorder(BorderFactory.createTitledBorder("Session"));
-		session.add(statusText, BorderLayout.CENTER);
-		allowHorizontalShrink(session);
-		addSection(session);
-		addSection(permissionsPanel);
-		addSection(actionsPanel);
-		addSection(liveForgePanel);
+		addSection(sessionHeader);
 
-		settingsLockPanel.setLayout(new BoxLayout(settingsLockPanel, BoxLayout.Y_AXIS));
-		settingsLockPanel.setBorder(
-			BorderFactory.createTitledBorder("Post-session settings lock")
+		controllerTools.setBorder(PanelUi.createSectionBorder("Subject workspace"));
+		editSubjectButton.setToolTipText(
+			"Open the participant's synced feedback settings"
 		);
-		SidebarTextLabel lockExplanation = new SidebarTextLabel(
-			"Ask the participant to keep the final feedback settings locked after "
-				+ "the session. They must approve the request. HapticScape generates "
-				+ "the unlock key for you. Shift-click settings in the Subject workspace "
-				+ "to select individual settings, section headers, or phrase rules."
+		openLiveForgeButton.setToolTipText(
+			"Open continuous haptic control for this session"
 		);
-		PanelUi.addVerticalComponent(settingsLockPanel, lockExplanation);
-		Dimension selectionSize = new Dimension(
-			180,
-			settingsLockSelectionText.getPreferredSize().height
+		configureCompactButton(editSubjectButton);
+		configureCompactButton(openLiveForgeButton);
+		controllerTools.add(editSubjectButton);
+		controllerTools.add(openLiveForgeButton);
+
+		controllerSide.setName("remoteControllerSubjectWorkspace");
+		controllerSide.setLayout(new BoxLayout(controllerSide, BoxLayout.Y_AXIS));
+		PanelUi.addFlexibleVerticalComponent(controllerSide, permissionSummary);
+		PanelUi.addPreferredHeightComponent(controllerSide, controllerTools);
+		PanelUi.addFlexibleVerticalComponent(controllerSide, lockPreparationPanel);
+		controllerDashboard = new RemoteControllerDashboardPanel(
+			actionsPanel,
+			controllerSide
 		);
-		settingsLockSelectionText.setPreferredSize(selectionSize);
-		settingsLockSelectionText.setMinimumSize(new Dimension(0, selectionSize.height));
-		PanelUi.addVerticalComponent(settingsLockPanel, settingsLockSelectionText);
-		JPanel settingsLockButtons = new JPanel(new GridLayout(0, 1, 0, 4));
-		allowHorizontalShrink(settingsLockButtons);
-		configureCompactButton(armSettingsLockButton);
-		configureCompactButton(cancelSettingsLockButton);
-		settingsLockButtons.add(armSettingsLockButton);
-		settingsLockButtons.add(cancelSettingsLockButton);
-		PanelUi.addVerticalComponent(settingsLockPanel, settingsLockButtons);
-		PanelUi.addVerticalComponent(settingsLockPanel, settingsLockStatusText);
-		allowHorizontalShrink(settingsLockPanel);
-		addSection(settingsLockPanel);
+		addSection(controllerDashboard);
+		addSection(permissionsPanel);
 
 		addSection(savedUnlockKeysPanel);
-
-		JPanel safetyButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
-		safetyButtons.add(emergencyButton);
-		safetyButtons.add(resumeButton);
-		safetyButtons.add(endButton);
-		addSection(safetyButtons);
+		addSection(privacy);
 
 		emergencyButton.addActionListener(event -> sessionManager.emergencyPause());
 		resumeButton.addActionListener(event -> sessionManager.resumeParticipant());
 		endButton.addActionListener(event -> sessionManager.endSession());
-		armSettingsLockButton.addActionListener(event -> armSettingsLock());
-		cancelSettingsLockButton.addActionListener(event -> sessionManager.cancelSettingsLock());
-
+		editSubjectButton.addActionListener(event -> editSubjectSettingsAction.run());
+		openLiveForgeButton.addActionListener(event -> openLiveForgeAction.run());
 		sessionManager.addListener(this);
 		settingsLockDraft.addListener(settingsLockDraftListener);
 		savedUnlockKeysPanel.refresh();
@@ -180,7 +173,6 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 	void close()
 	{
 		pairingPanel.close();
-		liveForgePanel.close();
 		settingsLockDraft.removeListener(settingsLockDraftListener);
 		sessionManager.removeListener(this);
 	}
@@ -208,12 +200,14 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		SwingUtilities.invokeLater(() ->
 		{
 			permissionsPanel.apply(permissions);
+			permissionSummary.apply(permissions);
+			refreshControllerTools(sessionManager.getSnapshot(), permissions);
+			refreshLockPreparation(sessionManager.getLockSnapshot());
 			actionsPanel.apply(
 				sessionManager.getSnapshot(),
 				sessionManager.getPeerPermissions(),
 				sessionManager.getControllerSettingsSnapshot()
 			);
-			liveForgePanel.apply(sessionManager.getSnapshot(), permissions);
 		});
 	}
 
@@ -258,21 +252,21 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		JTextField keyField = new JTextField(new String(unlockKey));
 		keyField.setEditable(false);
 		keyField.setHorizontalAlignment(JTextField.CENTER);
-		SidebarTextLabel explanation = new SidebarTextLabel(
+		WrappedTextLabel explanation = new WrappedTextLabel(
 			"HapticScape will save this unlock key only if the participant accepts "
 				+ "the lock. The saved copy is encrypted by Windows for your account."
 		);
 		JPanel content = new JPanel();
 		content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
-		PanelUi.addVerticalComponent(content, explanation);
-		PanelUi.addVerticalComponent(
+		PanelUi.addPreferredHeightComponent(content, explanation);
+		PanelUi.addPreferredHeightComponent(
 			content,
 			new JLabel(targets.size() + (targets.size() == 1
 				? " setting will be locked:"
 				: " settings will be locked:"))
 		);
-		PanelUi.addVerticalComponent(content, createTargetList(targets));
-		PanelUi.addVerticalComponent(content, keyField);
+		PanelUi.addPreferredHeightComponent(content, createTargetList(targets));
+		PanelUi.addPreferredHeightComponent(content, keyField);
 		try
 		{
 			Object[] options = {"Copy key & request", "Cancel"};
@@ -315,20 +309,20 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 			);
 			return;
 		}
-		SidebarTextLabel explanation = new SidebarTextLabel(
+		WrappedTextLabel explanation = new WrappedTextLabel(
 			"The controller requests a persistent lock on the settings listed below. "
 				+ "Their final values will stay locked after this session ends. Only the "
 				+ "controller's generated key can unlock this bundle normally."
 		);
-		SidebarTextLabel safety = new SidebarTextLabel(
+		WrappedTextLabel safety = new WrappedTextLabel(
 			"Emergency Off, End Session, Intiface controls, remote permissions, "
 				+ "Forge, Music, and developer recovery remain available."
 		);
 		JPanel content = new JPanel();
 		content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
-		PanelUi.addVerticalComponent(content, explanation);
-		PanelUi.addVerticalComponent(content, createTargetList(proposal.getTargets()));
-		PanelUi.addVerticalComponent(content, safety);
+		PanelUi.addPreferredHeightComponent(content, explanation);
+		PanelUi.addPreferredHeightComponent(content, createTargetList(proposal.getTargets()));
+		PanelUi.addPreferredHeightComponent(content, safety);
 		int choice = JOptionPane.showConfirmDialog(
 			this,
 			content,
@@ -348,64 +342,67 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 
 	private void applySnapshot(RemoteSessionSnapshot snapshot)
 	{
-		statusText.setPlainText(snapshot.getMessage());
-		boolean local = snapshot.getState() == RemoteSessionState.LOCAL;
-		boolean controller = snapshot.getRole() == RemoteRole.CONTROLLER && !local;
-		boolean participant = snapshot.getRole() == RemoteRole.PARTICIPANT && !local;
-		boolean emergencyPaused = snapshot.getState() == RemoteSessionState.EMERGENCY_PAUSED;
-		if (local && !wasLocal)
+		RemoteSessionViewState view = RemoteSessionViewState.from(snapshot);
+		if (view.isLocal() && !wasLocal)
 		{
 			settingsLockDraft.clear();
 		}
-		wasLocal = local;
+		wasLocal = view.isLocal();
 
 		pairingPanel.apply(snapshot);
-		permissionsPanel.setVisible(local || participant);
+		sessionHeader.apply(snapshot);
+		sessionHeader.setVisible(view.showsSessionHeader());
+		controllerDashboard.setVisible(view.showsControllerDashboard());
+		permissionsPanel.setVisible(view.showsParticipantPermissions());
+		permissionSummary.apply(sessionManager.getPeerPermissions());
 		actionsPanel.apply(
 			snapshot,
 			sessionManager.getPeerPermissions(),
 			sessionManager.getControllerSettingsSnapshot()
 		);
-		liveForgePanel.apply(snapshot, sessionManager.getPeerPermissions());
-		savedUnlockKeysPanel.setVisible(!participant);
-		emergencyButton.setEnabled(participant && !emergencyPaused);
-		resumeButton.setEnabled(participant && emergencyPaused);
-		emergencyButton.setVisible(participant && !emergencyPaused);
-		resumeButton.setVisible(participant && emergencyPaused);
-		endButton.setEnabled(!local);
-		endButton.setVisible(!local);
+		refreshControllerTools(snapshot, sessionManager.getPeerPermissions());
+		savedUnlockKeysPanel.setLocalMode(view.isLocal());
+		emergencyButton.setEnabled(view.showsEmergency());
+		resumeButton.setEnabled(view.showsResume());
+		emergencyButton.setVisible(view.showsEmergency());
+		resumeButton.setVisible(view.showsResume());
+		endButton.setEnabled(view.showsEnd());
+		endButton.setVisible(view.showsEnd());
 		applyLockSnapshot(sessionManager.getLockSnapshot());
 		refreshSectionMinimumHeights();
 		revalidate();
 		repaint();
 	}
 
+	private void refreshControllerTools(
+		RemoteSessionSnapshot snapshot,
+		RemotePermissions permissions)
+	{
+		boolean controller = snapshot.getRole() == RemoteRole.CONTROLLER
+			&& (snapshot.getState() == RemoteSessionState.ACTIVE
+				|| snapshot.getState() == RemoteSessionState.PEER_EMERGENCY_PAUSED);
+		controllerTools.setVisible(controller);
+		editSubjectButton.setEnabled(controller && permissions.isSettingsAllowed());
+		openLiveForgeButton.setEnabled(
+			controller
+				&& snapshot.getState() == RemoteSessionState.ACTIVE
+				&& permissions.isLiveHapticsAllowed()
+				&& permissions.getMaximumIntensityPercent() > 0
+		);
+	}
+
 	private void applyLockSnapshot(RemoteLockSnapshot snapshot)
 	{
-		RemoteSessionSnapshot session = sessionManager.getSnapshot();
-		boolean controllerActive = session.getRole() == RemoteRole.CONTROLLER
-			&& (session.getState() == RemoteSessionState.ACTIVE
-				|| session.getState() == RemoteSessionState.PEER_EMERGENCY_PAUSED);
-		RemoteLockState state = snapshot.getState();
-		settingsLockPanel.setVisible(controllerActive);
-		settingsLockStatusText.setPlainText(snapshot.getMessage());
-		if (state == RemoteLockState.ARMED && settingsLockDraft.size() > 0)
+		if (snapshot.getState() == RemoteLockState.ARMED
+			&& settingsLockDraft.size() > 0)
 		{
 			settingsLockDraft.clear();
 		}
-		refreshSettingsLockSelectionText();
 		savedUnlockKeysPanel.refresh();
-		boolean mayRequest = state == RemoteLockState.INACTIVE
-			|| state == RemoteLockState.DECLINED;
-		refreshArmSettingsLockButton(controllerActive, mayRequest);
-		boolean mayCancel = state == RemoteLockState.AWAITING_APPROVAL
-			|| state == RemoteLockState.ARMED
-			|| state == RemoteLockState.DECLINED;
-		cancelSettingsLockButton.setVisible(mayCancel);
-		cancelSettingsLockButton.setEnabled(controllerActive && mayCancel);
+		refreshLockPreparation(snapshot);
 		refreshSectionMinimumHeights();
-		settingsLockPanel.revalidate();
-		settingsLockPanel.repaint();
+		lockPreparationPanel.revalidate();
+		lockPreparationPanel.repaint();
 	}
 
 	private void handleSettingsLockDraftChanged()
@@ -415,42 +412,23 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 			SwingUtilities.invokeLater(this::handleSettingsLockDraftChanged);
 			return;
 		}
+		refreshLockPreparation(sessionManager.getLockSnapshot());
+	}
+
+	private void refreshLockPreparation(RemoteLockSnapshot snapshot)
+	{
 		RemoteSessionSnapshot session = sessionManager.getSnapshot();
-		RemoteLockState state = sessionManager.getLockSnapshot().getState();
 		boolean controllerActive = session.getRole() == RemoteRole.CONTROLLER
 			&& (session.getState() == RemoteSessionState.ACTIVE
 				|| session.getState() == RemoteSessionState.PEER_EMERGENCY_PAUSED);
-		boolean mayRequest = state == RemoteLockState.INACTIVE
-			|| state == RemoteLockState.DECLINED;
-		refreshSettingsLockSelectionText();
-		refreshArmSettingsLockButton(controllerActive, mayRequest);
-		settingsLockSelectionText.repaint();
-		armSettingsLockButton.repaint();
-	}
-
-	private void refreshSettingsLockSelectionText()
-	{
-		settingsLockSelectionText.setText(
-			"Selected lock targets: " + settingsLockDraft.size()
-		);
-	}
-
-	private void refreshArmSettingsLockButton(
-		boolean controllerActive,
-		boolean mayRequest)
-	{
-		armSettingsLockButton.setEnabled(
-			controllerActive
-				&& mayRequest
-				&& settingsLockDraft.size() > 0
-				&& sessionManager.isSavedUnlockKeyVaultAvailable()
-		);
-		armSettingsLockButton.setToolTipText(
-			!sessionManager.isSavedUnlockKeyVaultAvailable()
-				? sessionManager.getSavedUnlockKeyVaultMessage()
-				: settingsLockDraft.size() == 0
-					? "Shift-click settings in the Subject workspace first"
-					: null
+		RemotePermissions permissions = sessionManager.getPeerPermissions();
+		lockPreparationPanel.apply(
+			snapshot,
+			settingsLockDraft.size(),
+			controllerActive,
+			permissions.isSettingsAllowed(),
+			sessionManager.isSavedUnlockKeyVaultAvailable(),
+			sessionManager.getSavedUnlockKeyVaultMessage()
 		);
 	}
 

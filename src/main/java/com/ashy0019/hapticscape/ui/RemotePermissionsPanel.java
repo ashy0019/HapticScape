@@ -45,12 +45,12 @@ final class RemotePermissionsPanel extends JPanel
 	{
 		this.sessionManager = sessionManager;
 		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
-		setBorder(BorderFactory.createTitledBorder("Your remote permissions"));
+		setBorder(PanelUi.createSectionBorder("Your remote permissions"));
 
-		SidebarTextLabel explanation = new SidebarTextLabel(
+		WrappedTextLabel explanation = new WrappedTextLabel(
 			"Only you can change these controls. They cannot be locked or changed remotely."
 		);
-		PanelUi.addVerticalComponent(this, explanation);
+		PanelUi.addPreferredHeightComponent(this, explanation);
 		settings.setToolTipText("Allow the controller to change feedback settings");
 		haptics.setToolTipText("Allow bounded haptic requests");
 		liveHaptics.setToolTipText(
@@ -61,12 +61,12 @@ final class RemotePermissionsPanel extends JPanel
 		chatbox.setToolTipText(
 			"Show a local-only HapticScape console line; nothing is sent to game chat"
 		);
-		PanelUi.addVerticalComponent(this, settings);
-		PanelUi.addVerticalComponent(this, haptics);
-		PanelUi.addVerticalComponent(this, liveHaptics);
-		PanelUi.addVerticalComponent(this, clicks);
-		PanelUi.addVerticalComponent(this, notifications);
-		PanelUi.addVerticalComponent(this, chatbox);
+		PanelUi.addPreferredHeightComponent(this, settings);
+		PanelUi.addPreferredHeightComponent(this, haptics);
+		PanelUi.addPreferredHeightComponent(this, liveHaptics);
+		PanelUi.addPreferredHeightComponent(this, clicks);
+		PanelUi.addPreferredHeightComponent(this, notifications);
+		PanelUi.addPreferredHeightComponent(this, chatbox);
 
 		maximumIntensity.setPaintTicks(false);
 		maximumIntensity.setPaintLabels(false);
@@ -80,7 +80,7 @@ final class RemotePermissionsPanel extends JPanel
 		intensityRow.add(maximumIntensityValue, BorderLayout.EAST);
 		allowHorizontalShrink(intensityRow);
 		allowHorizontalShrink(maximumIntensity);
-		PanelUi.addVerticalComponent(this, intensityRow);
+		PanelUi.addPreferredHeightComponent(this, intensityRow);
 
 		JPanel durationRow = new JPanel(new BorderLayout(6, 0));
 		PanelUi.setFixedWidth(maximumDuration, 70);
@@ -88,7 +88,7 @@ final class RemotePermissionsPanel extends JPanel
 		durationRow.add(new JLabel("Max duration"), BorderLayout.WEST);
 		durationRow.add(maximumDuration, BorderLayout.CENTER);
 		allowHorizontalShrink(durationRow);
-		PanelUi.addVerticalComponent(this, durationRow);
+		PanelUi.addPreferredHeightComponent(this, durationRow);
 
 		JPanel liveDurationRow = new JPanel(new BorderLayout(6, 0));
 		PanelUi.setFixedWidth(maximumLiveDurationSeconds, 70);
@@ -98,7 +98,7 @@ final class RemotePermissionsPanel extends JPanel
 		liveDurationRow.add(new JLabel("Max live hold (s)"), BorderLayout.WEST);
 		liveDurationRow.add(maximumLiveDurationSeconds, BorderLayout.CENTER);
 		allowHorizontalShrink(liveDurationRow);
-		PanelUi.addVerticalComponent(this, liveDurationRow);
+		PanelUi.addPreferredHeightComponent(this, liveDurationRow);
 
 		settings.addActionListener(event -> save());
 		haptics.addActionListener(event -> save());

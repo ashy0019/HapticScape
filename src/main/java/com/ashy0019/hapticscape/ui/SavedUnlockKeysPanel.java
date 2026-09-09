@@ -7,154 +7,286 @@ import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
-import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
+import javax.swing.DefaultListCellRenderer;
+import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.ListSelectionModel;
 
-/** Controller-owned UI for DPAPI-protected post-session unlock keys. */
+/** Disconnected-only manager for DPAPI-protected post-session unlock keys. */
 final class SavedUnlockKeysPanel extends JPanel
 {
 	private final RemoteSessionManager sessionManager;
 	private final TextClipboard clipboard;
-	private final JPanel entriesPanel = new JPanel();
-	private final SidebarTextLabel statusText = new SidebarTextLabel("");
+	private final JPanel summaryView = new JPanel(new BorderLayout(8, 0));
+	private final JPanel managerView = new JPanel(new BorderLayout(0, 7));
+	private final WrappedTextLabel summaryStatus = new WrappedTextLabel("");
+	private final WrappedTextLabel managerStatus = new WrappedTextLabel("");
+	private final JButton manageButton = new JButton("Manage");
+	private final JButton backButton = new JButton("Back");
+	private final DefaultListModel<SavedUnlockKey> keyModel = new DefaultListModel<>();
+	private final JList<SavedUnlockKey> keyList = new JList<>(keyModel);
+	private final WrappedTextLabel detailLabel = new WrappedTextLabel("No key selected");
+	private final JLabel createdLabel = metadataLabel("");
+	private final JLabel lastUsedLabel = metadataLabel("");
+	private final JTextArea note = new JTextArea(4, 20);
+	private final JButton copyButton = new JButton("Copy key");
+	private final JButton editButton = new JButton("Edit details");
+	private final JButton forgetButton = new JButton("Forget");
 	private final DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern(
 		"MMM d, yyyy h:mm a"
 	).withZone(ZoneId.systemDefault());
+	private boolean managerOpen;
 
 	SavedUnlockKeysPanel(RemoteSessionManager sessionManager, TextClipboard clipboard)
 	{
-		this.sessionManager = sessionManager;
-		this.clipboard = clipboard;
-		setLayout(new BorderLayout(0, 0));
-		setBorder(BorderFactory.createTitledBorder("Saved Unlock Keys"));
-		JPanel header = new JPanel();
-		header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
+		this.sessionManager = Objects.requireNonNull(sessionManager, "sessionManager");
+		this.clipboard = Objects.requireNonNull(clipboard, "clipboard");
+		setName("savedUnlockKeys");
+		setLayout(new BorderLayout());
+		setBorder(PanelUi.createSectionBorder("Saved unlock keys"));
+		buildSummary();
+		buildManager();
+		showSummary();
+	}
 
-		SidebarTextLabel explanation = new SidebarTextLabel(
-			"Accepted unlock keys are protected by Windows for this account. "
-				+ "Invitations are never saved."
+	private void buildSummary()
+	{
+		JPanel text = new JPanel();
+		text.setLayout(new BoxLayout(text, BoxLayout.Y_AXIS));
+		WrappedTextLabel explanation = new WrappedTextLabel(
+			"Accepted post-session unlock keys are protected by Windows. "
+				+ "Invitations and session keys are never saved."
 		);
-		explanation.setBorder(BorderFactory.createEmptyBorder(0, 2, 4, 2));
-		PanelUi.addVerticalComponent(header, explanation);
+		explanation.setBorder(BorderFactory.createEmptyBorder(0, 2, 3, 2));
+		summaryStatus.setName("savedUnlockKeySummaryStatus");
+		summaryStatus.setBorder(BorderFactory.createEmptyBorder(0, 2, 0, 2));
+		PanelUi.addFlexibleVerticalComponent(text, explanation);
+		PanelUi.addFlexibleVerticalComponent(text, summaryStatus);
+		configureCompactButton(manageButton);
+		manageButton.setName("savedUnlockKeyManage");
+		manageButton.addActionListener(event -> showManager());
+		JPanel manageHost = new JPanel(new GridBagLayout());
+		manageHost.add(manageButton);
+		summaryView.add(text, BorderLayout.CENTER);
+		summaryView.add(manageHost, BorderLayout.EAST);
+		allowHorizontalShrink(summaryView);
+	}
 
-		statusText.setBorder(BorderFactory.createEmptyBorder(0, 2, 4, 2));
-		PanelUi.addVerticalComponent(header, statusText);
-		add(header, BorderLayout.NORTH);
-		entriesPanel.setLayout(new GridBagLayout());
-		entriesPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
-		entriesPanel.setMinimumSize(new Dimension(0, 0));
-		entriesPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
-		add(entriesPanel, BorderLayout.CENTER);
+	private void buildManager()
+	{
+		configureCompactButton(backButton);
+		backButton.setName("savedUnlockKeyBack");
+		backButton.addActionListener(event -> showSummary());
+		managerStatus.setName("savedUnlockKeyManagerStatus");
+		JPanel heading = new JPanel(new BorderLayout(8, 0));
+		heading.add(backButton, BorderLayout.WEST);
+		heading.add(managerStatus, BorderLayout.CENTER);
+		managerView.add(heading, BorderLayout.NORTH);
+
+		keyList.setName("savedUnlockKeyList");
+		keyList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		keyList.setCellRenderer(new DefaultListCellRenderer()
+		{
+			@Override
+			public Component getListCellRendererComponent(
+				JList<?> list,
+				Object value,
+				int index,
+				boolean selected,
+				boolean focused)
+			{
+				super.getListCellRendererComponent(
+					list,
+					value,
+					index,
+					selected,
+					focused
+				);
+				setText(value instanceof SavedUnlockKey
+					? ((SavedUnlockKey) value).getLabel()
+					: "");
+				return this;
+			}
+		});
+		keyList.addListSelectionListener(event ->
+		{
+			if (!event.getValueIsAdjusting())
+			{
+				showSelectedKey();
+			}
+		});
+		JScrollPane listScroll = new JScrollPane(keyList);
+		listScroll.setName("savedUnlockKeyScroll");
+		listScroll.setBorder(PanelUi.createSectionBorder("Keys"));
+		PanelUi.setFlexibleWidthHeightHint(listScroll, 190, 120);
+
+		JPanel details = new JPanel();
+		details.setName("savedUnlockKeyDetails");
+		details.setLayout(new BoxLayout(details, BoxLayout.Y_AXIS));
+		details.setBorder(PanelUi.createSectionBorder("Details"));
+		detailLabel.setName("savedUnlockKeyLabel");
+		detailLabel.setFont(detailLabel.getFont().deriveFont(Font.BOLD));
+		PanelUi.addPreferredHeightComponent(details, detailLabel);
+		PanelUi.addPreferredHeightComponent(details, createdLabel);
+		PanelUi.addPreferredHeightComponent(details, lastUsedLabel);
+		note.setName("savedUnlockKeyNote");
+		note.setEditable(false);
+		note.setFocusable(false);
+		note.setLineWrap(true);
+		note.setWrapStyleWord(true);
+		JScrollPane noteScroll = new JScrollPane(note);
+		noteScroll.setBorder(PanelUi.createSectionBorder("Note"));
+		allowHorizontalShrink(noteScroll);
+		PanelUi.addPreferredHeightComponent(details, noteScroll);
+
+		configureCompactButton(copyButton);
+		configureCompactButton(editButton);
+		configureCompactButton(forgetButton);
+		copyButton.setName("savedUnlockKeyCopy");
+		editButton.setName("savedUnlockKeyEdit");
+		forgetButton.setName("savedUnlockKeyForget");
+		copyButton.addActionListener(event -> copySelected());
+		editButton.addActionListener(event -> editSelected());
+		forgetButton.addActionListener(event -> forgetSelected());
+		JPanel actions = new JPanel(new GridLayout(1, 3, 4, 0));
+		actions.add(copyButton);
+		actions.add(editButton);
+		actions.add(forgetButton);
+		allowHorizontalShrink(actions);
+		PanelUi.addPreferredHeightComponent(details, actions);
+
+		SavedUnlockKeyVaultWorkspacePanel workspace =
+			new SavedUnlockKeyVaultWorkspacePanel(listScroll, details);
+		managerView.add(workspace, BorderLayout.CENTER);
+		allowHorizontalShrink(managerView);
+		showSelectedKey();
 	}
 
 	void refresh()
 	{
-		entriesPanel.removeAll();
-		if (!sessionManager.isSavedUnlockKeyVaultAvailable())
+		boolean available = sessionManager.isSavedUnlockKeyVaultAvailable();
+		List<SavedUnlockKey> entries = available
+			? sessionManager.getSavedUnlockKeys()
+			: Collections.emptyList();
+		SavedUnlockKeyVaultState state = SavedUnlockKeyVaultState.from(
+			available,
+			sessionManager.getSavedUnlockKeyVaultMessage(),
+			entries.size()
+		);
+		summaryStatus.setPlainText(state.getStatus());
+		summaryStatus.setToolTipText(state.getStatus());
+		manageButton.setEnabled(state.isManageable());
+		manageButton.setToolTipText(available ? null : state.getStatus());
+		managerStatus.setPlainText(state.getStatus());
+
+		String selectedId = selectedId();
+		keyModel.clear();
+		for (SavedUnlockKey entry : entries)
 		{
-			statusText.setPlainText(sessionManager.getSavedUnlockKeyVaultMessage());
+			keyModel.addElement(entry);
 		}
-		else
+		selectById(selectedId);
+		if (keyList.getSelectedIndex() < 0 && !entries.isEmpty())
 		{
-			List<SavedUnlockKey> entries = sessionManager.getSavedUnlockKeys();
-			if (entries.isEmpty())
-			{
-				statusText.setPlainText("No accepted unlock keys saved");
-			}
-			else
-			{
-				statusText.setPlainText(entries.size() + (entries.size() == 1
-					? " key saved"
-					: " keys saved"));
-				for (int index = 0; index < entries.size(); index++)
-				{
-					GridBagConstraints constraints = new GridBagConstraints();
-					constraints.gridx = 0;
-					constraints.gridy = index;
-					constraints.weightx = 1.0;
-					constraints.fill = GridBagConstraints.HORIZONTAL;
-					constraints.anchor = GridBagConstraints.NORTHWEST;
-					constraints.insets = new Insets(index == 0 ? 0 : 6, 0, 0, 0);
-					entriesPanel.add(entryRow(entries.get(index)), constraints);
-				}
-			}
+			keyList.setSelectedIndex(0);
 		}
+		showSelectedKey();
 		updateDynamicSizeConstraints();
-		entriesPanel.revalidate();
-		entriesPanel.repaint();
 		revalidate();
 		repaint();
 	}
 
-	private JPanel entryRow(SavedUnlockKey entry)
+	void setLocalMode(boolean local)
 	{
-		JPanel row = new JPanel();
-		row.setLayout(new BoxLayout(row, BoxLayout.Y_AXIS));
-		row.setBorder(BorderFactory.createCompoundBorder(
-			BorderFactory.createEtchedBorder(),
-			BorderFactory.createEmptyBorder(4, 4, 4, 4)
-		));
-		SidebarTextLabel label = new SidebarTextLabel(entry.getLabel());
-		label.setFont(label.getFont().deriveFont(Font.BOLD));
-		label.setPlainText(entry.getLabel());
-		label.setToolTipText(entry.getNote().isEmpty() ? null : entry.getNote());
-		allowHorizontalShrink(label);
-		PanelUi.addVerticalComponent(row, label);
-		JLabel created = metadataLabel(
-			"Created " + dateFormat.format(entry.getCreatedAt())
-		);
-		JLabel lastUsed = metadataLabel(entry.getLastUsedAt() == null
-			? "Not copied yet"
-			: "Copied " + dateFormat.format(entry.getLastUsedAt()));
-		PanelUi.addVerticalComponent(row, created);
-		PanelUi.addVerticalComponent(row, lastUsed);
-
-		JButton copy = new JButton("Copy key");
-		JButton edit = new JButton("Edit");
-		JButton forget = new JButton("Forget");
-		configureCompactButton(copy);
-		configureCompactButton(edit);
-		configureCompactButton(forget);
-		copy.addActionListener(event -> copy(entry));
-		edit.addActionListener(event -> edit(entry));
-		forget.addActionListener(event -> forget(entry));
-		PanelUi.addVerticalComponent(row, copy);
-		JPanel secondaryActions = new JPanel(new GridLayout(1, 2, 4, 0));
-		secondaryActions.setMinimumSize(new Dimension(0, edit.getPreferredSize().height));
-		secondaryActions.add(edit);
-		secondaryActions.add(forget);
-		PanelUi.addVerticalComponent(row, secondaryActions);
-		Dimension preferred = row.getPreferredSize();
-		row.setMinimumSize(new Dimension(0, preferred.height));
-		row.setMaximumSize(new Dimension(Integer.MAX_VALUE, preferred.height));
-		return row;
+		if (!local && managerOpen)
+		{
+			showSummary();
+		}
+		setVisible(local);
 	}
 
-	private void copy(SavedUnlockKey entry)
+	private void showManager()
 	{
+		refresh();
+		if (!manageButton.isEnabled())
+		{
+			return;
+		}
+		managerOpen = true;
+		showView(managerView);
+		keyList.requestFocusInWindow();
+	}
+
+	private void showSummary()
+	{
+		managerOpen = false;
+		showView(summaryView);
+	}
+
+	private void showView(JPanel view)
+	{
+		removeAll();
+		add(view, BorderLayout.CENTER);
+		updateDynamicSizeConstraints();
+		revalidate();
+		repaint();
+	}
+
+	private void showSelectedKey()
+	{
+		SavedUnlockKey selected = keyList.getSelectedValue();
+		boolean present = selected != null;
+		detailLabel.setPlainText(present ? selected.getLabel() : "No key selected");
+		createdLabel.setText(present
+			? "Created " + dateFormat.format(selected.getCreatedAt())
+			: "");
+		lastUsedLabel.setText(!present
+			? ""
+			: selected.getLastUsedAt() == null
+				? "Not copied yet"
+				: "Copied " + dateFormat.format(selected.getLastUsedAt()));
+		note.setText(!present
+			? ""
+			: selected.getNote().isEmpty() ? "No note" : selected.getNote());
+		note.setCaretPosition(0);
+		copyButton.setEnabled(present);
+		editButton.setEnabled(present);
+		forgetButton.setEnabled(present);
+	}
+
+	private void copySelected()
+	{
+		SavedUnlockKey selected = keyList.getSelectedValue();
+		if (selected == null)
+		{
+			return;
+		}
 		char[] key = null;
 		try
 		{
-			key = sessionManager.revealSavedUnlockKey(entry.getId());
+			key = sessionManager.revealSavedUnlockKey(selected.getId());
 			clipboard.copyText(new String(key));
 			refresh();
-			statusText.setPlainText("Unlock key copied");
+			managerStatus.setPlainText("Unlock key copied");
 		}
 		catch (RuntimeException e)
 		{
@@ -169,17 +301,22 @@ final class SavedUnlockKeysPanel extends JPanel
 		}
 	}
 
-	private void edit(SavedUnlockKey entry)
+	private void editSelected()
 	{
-		JTextField label = new JTextField(entry.getLabel());
-		JTextArea note = new JTextArea(entry.getNote(), 3, 24);
-		note.setLineWrap(true);
-		note.setWrapStyleWord(true);
+		SavedUnlockKey selected = keyList.getSelectedValue();
+		if (selected == null)
+		{
+			return;
+		}
+		JTextField label = new JTextField(selected.getLabel());
+		JTextArea updatedNote = new JTextArea(selected.getNote(), 3, 24);
+		updatedNote.setLineWrap(true);
+		updatedNote.setWrapStyleWord(true);
 		JPanel content = new JPanel();
 		content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
-		PanelUi.addVerticalComponent(content, labeledRow("Label", label));
-		PanelUi.addVerticalComponent(content, new JLabel("Note (optional)"));
-		PanelUi.addVerticalComponent(content, new JScrollPane(note));
+		PanelUi.addPreferredHeightComponent(content, labeledRow("Label", label));
+		PanelUi.addPreferredHeightComponent(content, new JLabel("Note (optional)"));
+		PanelUi.addPreferredHeightComponent(content, new JScrollPane(updatedNote));
 		int choice = JOptionPane.showConfirmDialog(
 			this,
 			content,
@@ -194,11 +331,12 @@ final class SavedUnlockKeysPanel extends JPanel
 		try
 		{
 			sessionManager.updateSavedUnlockKey(
-				entry.getId(),
+				selected.getId(),
 				label.getText(),
-				note.getText()
+				updatedNote.getText()
 			);
 			refresh();
+			managerStatus.setPlainText("Saved key details updated");
 		}
 		catch (RuntimeException e)
 		{
@@ -206,11 +344,16 @@ final class SavedUnlockKeysPanel extends JPanel
 		}
 	}
 
-	private void forget(SavedUnlockKey entry)
+	private void forgetSelected()
 	{
+		SavedUnlockKey selected = keyList.getSelectedValue();
+		if (selected == null)
+		{
+			return;
+		}
 		int choice = JOptionPane.showConfirmDialog(
 			this,
-			"Forget the saved unlock key for \"" + entry.getLabel() + "\"?",
+			"Forget the saved unlock key for \"" + selected.getLabel() + "\"?",
 			"Forget unlock key",
 			JOptionPane.YES_NO_OPTION,
 			JOptionPane.WARNING_MESSAGE
@@ -221,12 +364,35 @@ final class SavedUnlockKeysPanel extends JPanel
 		}
 		try
 		{
-			sessionManager.forgetSavedUnlockKey(entry.getId());
+			sessionManager.forgetSavedUnlockKey(selected.getId());
 			refresh();
+			managerStatus.setPlainText("Saved unlock key forgotten");
 		}
 		catch (RuntimeException e)
 		{
 			showError(e.getMessage());
+		}
+	}
+
+	private String selectedId()
+	{
+		SavedUnlockKey selected = keyList.getSelectedValue();
+		return selected == null ? null : selected.getId();
+	}
+
+	private void selectById(String id)
+	{
+		if (id == null)
+		{
+			return;
+		}
+		for (int index = 0; index < keyModel.size(); index++)
+		{
+			if (id.equals(keyModel.get(index).getId()))
+			{
+				keyList.setSelectedIndex(index);
+				return;
+			}
 		}
 	}
 
@@ -240,7 +406,7 @@ final class SavedUnlockKeysPanel extends JPanel
 		);
 	}
 
-	private static JPanel labeledRow(String name, java.awt.Component control)
+	private static JPanel labeledRow(String name, Component control)
 	{
 		JPanel row = new JPanel(new BorderLayout(8, 0));
 		row.add(new JLabel(name), BorderLayout.WEST);
@@ -250,12 +416,8 @@ final class SavedUnlockKeysPanel extends JPanel
 
 	private void updateDynamicSizeConstraints()
 	{
-		Dimension entriesSize = entriesPanel.getPreferredSize();
-		entriesPanel.setMinimumSize(new Dimension(0, entriesSize.height));
-		entriesPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, entriesSize.height));
-		Dimension panelSize = getPreferredSize();
-		setMinimumSize(new Dimension(0, panelSize.height));
-		setMaximumSize(new Dimension(Integer.MAX_VALUE, panelSize.height));
+		setMinimumSize(new Dimension(0, 0));
+		setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
 	}
 
 	private static JLabel metadataLabel(String text)

@@ -5,7 +5,6 @@ import static org.junit.Assert.assertTrue;
 
 import com.ashy0019.hapticscape.host.GlobalUiHooks;
 import java.awt.Dimension;
-import java.awt.event.InputEvent;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.util.concurrent.Callable;
@@ -32,7 +31,7 @@ public class AwtGlobalUiHooksTest
 			JScrollPane hostScroll = pageScroll(page);
 
 			try (GlobalUiHooks.Registration ignored =
-				new AwtGlobalUiHooks().installSidebarScrollRouting(hostScroll, page))
+				new AwtGlobalUiHooks().installPageScrollRouting(hostScroll, page))
 			{
 				int before = hostScroll.getVerticalScrollBar().getValue();
 				control.dispatchEvent(wheel(control, 1));
@@ -55,7 +54,7 @@ public class AwtGlobalUiHooksTest
 			page.add(slider);
 			JScrollPane pageScroll = pageScroll(page);
 			try (GlobalUiHooks.Registration ignored =
-				new AwtGlobalUiHooks().installSidebarScrollRouting(pageScroll, page))
+				new AwtGlobalUiHooks().installPageScrollRouting(pageScroll, page))
 			{
 				int before = pageScroll.getVerticalScrollBar().getValue();
 				slider.dispatchEvent(wheel(slider, 1));
@@ -75,7 +74,7 @@ public class AwtGlobalUiHooksTest
 			JPanel page = tallPage();
 			JScrollPane pageScroll = pageScroll(page);
 			try (GlobalUiHooks.Registration ignored =
-				new AwtGlobalUiHooks().installSidebarScrollRouting(pageScroll, page))
+				new AwtGlobalUiHooks().installPageScrollRouting(pageScroll, page))
 			{
 				JButton addedLater = new JButton("Later");
 				addedLater.setBounds(10, 150, 100, 25);
@@ -103,7 +102,7 @@ public class AwtGlobalUiHooksTest
 			wholeView.add(pageScroll);
 
 			try (GlobalUiHooks.Registration ignored =
-				new AwtGlobalUiHooks().installSidebarScrollRouting(pageScroll, wholeView))
+				new AwtGlobalUiHooks().installPageScrollRouting(pageScroll, wholeView))
 			{
 				int before = pageScroll.getVerticalScrollBar().getValue();
 				header.dispatchEvent(wheel(header, 1));
@@ -114,7 +113,7 @@ public class AwtGlobalUiHooksTest
 	}
 
 	@Test
-	public void textAreaRoutesNormallyAndUsesControlWheelForNestedScrolling() throws Exception
+	public void nestedControlScrollsNormallyThenHandsOffAtItsBoundary() throws Exception
 	{
 		onEdt(() ->
 		{
@@ -127,20 +126,18 @@ public class AwtGlobalUiHooksTest
 			page.add(nested);
 			JScrollPane pageScroll = pageScroll(page);
 			try (GlobalUiHooks.Registration ignored =
-				new AwtGlobalUiHooks().installSidebarScrollRouting(pageScroll, page))
+				new AwtGlobalUiHooks().installPageScrollRouting(pageScroll, page))
 			{
 				int pageBefore = pageScroll.getVerticalScrollBar().getValue();
 				text.dispatchEvent(wheel(text, 1));
-				assertEquals(0, nested.getVerticalScrollBar().getValue());
-				assertTrue(pageScroll.getVerticalScrollBar().getValue() > pageBefore);
-
-				int pageAfterNormalWheel = pageScroll.getVerticalScrollBar().getValue();
-				text.dispatchEvent(wheel(text, 1, InputEvent.CTRL_DOWN_MASK));
 				assertTrue(nested.getVerticalScrollBar().getValue() > 0);
-				assertEquals(
-					pageAfterNormalWheel,
-					pageScroll.getVerticalScrollBar().getValue()
+				assertEquals(pageBefore, pageScroll.getVerticalScrollBar().getValue());
+
+				nested.getVerticalScrollBar().setValue(
+					nested.getVerticalScrollBar().getMaximum()
 				);
+				text.dispatchEvent(wheel(text, 1));
+				assertTrue(pageScroll.getVerticalScrollBar().getValue() > pageBefore);
 			}
 			return null;
 		});
@@ -170,19 +167,11 @@ public class AwtGlobalUiHooksTest
 
 	private static MouseWheelEvent wheel(java.awt.Component source, int rotation)
 	{
-		return wheel(source, rotation, 0);
-	}
-
-	private static MouseWheelEvent wheel(
-		java.awt.Component source,
-		int rotation,
-		int modifiers)
-	{
 		return new MouseWheelEvent(
 			source,
 			MouseEvent.MOUSE_WHEEL,
 			System.currentTimeMillis(),
-			modifiers,
+			0,
 			5,
 			5,
 			0,
