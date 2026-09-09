@@ -51,12 +51,23 @@ final class ForgeWorkspacePanel extends JPanel implements RemoteSessionListener
 		composeButton.setName("forgeComposeMode");
 		liveButton.setName("forgeLiveMode");
 		composeButton.setSelected(true);
-		composeButton.setFocusPainted(false);
-		liveButton.setFocusPainted(false);
+		PanelUi.configureModeTab(composeButton);
+		PanelUi.configureModeTab(liveButton);
 		composeButton.setToolTipText("Build and save reusable patterns");
 		liveButton.setToolTipText("Control a participant continuously during Remote Play");
-		modeBar.setBorder(BorderFactory.createEmptyBorder(4, 5, 0, 5));
-		modeButtons.add(new JLabel("Forge"));
+		modeBar.setBackground(HapticScapeTheme.SURFACE);
+		modeBar.setBorder(BorderFactory.createCompoundBorder(
+			BorderFactory.createMatteBorder(0, 0, 1, 0, HapticScapeTheme.BORDER),
+			BorderFactory.createEmptyBorder(4, 5, 4, 5)
+		));
+		modeButtons.setOpaque(false);
+		liveState.setForeground(HapticScapeTheme.MUTED_TEXT);
+		JLabel forgeLabel = new JLabel("FORGE");
+		forgeLabel.setForeground(HapticScapeTheme.MUTED_TEXT);
+		forgeLabel.setFont(forgeLabel.getFont().deriveFont(
+			Math.max(9.0f, forgeLabel.getFont().getSize2D() - 1.0f)
+		));
+		modeButtons.add(forgeLabel);
 		modeButtons.add(composeButton);
 		modeButtons.add(liveButton);
 		add(modeBar, BorderLayout.NORTH);

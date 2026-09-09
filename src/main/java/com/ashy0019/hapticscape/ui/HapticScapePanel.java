@@ -448,10 +448,7 @@ public final class HapticScapePanel extends JPanel
 
 		tabs = new JTabbedPane(JTabbedPane.TOP, JTabbedPane.SCROLL_TAB_LAYOUT);
 		tabs.setName("gameplayWorkspaceTabs");
-		tabs.putClientProperty(
-			"FlatLaf.style",
-			"tabInsets: 2,1,2,1; tabHeight: 26; tabAreaAlignment: center"
-		);
+		PanelUi.configureWorkspaceTabs(tabs);
 		JPanel xpAndSkills = new XpSkillsWorkspacePanel(
 			settingsPanel,
 			skillsPanel,
@@ -463,7 +460,7 @@ public final class HapticScapePanel extends JPanel
 		JPanel topPanel = new JPanel();
 		topPanel.setLayout(new BoxLayout(topPanel, BoxLayout.Y_AXIS));
 
-		settingsLockBanner.setBorder(BorderFactory.createTitledBorder("Settings access"));
+		settingsLockBanner.setBorder(PanelUi.createSectionBorder("Settings access"));
 		settingsLockBanner.add(settingsLockLabel, BorderLayout.CENTER);
 		JPanel unlockButtonHost = new JPanel(new GridBagLayout());
 		unlockButtonHost.setOpaque(false);
@@ -472,7 +469,7 @@ public final class HapticScapePanel extends JPanel
 		settingsLockBanner.setVisible(false);
 		PanelUi.addFlexibleVerticalComponent(topPanel, settingsLockBanner);
 
-		remoteBanner.setBorder(BorderFactory.createTitledBorder("Remote Control"));
+		remoteBanner.setBorder(PanelUi.createSectionBorder("Remote Control"));
 		remoteBanner.add(remoteBannerLabel, BorderLayout.CENTER);
 		JPanel remoteBannerButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 3, 0));
 		remoteBannerButtons.add(remoteEmergencyButton);
@@ -485,7 +482,7 @@ public final class HapticScapePanel extends JPanel
 		JList<DeviceInfo> deviceList = new JList<>(deviceModel);
 		JScrollPane scrollPane = new JScrollPane(deviceList);
 		PanelUi.setFlexibleWidthHeightHint(scrollPane, 140, 90);
-		scrollPane.setBorder(BorderFactory.createTitledBorder("Devices"));
+		scrollPane.setBorder(PanelUi.createSectionBorder("Devices"));
 
 		connectButton.addActionListener(event ->
 		{
@@ -523,7 +520,7 @@ public final class HapticScapePanel extends JPanel
 		primaryButtons.add(stopButton);
 
 		JPanel deviceSettings = new JPanel(new BorderLayout(0, 6));
-		deviceSettings.setBorder(BorderFactory.createTitledBorder("Intiface devices"));
+		deviceSettings.setBorder(PanelUi.createSectionBorder("Intiface devices"));
 		deviceSettings.add(scrollPane, BorderLayout.CENTER);
 		JPanel deviceButtons = new JPanel(new GridLayout(1, 2, 4, 0));
 		deviceButtons.add(connectButton);
@@ -538,8 +535,9 @@ public final class HapticScapePanel extends JPanel
 
 		JTabbedPane patternTabs = new JTabbedPane(JTabbedPane.TOP);
 		patternTabs.setName("patternsWorkspaceTabs");
-		patternTabs.addTab("Forge", forgeWorkspacePanel);
-		patternTabs.addTab("Music Sync", musicPanel);
+		PanelUi.configureWorkspaceTabs(patternTabs);
+		PanelUi.addCompactTab(patternTabs, "Forge", forgeWorkspacePanel);
+		PanelUi.addCompactTab(patternTabs, "Music Sync", musicPanel);
 
 		workspaceShell.addWorkspace(GAMEPLAY_WORKSPACE, "Gameplay", tabs);
 		workspaceShell.addWorkspace(PATTERNS_WORKSPACE, "Patterns + Audio", patternTabs);
@@ -985,7 +983,7 @@ public final class HapticScapePanel extends JPanel
 	{
 		JPanel settings = new JPanel();
 		settings.setLayout(new BoxLayout(settings, BoxLayout.Y_AXIS));
-		settings.setBorder(BorderFactory.createTitledBorder("Feedback"));
+		settings.setBorder(PanelUi.createSectionBorder("Feedback"));
 		PanelUi.addPreferredHeightComponent(settings, feedbackBlockHeader);
 
 		JPanel thresholdRow = new JPanel(new BorderLayout(8, 0));

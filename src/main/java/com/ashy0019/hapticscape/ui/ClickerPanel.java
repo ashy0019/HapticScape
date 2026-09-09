@@ -172,7 +172,7 @@ final class ClickerPanel extends JPanel
 
 		JPanel clickOutputPanel = new JPanel();
 		clickOutputPanel.setLayout(new BoxLayout(clickOutputPanel, BoxLayout.Y_AXIS));
-		clickOutputPanel.setBorder(BorderFactory.createTitledBorder("Click output"));
+		clickOutputPanel.setBorder(PanelUi.createSectionBorder("Click output"));
 		PanelUi.addPreferredHeightComponent(clickOutputPanel, clickSettingsBlockHeader);
 		PanelUi.addPreferredHeightComponent(clickOutputPanel, enabledCheckBox);
 		PanelUi.addPreferredHeightComponent(clickOutputPanel, row("Volume", volumeValue));
@@ -186,7 +186,7 @@ final class ClickerPanel extends JPanel
 
 		JPanel xpSettingsPanel = new JPanel();
 		xpSettingsPanel.setLayout(new BoxLayout(xpSettingsPanel, BoxLayout.Y_AXIS));
-		xpSettingsPanel.setBorder(BorderFactory.createTitledBorder("XP clicks"));
+		xpSettingsPanel.setBorder(PanelUi.createSectionBorder("XP clicks"));
 		JLabel skillHint = new JLabel("Choose skills in XP + Skills → Clicks.");
 		skillHint.setToolTipText("Each skill has separate Haptics and Clicks switches");
 		PanelUi.addPreferredHeightComponent(xpSettingsPanel, skillHint);

@@ -38,6 +38,12 @@ public class WorkspaceShellTest
 		});
 		assertEquals("remote", shell.getSelectedWorkspace());
 		assertEquals("remote", selected.get());
+		assertTrue(component(shell, "workspace-remote", AbstractButton.class).isFocusPainted());
+		assertEquals(
+			"toolBarButton",
+			component(shell, "workspace-remote", javax.swing.JComponent.class)
+				.getClientProperty("JButton.buttonType")
+		);
 
 		onEdt(() ->
 		{

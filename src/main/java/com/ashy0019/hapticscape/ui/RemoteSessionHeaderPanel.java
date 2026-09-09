@@ -33,7 +33,7 @@ final class RemoteSessionHeaderPanel extends JPanel
 	{
 		setName("remoteSessionHeader");
 		setLayout(new GridBagLayout());
-		setBorder(BorderFactory.createTitledBorder("Session"));
+		setBorder(PanelUi.createSectionBorder("Session"));
 
 		roleLabel.setName("remoteSessionRole");
 		roleLabel.setFont(roleLabel.getFont().deriveFont(Font.BOLD));

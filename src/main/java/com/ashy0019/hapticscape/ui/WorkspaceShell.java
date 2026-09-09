@@ -11,6 +11,8 @@ import java.awt.GridLayout;
 import java.awt.Rectangle;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -107,8 +109,32 @@ final class WorkspaceShell extends JPanel
 		JToggleButton button = new JToggleButton(label);
 		button.setName("workspace-" + id);
 		button.setHorizontalAlignment(JButton.LEFT);
-		button.setFocusPainted(false);
+		button.setFocusPainted(true);
 		button.setBackground(HapticScapeTheme.SIDEBAR);
+		button.putClientProperty("JButton.buttonType", "toolBarButton");
+		button.putClientProperty(
+			"FlatLaf.style",
+			"arc: 0; focusWidth: 0; innerFocusWidth: 0; borderWidth: 0;"
+				+ " background: #1F1F1F; foreground: #F2F2F2;"
+				+ " toolbar.hoverBackground: #2B2B2B; toolbar.hoverForeground: #F2F2F2;"
+				+ " toolbar.pressedBackground: #373737; toolbar.pressedForeground: #F2F2F2;"
+				+ " toolbar.selectedBackground: #2B2B2B; toolbar.selectedForeground: #F2F2F2;"
+				+ " disabledText: #747474"
+		);
+		button.addFocusListener(new FocusAdapter()
+		{
+			@Override
+			public void focusGained(FocusEvent event)
+			{
+				updateNavigationBorders();
+			}
+
+			@Override
+			public void focusLost(FocusEvent event)
+			{
+				updateNavigationBorders();
+			}
+		});
 		button.addActionListener(event ->
 		{
 			showWorkspace(id);
@@ -268,14 +294,21 @@ final class WorkspaceShell extends JPanel
 		for (Map.Entry<String, JToggleButton> entry : buttons.entrySet())
 		{
 			boolean selected = entry.getKey().equals(selectedId);
+			JToggleButton button = entry.getValue();
 			Color marker = selected ? HapticScapeTheme.ACCENT : HapticScapeTheme.SIDEBAR;
-			entry.getValue().setBorder(BorderFactory.createCompoundBorder(
+			Color focus = button.isFocusOwner()
+				? HapticScapeTheme.ACCENT_HOVER
+				: (selected ? HapticScapeTheme.SELECTION : HapticScapeTheme.SIDEBAR);
+			button.setBorder(BorderFactory.createCompoundBorder(
 				compact
 					? BorderFactory.createMatteBorder(0, 0, 2, 0, marker)
 					: BorderFactory.createMatteBorder(0, 2, 0, 0, marker),
-				BorderFactory.createEmptyBorder(4, compact ? 6 : 10, 4, 6)
+				BorderFactory.createCompoundBorder(
+					BorderFactory.createLineBorder(focus),
+					BorderFactory.createEmptyBorder(3, compact ? 5 : 9, 3, 5)
+				)
 			));
-			entry.getValue().setHorizontalAlignment(compact ? JButton.CENTER : JButton.LEFT);
+			button.setHorizontalAlignment(compact ? JButton.CENTER : JButton.LEFT);
 		}
 	}
 

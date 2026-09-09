@@ -73,7 +73,7 @@ final class ProfilesPanel extends JPanel
 		this.customPatternsSupplier = customPatternsSupplier;
 		setName("skillProfileEditor");
 		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
-		setBorder(BorderFactory.createTitledBorder("Skill override"));
+		setBorder(PanelUi.createSectionBorder("Skill override"));
 
 		SkillDescriptor[] skills = skillCatalog.getSkills().toArray(new SkillDescriptor[0]);
 		for (SkillDescriptor skill : skills)

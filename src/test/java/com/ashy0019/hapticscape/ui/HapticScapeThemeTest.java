@@ -29,6 +29,8 @@ public class HapticScapeThemeTest
 			assertEquals(HapticScapeTheme.CANVAS, color("Panel.background"));
 			assertEquals(HapticScapeTheme.TEXT, color("Label.foreground"));
 			assertEquals(HapticScapeTheme.ACCENT, color("TabbedPane.underlineColor"));
+			assertEquals(HapticScapeTheme.ACCENT, color("TabbedPane.selectedForeground"));
+			assertEquals(HapticScapeTheme.SURFACE, color("TabbedPane.tabAreaBackground"));
 			assertEquals(HapticScapeTheme.ACCENT, color("CheckBox.icon.selectedBackground"));
 			assertEquals(0, UIManager.getInt("Component.arc"));
 			assertEquals(0, UIManager.getInt("Button.arc"));

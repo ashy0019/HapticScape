@@ -211,7 +211,7 @@ final class RemotePairingPanel extends JPanel
 	{
 		controllerPanel.setName("remoteControlPartner");
 		controllerPanel.setLayout(new BoxLayout(controllerPanel, BoxLayout.Y_AXIS));
-		controllerPanel.setBorder(BorderFactory.createTitledBorder("Control a partner"));
+		controllerPanel.setBorder(PanelUi.createSectionBorder("Control a partner"));
 		PanelUi.addPreferredHeightComponent(controllerPanel, new WrappedTextLabel(
 			"Create a temporary encrypted connection code and send it privately to your partner."
 		));
@@ -228,7 +228,7 @@ final class RemotePairingPanel extends JPanel
 	{
 		participantPanel.setName("remoteJoinPartner");
 		participantPanel.setLayout(new BoxLayout(participantPanel, BoxLayout.Y_AXIS));
-		participantPanel.setBorder(BorderFactory.createTitledBorder("Let a partner control you"));
+		participantPanel.setBorder(PanelUi.createSectionBorder("Let a partner control you"));
 		PanelUi.addPreferredHeightComponent(participantPanel, new WrappedTextLabel(
 			"Paste the temporary connection code your partner sent you."
 		));
@@ -251,7 +251,7 @@ final class RemotePairingPanel extends JPanel
 	{
 		discordPanel.setName("remoteDiscordLink");
 		discordPanel.setLayout(new BoxLayout(discordPanel, BoxLayout.Y_AXIS));
-		discordPanel.setBorder(BorderFactory.createTitledBorder("Discord"));
+		discordPanel.setBorder(PanelUi.createSectionBorder("Discord"));
 		JPanel statusRow = new JPanel(new BorderLayout(8, 0));
 		statusRow.add(discordStatus, BorderLayout.CENTER);
 		configureCompactButton(unlinkDiscordButton);
@@ -292,7 +292,7 @@ final class RemotePairingPanel extends JPanel
 		connectView.setName("remoteConnectView");
 		connectView.setLayout(new BoxLayout(connectView, BoxLayout.Y_AXIS));
 		connectionStatus.setName("remoteConnectionStatus");
-		connectionStatus.setBorder(BorderFactory.createTitledBorder("Remote Play"));
+		connectionStatus.setBorder(PanelUi.createSectionBorder("Remote Play"));
 		PanelUi.addPreferredHeightComponent(connectView, connectionStatus);
 		WrappedTextLabel heading = new WrappedTextLabel(
 			"Start a private session with a temporary code, or accept a linked Discord request."
@@ -319,7 +319,7 @@ final class RemotePairingPanel extends JPanel
 	{
 		waitingView.setName("remoteWaitingView");
 		waitingView.setLayout(new BoxLayout(waitingView, BoxLayout.Y_AXIS));
-		waitingView.setBorder(BorderFactory.createTitledBorder("Waiting for your partner"));
+		waitingView.setBorder(PanelUi.createSectionBorder("Waiting for your partner"));
 		waitingStatus.setName("remoteWaitingStatus");
 		waitingStatus.setBorder(BorderFactory.createEmptyBorder(0, 1, 7, 1));
 		PanelUi.addPreferredHeightComponent(waitingView, waitingStatus);

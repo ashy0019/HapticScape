@@ -31,7 +31,7 @@ final class RemoteLockPreparationPanel extends JPanel
 		Objects.requireNonNull(cancelLock, "cancelLock");
 		setName("remoteLockPreparation");
 		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
-		setBorder(BorderFactory.createTitledBorder("Post-session lock"));
+		setBorder(PanelUi.createSectionBorder("Post-session lock"));
 
 		stateLabel.setName("remoteLockState");
 		stateLabel.setFont(stateLabel.getFont().deriveFont(Font.BOLD));

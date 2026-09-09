@@ -115,7 +115,7 @@ final class RemoteActionsPanel extends JPanel
 		this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
 		setName("remoteActionsPanel");
 		setLayout(new BorderLayout(0, 6));
-		setBorder(BorderFactory.createTitledBorder("Actions"));
+		setBorder(PanelUi.createSectionBorder("Actions"));
 
 		WrappedTextLabel explanation = new WrappedTextLabel(
 			"The participant's permissions and safety limits remain authoritative."
@@ -199,7 +199,7 @@ final class RemoteActionsPanel extends JPanel
 		add(workspace, BorderLayout.CENTER);
 
 		actionStatus.setName("remoteActionStatus");
-		actionStatus.setBorder(BorderFactory.createTitledBorder("Last action"));
+		actionStatus.setBorder(PanelUi.createSectionBorder("Last action"));
 		setActionStatus("Ready for remote actions");
 		add(actionStatus, BorderLayout.SOUTH);
 
@@ -531,7 +531,7 @@ final class RemoteActionsPanel extends JPanel
 	{
 		JPanel section = new JPanel();
 		section.setLayout(new BoxLayout(section, BoxLayout.Y_AXIS));
-		section.setBorder(BorderFactory.createTitledBorder(title));
+		section.setBorder(PanelUi.createSectionBorder(title));
 		allowHorizontalShrink(section);
 		return section;
 	}

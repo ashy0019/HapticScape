@@ -13,7 +13,7 @@ final class RemotePermissionSummaryPanel extends JPanel
 	{
 		setName("remotePermissionSummary");
 		setLayout(new javax.swing.BoxLayout(this, javax.swing.BoxLayout.Y_AXIS));
-		setBorder(BorderFactory.createTitledBorder("Partner permissions"));
+		setBorder(PanelUi.createSectionBorder("Partner permissions"));
 		summary.setName("remotePermissionSummaryText");
 		PanelUi.addFlexibleVerticalComponent(this, summary);
 	}

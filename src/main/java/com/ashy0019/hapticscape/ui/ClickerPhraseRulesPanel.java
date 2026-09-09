@@ -107,7 +107,7 @@ final class ClickerPhraseRulesPanel extends JPanel
 
 		setName("phraseRulesWorkspace");
 		setLayout(new BorderLayout(0, 5));
-		setBorder(BorderFactory.createTitledBorder("Phrase rules"));
+		setBorder(PanelUi.createSectionBorder("Phrase rules"));
 		JPanel heading = new JPanel(new BorderLayout(8, 0));
 		JLabel description = new JLabel("Click when an incoming chat message matches a rule.");
 		description.setToolTipText(
@@ -168,7 +168,7 @@ final class ClickerPhraseRulesPanel extends JPanel
 	private JPanel createListPanel()
 	{
 		JPanel panel = new JPanel(new BorderLayout(0, 4));
-		panel.setBorder(BorderFactory.createTitledBorder("Rules"));
+		panel.setBorder(PanelUi.createSectionBorder("Rules"));
 		ruleList.setName("phraseRuleList");
 		ruleList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 		ruleList.setCellRenderer(new PhraseRuleRenderer());
@@ -191,7 +191,7 @@ final class ClickerPhraseRulesPanel extends JPanel
 	private void createEditorPanel()
 	{
 		editorPanel.setLayout(new BoxLayout(editorPanel, BoxLayout.Y_AXIS));
-		editorPanel.setBorder(BorderFactory.createTitledBorder("Rule editor"));
+		editorPanel.setBorder(PanelUi.createSectionBorder("Rule editor"));
 		editorTitle.setBorder(BorderFactory.createEmptyBorder(2, 2, 4, 2));
 		PanelUi.addPreferredHeightComponent(editorPanel, editorTitle);
 		PanelUi.addPreferredHeightComponent(editorPanel, editorEnabled);

@@ -132,7 +132,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 
 		addSection(sessionHeader);
 
-		controllerTools.setBorder(BorderFactory.createTitledBorder("Subject workspace"));
+		controllerTools.setBorder(PanelUi.createSectionBorder("Subject workspace"));
 		editSubjectButton.setToolTipText(
 			"Open the participant's synced feedback settings"
 		);

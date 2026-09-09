@@ -367,7 +367,7 @@ final class MusicPanel extends JPanel
 		JPanel panel = new JPanel();
 		panel.setName(name);
 		panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-		panel.setBorder(BorderFactory.createTitledBorder(title));
+		panel.setBorder(PanelUi.createSectionBorder(title));
 		panel.setAlignmentY(Component.TOP_ALIGNMENT);
 		return panel;
 	}

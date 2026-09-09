@@ -408,7 +408,7 @@ final class AlertsPanel extends JPanel
 	private JPanel createCategoriesPanel()
 	{
 		JPanel panel = new JPanel(new BorderLayout(0, 5));
-		panel.setBorder(BorderFactory.createTitledBorder("Alert types"));
+		panel.setBorder(PanelUi.createSectionBorder("Alert types"));
 		JLabel help = new JLabel("Select an event to edit");
 		help.setEnabled(false);
 		panel.add(help, BorderLayout.NORTH);
@@ -422,7 +422,7 @@ final class AlertsPanel extends JPanel
 	{
 		JPanel panel = new JPanel();
 		panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-		panel.setBorder(BorderFactory.createTitledBorder("Generic defaults"));
+		panel.setBorder(PanelUi.createSectionBorder("Generic defaults"));
 		PanelUi.addPreferredHeightComponent(panel, genericBlockHeader);
 
 		genericEnabledCheckBox.setSelected(genericEnabled);
@@ -469,7 +469,7 @@ final class AlertsPanel extends JPanel
 	{
 		JPanel panel = new JPanel();
 		panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-		panel.setBorder(BorderFactory.createTitledBorder("Selected alert"));
+		panel.setBorder(PanelUi.createSectionBorder("Selected alert"));
 		selectedCategoryLabel.setFont(
 			selectedCategoryLabel.getFont().deriveFont(Font.BOLD)
 		);
@@ -497,7 +497,7 @@ final class AlertsPanel extends JPanel
 		customProfilePanel.setLayout(
 			new BoxLayout(customProfilePanel, BoxLayout.Y_AXIS)
 		);
-		customProfilePanel.setBorder(BorderFactory.createTitledBorder("Custom haptics"));
+		customProfilePanel.setBorder(PanelUi.createSectionBorder("Custom haptics"));
 		JPanel intensityHeader = new JPanel(new BorderLayout());
 		intensityHeader.add(new JLabel("Intensity"), BorderLayout.WEST);
 		intensityHeader.add(specificIntensityValueLabel, BorderLayout.EAST);

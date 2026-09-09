@@ -136,7 +136,7 @@ final class PatternForgePanel extends JPanel
 		JPanel libraryPanel = new JPanel();
 		libraryPanel.setName("patternLibrary");
 		libraryPanel.setLayout(new BoxLayout(libraryPanel, BoxLayout.Y_AXIS));
-		libraryPanel.setBorder(BorderFactory.createTitledBorder("Pattern library"));
+		libraryPanel.setBorder(PanelUi.createSectionBorder("Pattern library"));
 		patternComboBox.setMaximumSize(new Dimension(Integer.MAX_VALUE,
 			patternComboBox.getPreferredSize().height));
 		patternComboBox.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -160,7 +160,7 @@ final class PatternForgePanel extends JPanel
 
 		JPanel shapePanel = new JPanel(new BorderLayout(0, 5));
 		shapePanel.setName("patternShapeEditor");
-		shapePanel.setBorder(BorderFactory.createTitledBorder("Shape editor"));
+		shapePanel.setBorder(PanelUi.createSectionBorder("Shape editor"));
 		JPanel shapeHeading = new JPanel(new BorderLayout(8, 0));
 		JLabel instructions = new JLabel("Draw intensity over one beat.");
 		instructions.setToolTipText("Left to right is time; height is intensity");
@@ -195,7 +195,7 @@ final class PatternForgePanel extends JPanel
 		JPanel playbackPanel = new JPanel();
 		playbackPanel.setName("patternPlayback");
 		playbackPanel.setLayout(new BoxLayout(playbackPanel, BoxLayout.Y_AXIS));
-		playbackPanel.setBorder(BorderFactory.createTitledBorder("Playback"));
+		playbackPanel.setBorder(PanelUi.createSectionBorder("Playback"));
 		JPanel beatDurationRow = new JPanel(new BorderLayout(8, 0));
 		beatDurationRow.add(new JLabel("Beat length (ms)"), BorderLayout.CENTER);
 		beatDurationRow.add(beatDurationSpinner, BorderLayout.EAST);

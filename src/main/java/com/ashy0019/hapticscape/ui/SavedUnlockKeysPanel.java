@@ -62,7 +62,7 @@ final class SavedUnlockKeysPanel extends JPanel
 		this.clipboard = Objects.requireNonNull(clipboard, "clipboard");
 		setName("savedUnlockKeys");
 		setLayout(new BorderLayout());
-		setBorder(BorderFactory.createTitledBorder("Saved unlock keys"));
+		setBorder(PanelUi.createSectionBorder("Saved unlock keys"));
 		buildSummary();
 		buildManager();
 		showSummary();
@@ -136,13 +136,13 @@ final class SavedUnlockKeysPanel extends JPanel
 		});
 		JScrollPane listScroll = new JScrollPane(keyList);
 		listScroll.setName("savedUnlockKeyScroll");
-		listScroll.setBorder(BorderFactory.createTitledBorder("Keys"));
+		listScroll.setBorder(PanelUi.createSectionBorder("Keys"));
 		PanelUi.setFlexibleWidthHeightHint(listScroll, 190, 120);
 
 		JPanel details = new JPanel();
 		details.setName("savedUnlockKeyDetails");
 		details.setLayout(new BoxLayout(details, BoxLayout.Y_AXIS));
-		details.setBorder(BorderFactory.createTitledBorder("Details"));
+		details.setBorder(PanelUi.createSectionBorder("Details"));
 		detailLabel.setName("savedUnlockKeyLabel");
 		detailLabel.setFont(detailLabel.getFont().deriveFont(Font.BOLD));
 		PanelUi.addPreferredHeightComponent(details, detailLabel);
@@ -154,7 +154,7 @@ final class SavedUnlockKeysPanel extends JPanel
 		note.setLineWrap(true);
 		note.setWrapStyleWord(true);
 		JScrollPane noteScroll = new JScrollPane(note);
-		noteScroll.setBorder(BorderFactory.createTitledBorder("Note"));
+		noteScroll.setBorder(PanelUi.createSectionBorder("Note"));
 		allowHorizontalShrink(noteScroll);
 		PanelUi.addPreferredHeightComponent(details, noteScroll);
 

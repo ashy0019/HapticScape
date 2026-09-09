@@ -42,7 +42,7 @@ final class UpdatesPanel extends JPanel
 		checkNowButton.setEnabled(false);
 
 		JPanel choices = new JPanel(new GridLayout(0, 1, 0, 2));
-		choices.setBorder(BorderFactory.createTitledBorder("Startup behavior"));
+		choices.setBorder(PanelUi.createSectionBorder("Startup behavior"));
 		choices.add(automaticUpdates);
 		choices.add(updateNotifications);
 		PanelUi.addPreferredHeightComponent(this, choices);

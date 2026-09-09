@@ -155,17 +155,21 @@ public final class HapticScapeTheme
 
 		put("TabbedPane.background", canvas);
 		put("TabbedPane.foreground", muted);
-		put("TabbedPane.selectedBackground", canvas);
-		put("TabbedPane.selectedForeground", text);
-		put("TabbedPane.hoverColor", surface);
+		put("TabbedPane.disabledForeground", disabled);
+		put("TabbedPane.tabAreaBackground", surface);
+		put("TabbedPane.selectedBackground", surface);
+		put("TabbedPane.selectedForeground", accent);
+		put("TabbedPane.hoverColor", raised);
 		put("TabbedPane.focusColor", surface);
 		put("TabbedPane.underlineColor", accent);
 		put("TabbedPane.inactiveUnderlineColor", border);
 		put("TabbedPane.contentAreaColor", border);
+		put("TabbedPane.tabType", "underlined");
 		put("TabbedPane.showTabSeparators", true);
 		put("TabbedPane.tabSeparatorsFullHeight", true);
-		put("TabbedPane.tabHeight", 28);
+		put("TabbedPane.tabHeight", 30);
 		put("TabbedPane.tabInsets", insets(0, 10, 0, 10));
+		put("TabbedPane.tabAreaInsets", insets(0, 0, 0, 0));
 		put("TabbedPane.contentSeparatorHeight", 1);
 
 		put("List.background", canvas);

@@ -86,7 +86,7 @@ final class SkillsPanel extends JPanel
 		this.lockSelectionEnabled = lockSelectionEnabled;
 		setName("skillMatrix");
 		setLayout(new BorderLayout(0, 5));
-		setBorder(BorderFactory.createTitledBorder("Skills"));
+		setBorder(PanelUi.createSectionBorder("Skills"));
 
 		JPanel header = new JPanel(new GridBagLayout());
 		addCell(header, new JLabel("Skill"), 0, 0, 1.0, GridBagConstraints.HORIZONTAL);

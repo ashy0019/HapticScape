@@ -110,7 +110,7 @@ final class RemoteLiveForgePanel extends JPanel
 		JPanel sessionPanel = new JPanel();
 		sessionPanel.setName("remoteLiveSession");
 		sessionPanel.setLayout(new BoxLayout(sessionPanel, BoxLayout.Y_AXIS));
-		sessionPanel.setBorder(BorderFactory.createTitledBorder("Session limits"));
+		sessionPanel.setBorder(PanelUi.createSectionBorder("Session limits"));
 		JPanel heading = new JPanel(new BorderLayout(6, 0));
 		heading.add(new JLabel("Permission"), BorderLayout.WEST);
 		permissionLabel.setName("remoteLivePermission");
@@ -121,7 +121,7 @@ final class RemoteLiveForgePanel extends JPanel
 
 		JPanel controlPanel = new JPanel(new BorderLayout(0, 5));
 		controlPanel.setName("remoteLiveControl");
-		controlPanel.setBorder(BorderFactory.createTitledBorder("Live control"));
+		controlPanel.setBorder(PanelUi.createSectionBorder("Live control"));
 		WrappedTextLabel explanation = new WrappedTextLabel(
 			"Hold and move inside the graph. Height controls intensity while time moves continuously."
 		);
