@@ -15,6 +15,7 @@ version = appVersion.get()
 def standaloneRuntimeModules = [
 	'ch.qos.logback:logback-classic',
 	'ch.qos.logback:logback-core',
+	'com.formdev:flatlaf',
 	'com.google.code.gson:gson',
 	'com.squareup.okhttp3:okhttp',
 	'com.squareup.okio:okio',
@@ -24,6 +25,7 @@ def standaloneRuntimeModules = [
 ] as Set
 
 dependencies {
+	implementation 'com.formdev:flatlaf:3.7.2'
 	implementation 'com.google.code.gson:gson:2.8.5'
 	implementation 'com.squareup.okhttp3:okhttp:3.14.9'
 	implementation 'net.java.dev.jna:jna:5.9.0'

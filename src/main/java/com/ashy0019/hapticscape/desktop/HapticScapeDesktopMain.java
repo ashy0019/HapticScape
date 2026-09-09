@@ -1,8 +1,8 @@
 package com.ashy0019.hapticscape.desktop;
 
+import com.ashy0019.hapticscape.ui.HapticScapeTheme;
 import java.awt.GraphicsEnvironment;
 import javax.swing.JOptionPane;
-import javax.swing.UIManager;
 
 /** Standalone desktop entry point for HapticScape. */
 public final class HapticScapeDesktopMain
@@ -17,7 +17,7 @@ public final class HapticScapeDesktopMain
 		{
 			throw new IllegalStateException("HapticScape desktop mode requires a graphical desktop");
 		}
-		installSystemLookAndFeel();
+		HapticScapeTheme.install();
 
 		HapticScapeDesktopApplication application = new HapticScapeDesktopApplication();
 		Runtime.getRuntime().addShutdownHook(new Thread(application::close, "hapticscape-desktop-shutdown"));
@@ -30,18 +30,6 @@ public final class HapticScapeDesktopMain
 			showStartupError(failure);
 			application.close();
 			System.exit(1);
-		}
-	}
-
-	private static void installSystemLookAndFeel()
-	{
-		try
-		{
-			UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-		}
-		catch (Exception ignored)
-		{
-			// Swing's cross-platform look and feel is an acceptable fallback.
 		}
 	}
 
