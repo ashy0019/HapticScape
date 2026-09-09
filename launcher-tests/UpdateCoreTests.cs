@@ -14,6 +14,7 @@ internal static class UpdateCoreTests
 		{
 			TestVersions();
 			TestDeepLinks();
+			TestLaunchOptions();
 			TestPolicy();
 			TestReleaseParsing();
 			TestPreferences(root);
@@ -33,6 +34,35 @@ internal static class UpdateCoreTests
 		{
 			UpdatePackagePreparer.TryDeleteDirectory(root);
 		}
+	}
+
+	private static void TestLaunchOptions()
+	{
+		HapticScapeLaunchOptions defaults = HapticScapeLaunchOptions.Parse(new string[0]);
+		Assert(defaults.Profile == null, "ordinary launches use default storage");
+		Assert(defaults.GameplayPort == 41713, "ordinary launches preserve the bridge port");
+		Assert(defaults.MutexName == @"Local\HapticScape.Client",
+			"ordinary launches preserve the existing instance mutex");
+
+		HapticScapeLaunchOptions controller = HapticScapeLaunchOptions.Parse(new[]
+		{
+			"--profile", "Controller", "--gameplay-port=41714"
+		});
+		Assert(controller.Profile == "controller", "profile names are normalized");
+		Assert(controller.GameplayPort == 41714, "named clients can select another port");
+		Assert(controller.MutexName == @"Local\HapticScape.Client.controller",
+			"named clients receive independent process mutexes");
+		Assert(controller.JavaArguments() == " --profile controller --gameplay-port 41714",
+			"validated options are forwarded to Java");
+
+		AssertThrows<InvalidOperationException>(delegate
+		{
+			HapticScapeLaunchOptions.Parse(new[] { "--profile", "../escape" });
+		}, "profile path traversal should be rejected");
+		AssertThrows<InvalidOperationException>(delegate
+		{
+			HapticScapeLaunchOptions.Parse(new[] { "--gameplay-port", "70000" });
+		}, "invalid gameplay ports should be rejected");
 	}
 
 	private static void TestDeepLinks()

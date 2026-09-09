@@ -674,6 +674,23 @@ On macOS or Linux, use `./gradlew` instead of `.\gradlew.bat`. The prebuilt
 Windows launcher, Music sync, and DPAPI-protected Saved Unlock Keys are
 Windows-specific.
 
+### Run two local clients
+
+The packaged Windows launcher accepts isolated named profiles for local Remote
+Play testing. Give each client a different gameplay bridge port:
+
+```powershell
+.\HapticScape.exe --profile controller --gameplay-port 41714
+.\HapticScape.exe --profile subject --gameplay-port 41713
+```
+
+Named profiles keep settings, locks, Discord credentials, and saved unlock keys
+under separate `profiles\<name>` directories. Leave the subject on port `41713`
+when it should receive events from the standard local gameplay bridge. Create a
+manual invitation in the controller window and paste it into the subject window.
+Browser-opened Discord links continue to target the normal, unnamed client so a
+link cannot select the wrong local test profile.
+
 ## Build a Windows release bundle
 
 Windows packaging additionally requires:

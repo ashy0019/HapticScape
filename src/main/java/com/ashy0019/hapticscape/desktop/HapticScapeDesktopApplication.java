@@ -31,6 +31,7 @@ import okhttp3.OkHttpClient;
 /** Owns the standalone desktop host lifecycle around the neutral HapticScape runtime. */
 public final class HapticScapeDesktopApplication implements AutoCloseable
 {
+	private final DesktopLaunchOptions launchOptions;
 	private final AtomicBoolean closed = new AtomicBoolean();
 	private OkHttpClient httpClient;
 	private AwtDesktopNotificationService desktopNotifications;
@@ -38,6 +39,16 @@ public final class HapticScapeDesktopApplication implements AutoCloseable
 	private HapticScapeDesktopWindow window;
 	private DiscordDeepLinkInbox deepLinkInbox;
 	private ProtectedExitAuditStore protectedExitAudit;
+
+	public HapticScapeDesktopApplication()
+	{
+		this(DesktopLaunchOptions.defaults());
+	}
+
+	public HapticScapeDesktopApplication(DesktopLaunchOptions launchOptions)
+	{
+		this.launchOptions = java.util.Objects.requireNonNull(launchOptions, "launchOptions");
+	}
 
 	public void start()
 	{
@@ -47,7 +58,9 @@ public final class HapticScapeDesktopApplication implements AutoCloseable
 		}
 
 		SkillCatalog skillCatalog = OldSchoolRuneScapeSkillCatalog.get();
-		HapticScapeStoragePaths storagePaths = DesktopStoragePaths.hapticScapeStoragePaths();
+		HapticScapeStoragePaths storagePaths = DesktopStoragePaths.hapticScapeStoragePaths(
+			launchOptions.getProfile()
+		);
 		SettingsStore settingsStore = new FileSettingsStore(storagePaths.getSettingsPath());
 		HapticScapeSettingsSource settings = new SettingsBackedHapticScapeSettings(
 			settingsStore,
@@ -74,7 +87,7 @@ public final class HapticScapeDesktopApplication implements AutoCloseable
 			DesktopAudioCaptureSources::systemOutput,
 			DesktopSecretProtectors.savedUnlockKeys(),
 			DesktopSecretProtectors.discordCredentials(),
-			LocalhostTransportEndpoint.DEFAULT_PORT
+			launchOptions.getGameplayPort()
 		));
 
 		try
@@ -90,6 +103,10 @@ public final class HapticScapeDesktopApplication implements AutoCloseable
 			);
 			wireProtectedExitAudit();
 			createAndShowWindow(settings, skillCatalog, settingsStore, sourceMessages);
+			desktopNotifications.installApplicationMenu(
+				window::restoreFromTray,
+				window::requestCloseFromTray
+			);
 			wireDiscordDeepLinks();
 		}
 		catch (RuntimeException failure)
@@ -122,7 +139,13 @@ public final class HapticScapeDesktopApplication implements AutoCloseable
 			@Override
 			public void onUnauthorizedEnd(String reason)
 			{
-				desktopNotifications.notify("Unauthorized end");
+				String message = "The participant exited without the protected-exit password.";
+				desktopNotifications.notify("Unauthorized end: " + message);
+				HapticScapeDesktopWindow currentWindow = window;
+				if (currentWindow != null)
+				{
+					currentWindow.showUnauthorizedEndWarning(message);
+				}
 			}
 		});
 	}
@@ -142,6 +165,7 @@ public final class HapticScapeDesktopApplication implements AutoCloseable
 				settingsStore,
 				sourceMessages,
 				protectedExitAudit,
+				launchOptions.getWindowTitle(),
 				this::closeAndExit
 			);
 			window.show();
@@ -175,7 +199,7 @@ public final class HapticScapeDesktopApplication implements AutoCloseable
 	{
 		DiscordPairingBridge bridge = runtime.getDiscordPairingBridge();
 		bridge.setJoinConsentHandler(window.createDiscordJoinConsentHandler());
-		deepLinkInbox = DesktopDiscordDeepLinkInbox.getInstance();
+		deepLinkInbox = DesktopDiscordDeepLinkInbox.forProfile(launchOptions.getProfile());
 		deepLinkInbox.start();
 		deepLinkInbox.setHandler(bridge::acceptDeepLink);
 	}

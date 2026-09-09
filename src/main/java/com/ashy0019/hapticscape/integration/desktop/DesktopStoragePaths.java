@@ -16,12 +16,35 @@ public final class DesktopStoragePaths
 		return new HapticScapeStoragePaths(applicationDataDirectory());
 	}
 
+	public static HapticScapeStoragePaths hapticScapeStoragePaths(String profile)
+	{
+		return new HapticScapeStoragePaths(applicationDataDirectory(profile));
+	}
+
 	public static Path applicationDataDirectory()
 	{
 		return applicationDataDirectory(
 			System.getenv("LOCALAPPDATA"),
 			System.getProperty("user.home")
 		);
+	}
+
+	public static Path applicationDataDirectory(String profile)
+	{
+		return applicationDataDirectory(
+			System.getenv("LOCALAPPDATA"),
+			System.getProperty("user.home"),
+			profile
+		);
+	}
+
+	static Path applicationDataDirectory(
+		String localApplicationData,
+		String userHome,
+		String profile)
+	{
+		Path base = applicationDataDirectory(localApplicationData, userHome);
+		return profile == null ? base : base.resolve("profiles").resolve(profile);
 	}
 
 	static Path applicationDataDirectory(String localApplicationData, String userHome)
@@ -40,6 +63,11 @@ public final class DesktopStoragePaths
 	public static Path deepLinkInboxPath()
 	{
 		return applicationDataDirectory().resolve("deep-links");
+	}
+
+	public static Path deepLinkInboxPath(String profile)
+	{
+		return applicationDataDirectory(profile).resolve("deep-links");
 	}
 
 	static Path deepLinkInboxPath(String localApplicationData, String userHome)

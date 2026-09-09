@@ -4,8 +4,11 @@ import com.ashy0019.hapticscape.host.DesktopNotificationService;
 import java.awt.Graphics2D;
 import java.awt.GraphicsEnvironment;
 import java.awt.Image;
+import java.awt.MenuItem;
+import java.awt.PopupMenu;
 import java.awt.SystemTray;
 import java.awt.TrayIcon;
+import java.awt.EventQueue;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.Objects;
@@ -31,6 +34,29 @@ public final class AwtDesktopNotificationService implements DesktopNotificationS
 		{
 			icon.displayMessage(title, Objects.requireNonNull(message, "message"), TrayIcon.MessageType.NONE);
 		}
+	}
+
+	/** Installs the persistent tray icon and its application controls. */
+	public synchronized void installApplicationMenu(Runnable openAction, Runnable exitAction)
+	{
+		Objects.requireNonNull(openAction, "openAction");
+		Objects.requireNonNull(exitAction, "exitAction");
+		TrayIcon icon = ensureTrayIcon();
+		if (icon == null)
+		{
+			return;
+		}
+
+		PopupMenu menu = new PopupMenu();
+		MenuItem open = new MenuItem("Open HapticScape");
+		open.addActionListener(event -> EventQueue.invokeLater(openAction));
+		MenuItem exit = new MenuItem("Exit");
+		exit.addActionListener(event -> EventQueue.invokeLater(exitAction));
+		menu.add(open);
+		menu.addSeparator();
+		menu.add(exit);
+		icon.setPopupMenu(menu);
+		icon.addActionListener(event -> EventQueue.invokeLater(openAction));
 	}
 
 	private TrayIcon ensureTrayIcon()

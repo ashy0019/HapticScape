@@ -5,7 +5,7 @@ import com.ashy0019.hapticscape.remote.DiscordDeepLinkInbox;
 /** Owns the process-wide Discord deep-link inbox for the desktop host. */
 public final class DesktopDiscordDeepLinkInbox
 {
-	private static final DiscordDeepLinkInbox INSTANCE =
+	private static final DiscordDeepLinkInbox DEFAULT_INSTANCE =
 		new DiscordDeepLinkInbox(DesktopStoragePaths.deepLinkInboxPath());
 
 	private DesktopDiscordDeepLinkInbox()
@@ -14,6 +14,13 @@ public final class DesktopDiscordDeepLinkInbox
 
 	public static DiscordDeepLinkInbox getInstance()
 	{
-		return INSTANCE;
+		return DEFAULT_INSTANCE;
+	}
+
+	public static DiscordDeepLinkInbox forProfile(String profile)
+	{
+		return profile == null
+			? DEFAULT_INSTANCE
+			: new DiscordDeepLinkInbox(DesktopStoragePaths.deepLinkInboxPath(profile));
 	}
 }

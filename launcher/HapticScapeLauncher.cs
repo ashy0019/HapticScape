@@ -31,10 +31,13 @@ internal static class HapticScapeLauncher
 				ShowUpdateSettings(preferencesPath, manifest.Version);
 				return 0;
 			}
+			HapticScapeLaunchOptions launchOptions = deepLink == null
+				? HapticScapeLaunchOptions.Parse(args)
+				: HapticScapeLaunchOptions.Defaults();
 			bool ownsInstance;
 			using (Mutex instance = new Mutex(
 				true,
-				@"Local\HapticScape.Client",
+				launchOptions.MutexName,
 				out ownsInstance))
 			{
 				if (deepLink != null)
@@ -46,12 +49,12 @@ internal static class HapticScapeLauncher
 					return 0;
 				}
 
-				if (deepLink == null
+				if (deepLink == null && launchOptions.IsDefault
 					&& TryBeginUpdate(applicationDirectory, manifest, preferencesPath))
 				{
 					return 0;
 				}
-				return LaunchClient(applicationDirectory);
+				return LaunchClient(applicationDirectory, launchOptions);
 			}
 		}
 		catch (Exception exception)
@@ -173,7 +176,9 @@ internal static class HapticScapeLauncher
 		Process.Start(startInfo);
 	}
 
-	private static int LaunchClient(string applicationDirectory)
+	private static int LaunchClient(
+		string applicationDirectory,
+		HapticScapeLaunchOptions launchOptions)
 	{
 		string clientJar = Path.Combine(applicationDirectory, "app", "hapticscape-desktop.jar");
 		if (!File.Exists(clientJar))
@@ -192,7 +197,8 @@ internal static class HapticScapeLauncher
 
 		ProcessStartInfo startInfo = new ProcessStartInfo();
 		startInfo.FileName = javaExecutable;
-		startInfo.Arguments = "-ea -jar \"" + clientJar + "\"";
+		startInfo.Arguments = "-ea -jar \"" + clientJar + "\""
+			+ launchOptions.JavaArguments();
 		startInfo.WorkingDirectory = applicationDirectory;
 		startInfo.UseShellExecute = false;
 		using (Process client = Process.Start(startInfo))

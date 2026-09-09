@@ -9,6 +9,7 @@ import com.ashy0019.hapticscape.remote.RemotePermissions;
 import com.ashy0019.hapticscape.remote.RemoteRole;
 import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteSessionState;
+import java.awt.CardLayout;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.event.MouseEvent;
@@ -17,6 +18,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.AbstractButton;
 import javax.swing.JComponent;
+import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
@@ -24,6 +26,39 @@ import org.junit.Test;
 
 public class RemoteLiveForgePanelTest
 {
+	@Test
+	public void sessionUpdatesDoNotOverrideTheForgeCardSelection() throws Exception
+	{
+		RemoteLiveForgePanel panel = onEdt(() -> new RemoteLiveForgePanel(
+			new RecordingDispatcher()
+		));
+		try
+		{
+			onEdt(() ->
+			{
+				CardLayout cards = new CardLayout();
+				JPanel host = new JPanel(cards);
+				host.add(new JPanel(), "compose");
+				host.add(panel, "live");
+				cards.show(host, "compose");
+				assertFalse(panel.isVisible());
+
+				panel.apply(activeController(), livePermissions(60));
+
+				assertFalse("A session update exposed the hidden Live card", panel.isVisible());
+				return null;
+			});
+		}
+		finally
+		{
+			onEdt(() ->
+			{
+				panel.close();
+				return null;
+			});
+		}
+	}
+
 	@Test
 	public void gestureIsCappedSampledAndReleasedWithoutStatusChurn() throws Exception
 	{

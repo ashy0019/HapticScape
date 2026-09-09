@@ -223,8 +223,6 @@ final class RemoteLiveForgePanel extends JPanel
 			&& session.getState() != RemoteSessionState.LOCAL;
 		boolean connected = session.getState() == RemoteSessionState.ACTIVE
 			|| session.getState() == RemoteSessionState.PEER_EMERGENCY_PAUSED;
-		setVisible(controller && connected);
-
 		boolean allowed = permissions.isLiveHapticsAllowed()
 			&& permissions.getMaximumIntensityPercent() > 0;
 		boolean active = controller
@@ -263,7 +261,7 @@ final class RemoteLiveForgePanel extends JPanel
 			setWarning("");
 		}
 
-		if (!isVisible() || !workspaceActive)
+		if (!controller || !connected || !workspaceActive)
 		{
 			sampleTimer.stop();
 			canvas.clear();

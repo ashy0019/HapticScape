@@ -17,9 +17,20 @@ public final class HapticScapeDesktopMain
 		{
 			throw new IllegalStateException("HapticScape desktop mode requires a graphical desktop");
 		}
+		final DesktopLaunchOptions options;
+		try
+		{
+			options = DesktopLaunchOptions.parse(args);
+		}
+		catch (IllegalArgumentException failure)
+		{
+			showStartupError(failure, DesktopLaunchOptions.defaults());
+			System.exit(2);
+			return;
+		}
 		HapticScapeTheme.install();
 
-		HapticScapeDesktopApplication application = new HapticScapeDesktopApplication();
+		HapticScapeDesktopApplication application = new HapticScapeDesktopApplication(options);
 		Runtime.getRuntime().addShutdownHook(new Thread(application::close, "hapticscape-desktop-shutdown"));
 		try
 		{
@@ -27,13 +38,15 @@ public final class HapticScapeDesktopMain
 		}
 		catch (RuntimeException failure)
 		{
-			showStartupError(failure);
+			showStartupError(failure, options);
 			application.close();
 			System.exit(1);
 		}
 	}
 
-	private static void showStartupError(RuntimeException failure)
+	private static void showStartupError(
+		RuntimeException failure,
+		DesktopLaunchOptions options)
 	{
 		String message = failure.getMessage();
 		if (message == null || message.trim().isEmpty())
@@ -41,7 +54,8 @@ public final class HapticScapeDesktopMain
 			message = failure.getClass().getSimpleName();
 		}
 		String finalMessage = "HapticScape could not start.\n\n" + message
-			+ "\n\nAnother HapticScape instance may already be running, or port 41713 may be unavailable.";
+			+ "\n\nAnother HapticScape instance may already be running, or port "
+			+ options.getGameplayPort() + " may be unavailable.";
 		JOptionPane.showMessageDialog(
 			null,
 			finalMessage,

@@ -92,6 +92,8 @@ public final class HapticScapePanel extends JPanel
 	private static final String PATTERNS_WORKSPACE = "patterns";
 	private static final String REMOTE_WORKSPACE = "remote";
 	private static final String SETTINGS_WORKSPACE = "settings";
+	private static final int MINE_WORKSPACE_INDEX = 0;
+	private static final int SUBJECT_WORKSPACE_INDEX = 1;
 	private static final String SETTINGS_LOCKED_MESSAGE =
 		"<html><b>Settings locked</b><br>Forge + Music<br>stay editable</html>";
 	private static final String POST_SESSION_LOCK_MESSAGE =
@@ -107,6 +109,7 @@ public final class HapticScapePanel extends JPanel
 	private final JTabbedPane patternTabs;
 	private final CardLayout contentLayout = new CardLayout();
 	private final JPanel contentHost = new JPanel(contentLayout);
+	private final JTabbedPane controllerWorkspaceTabs = new JTabbedPane(JTabbedPane.TOP);
 	private final JLabel statusLabel = new JLabel("Disconnected");
 	private final JLabel connectionIndicator = new JLabel("\u25cf");
 	private final JLabel deviceSummaryLabel = new JLabel("No device connected");
@@ -188,7 +191,7 @@ public final class HapticScapePanel extends JPanel
 	private boolean updatingDisplayedSettings;
 	private boolean subjectWorkspaceSelected = true;
 	private boolean controllerSubjectAvailable;
-	private boolean controllerWorkspaceAvailable;
+	private boolean updatingControllerWorkspaceTabs;
 	private RemoteSessionSnapshot appliedRemoteSessionSnapshot = RemoteSessionSnapshot.local();
 
 	public HapticScapePanel(
@@ -484,6 +487,26 @@ public final class HapticScapePanel extends JPanel
 		remoteBanner.add(remoteBannerButtons, BorderLayout.SOUTH);
 		remoteBanner.setVisible(false);
 		PanelUi.addFlexibleVerticalComponent(topPanel, remoteBanner);
+
+		controllerWorkspaceTabs.setName("controllerWorkspaceTabs");
+		PanelUi.configureWorkspaceTabs(controllerWorkspaceTabs);
+		PanelUi.addCompactTab(controllerWorkspaceTabs, "Mine", new JPanel());
+		PanelUi.addCompactTab(controllerWorkspaceTabs, "Subject", new JPanel());
+		controllerWorkspaceTabs.setSelectedIndex(SUBJECT_WORKSPACE_INDEX);
+		controllerWorkspaceTabs.setPreferredSize(new Dimension(0, 31));
+		controllerWorkspaceTabs.setMinimumSize(new Dimension(0, 31));
+		controllerWorkspaceTabs.setMaximumSize(new Dimension(Integer.MAX_VALUE, 31));
+		controllerWorkspaceTabs.setVisible(false);
+		controllerWorkspaceTabs.addChangeListener(event ->
+		{
+			if (!updatingControllerWorkspaceTabs)
+			{
+				selectControllerWorkspace(
+					controllerWorkspaceTabs.getSelectedIndex() == SUBJECT_WORKSPACE_INDEX
+				);
+			}
+		});
+		PanelUi.addFlexibleVerticalComponent(topPanel, controllerWorkspaceTabs);
 
 		JList<DeviceInfo> deviceList = new JList<>(deviceModel);
 		JScrollPane scrollPane = new JScrollPane(deviceList);
@@ -1259,12 +1282,6 @@ public final class HapticScapePanel extends JPanel
 		{
 			forgeWorkspacePanel.leaveWorkspace();
 		}
-		if (GAMEPLAY_WORKSPACE.equals(workspace)
-			|| PATTERNS_WORKSPACE.equals(workspace)
-			|| SETTINGS_WORKSPACE.equals(workspace))
-		{
-			selectControllerWorkspace(false);
-		}
 	}
 
 	private void setForgeDocked(boolean docked)
@@ -1697,10 +1714,12 @@ public final class HapticScapePanel extends JPanel
 		}
 		if (subject && !isControllerSubjectAvailable(snapshot))
 		{
+			setControllerWorkspaceTab(false);
 			return;
 		}
 
 		subjectWorkspaceSelected = subject;
+		setControllerWorkspaceTab(subject);
 		if (subject)
 		{
 			RemoteSettingsSnapshot subjectSettings =
@@ -1717,6 +1736,21 @@ public final class HapticScapePanel extends JPanel
 			displayingRemoteSettings = false;
 		}
 		applyRemoteSessionState(snapshot);
+	}
+
+	private void setControllerWorkspaceTab(boolean subject)
+	{
+		updatingControllerWorkspaceTabs = true;
+		try
+		{
+			controllerWorkspaceTabs.setSelectedIndex(
+				subject ? SUBJECT_WORKSPACE_INDEX : MINE_WORKSPACE_INDEX
+			);
+		}
+		finally
+		{
+			updatingControllerWorkspaceTabs = false;
+		}
 	}
 
 	private void applyRemoteSessionState(RemoteSessionSnapshot snapshot)
@@ -1745,14 +1779,17 @@ public final class HapticScapePanel extends JPanel
 			&& snapshot.getState() != RemoteSessionState.DISCONNECTED;
 		boolean subjectAvailable = isControllerSubjectAvailable(snapshot);
 		stopButton.setText(participantControlled ? "EMERGENCY OFF" : "STOP ALL");
-		boolean workspaceWasVisible = controllerWorkspaceAvailable;
+		boolean workspaceWasVisible = controllerWorkspaceTabs.isVisible();
 		boolean subjectBecameAvailable = subjectAvailable && !controllerSubjectAvailable;
 		controllerSubjectAvailable = subjectAvailable;
-		controllerWorkspaceAvailable = workspaceVisible;
+		controllerWorkspaceTabs.setVisible(workspaceVisible);
+		controllerWorkspaceTabs.setEnabledAt(MINE_WORKSPACE_INDEX, true);
+		controllerWorkspaceTabs.setEnabledAt(SUBJECT_WORKSPACE_INDEX, subjectAvailable);
 		if (workspaceVisible && subjectAvailable
 			&& (!workspaceWasVisible || subjectBecameAvailable))
 		{
 			subjectWorkspaceSelected = true;
+			setControllerWorkspaceTab(true);
 			RemoteSettingsSnapshot subjectSettings =
 				remoteSessionManager.getControllerSettingsSnapshot();
 			if (subjectSettings != null)
@@ -1765,6 +1802,7 @@ public final class HapticScapePanel extends JPanel
 			&& (!workspaceWasVisible || subjectWorkspaceSelected))
 		{
 			subjectWorkspaceSelected = false;
+			setControllerWorkspaceTab(false);
 			if (displayingRemoteSettings)
 			{
 				applyDisplayedSettings(RemoteSettingsSnapshot.capture(config));
@@ -1790,6 +1828,7 @@ public final class HapticScapePanel extends JPanel
 			{
 				displayingRemoteSettings = false;
 				subjectWorkspaceSelected = true;
+				setControllerWorkspaceTab(true);
 			}
 		}
 

@@ -32,8 +32,10 @@ import java.util.concurrent.CompletableFuture;
 import javax.imageio.ImageIO;
 import javax.swing.BorderFactory;
 import javax.swing.JFrame;
+import javax.swing.JOptionPane;
 import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 
 /** Hosts the reusable HapticScape Swing panel in a standalone desktop window. */
 public final class HapticScapeDesktopWindow implements AutoCloseable
@@ -42,6 +44,7 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 	static final int DEFAULT_WINDOW_HEIGHT = 900;
 	static final int MINIMUM_WINDOW_WIDTH = 480;
 	static final int MINIMUM_WINDOW_HEIGHT = 640;
+	static final int UNAUTHORIZED_EXIT_FLUSH_MILLIS = 750;
 
 	private final HapticScapeRuntime runtime;
 	private final JFrame frame = new JFrame("HapticScape");
@@ -52,6 +55,7 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 	private final SettingsLockService settingsLockService;
 	private final ProtectedExitAuditStore protectedExitAudit;
 	private ProtectedExitDialog protectedExitDialog;
+	private boolean exitScheduled;
 
 	public HapticScapeDesktopWindow(
 		HapticScapeRuntime runtime,
@@ -60,6 +64,7 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 		SettingsStore settingsStore,
 		DesktopSourceMessageService sourceMessages,
 		ProtectedExitAuditStore protectedExitAudit,
+		String windowTitle,
 		Runnable closeAction)
 	{
 		this.runtime = Objects.requireNonNull(runtime, "runtime");
@@ -70,6 +75,7 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 			protectedExitAudit,
 			"protectedExitAudit"
 		);
+		frame.setTitle(Objects.requireNonNull(windowTitle, "windowTitle"));
 		Objects.requireNonNull(settings, "settings");
 		Objects.requireNonNull(skillCatalog, "skillCatalog");
 		Objects.requireNonNull(settingsStore, "settingsStore");
@@ -132,6 +138,10 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 
 	private void requestClose()
 	{
+		if (exitScheduled)
+		{
+			return;
+		}
 		if (!settingsLockService.isLocked(SettingsLockCatalog.PROTECTED_EXIT))
 		{
 			protectedExitAudit.markAuthorizedEnd();
@@ -161,12 +171,27 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 
 	private void unauthorizedExit()
 	{
+		exitScheduled = true;
 		protectedExitAudit.markUnauthorizedEnd();
 		runtime.stopAll();
-		// Best effort now; retain the durable flag so the next running session can
-		// confirm delivery instead of trusting a process that is about to exit.
-		runtime.getRemoteSessionManager().reportUnauthorizedEnd("Unauthorized end");
-		closeAction.run();
+		// WebSocket.send confirms that the message was queued, not that OkHttp put
+		// it on the wire. Keep the runtime alive briefly so close() cannot tear the
+		// transport down before the controller receives the flag. The durable flag
+		// remains as a fallback if delivery still fails.
+		boolean queued = runtime.getRemoteSessionManager().reportUnauthorizedEnd(
+			"Unauthorized end"
+		);
+		if (!queued)
+		{
+			closeAction.run();
+			return;
+		}
+		Timer flushTimer = new Timer(
+			UNAUTHORIZED_EXIT_FLUSH_MILLIS,
+			event -> closeAction.run()
+		);
+		flushTimer.setRepeats(false);
+		flushTimer.start();
 	}
 
 	private void emergencyOff()
@@ -179,6 +204,44 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 	{
 		requireEventDispatchThread();
 		frame.setVisible(true);
+	}
+
+	void restoreFromTray()
+	{
+		frame.setVisible(true);
+		frame.setState(JFrame.NORMAL);
+		frame.toFront();
+		frame.requestFocus();
+	}
+
+	void requestCloseFromTray()
+	{
+		requestClose();
+	}
+
+	void showUnauthorizedEndWarning(String message)
+	{
+		Runnable showWarning = () ->
+		{
+			frame.setVisible(true);
+			frame.setState(JFrame.NORMAL);
+			frame.toFront();
+			frame.requestFocus();
+			JOptionPane.showMessageDialog(
+				frame,
+				Objects.requireNonNull(message, "message"),
+				"Unauthorized end",
+				JOptionPane.WARNING_MESSAGE
+			);
+		};
+		if (SwingUtilities.isEventDispatchThread())
+		{
+			showWarning.run();
+		}
+		else
+		{
+			SwingUtilities.invokeLater(showWarning);
+		}
 	}
 
 	public DiscordJoinConsentHandler createDiscordJoinConsentHandler()
