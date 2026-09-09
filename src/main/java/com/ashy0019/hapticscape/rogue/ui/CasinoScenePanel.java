@@ -26,9 +26,9 @@ import javax.swing.JPanel;
 import javax.swing.Timer;
 
 /**
- * Full-height Rogue's Den game canvas. The entire host panel body is used
- * as one illustrated blackjack surface: room art, future multiplayer/AI seats,
- * table, chips, controls, and an event log all scale together.
+ * Wide Rogue's Den game canvas. The host panel body is used as one illustrated
+ * blackjack surface: room art, four wandering multiplayer/AI seats, table,
+ * chips, controls, and an event log all share a desktop-friendly composition.
  */
 public final class CasinoScenePanel extends JPanel
 {
@@ -41,18 +41,18 @@ public final class CasinoScenePanel extends JPanel
 		void refill();
 	}
 
-	private static final int LOGICAL_WIDTH = 240;
-	private static final int LOGICAL_HEIGHT = 940;
-	private static final int CARD_WIDTH = 43;
-	private static final int CARD_HEIGHT = 59;
-	private static final int CARD_STEP = 31;
+	private static final int LOGICAL_WIDTH = 960;
+	private static final int LOGICAL_HEIGHT = 720;
+	private static final int CARD_WIDTH = 56;
+	private static final int CARD_HEIGHT = 78;
+	private static final int CARD_STEP = 42;
 	private static final long REVEAL_NANOS = 4_500_000_000L;
 	private static final long[] BETS = {10L, 25L, 50L, 100L, 250L};
 
-	private static final Rectangle HIT_RECT = new Rectangle(8, 716, 108, 42);
-	private static final Rectangle STAND_RECT = new Rectangle(124, 716, 108, 42);
-	private static final Rectangle DOUBLE_RECT = new Rectangle(8, 766, 108, 42);
-	private static final Rectangle DEAL_RECT = new Rectangle(124, 766, 108, 42);
+	private static final Rectangle HIT_RECT = new Rectangle(460, 610, 105, 44);
+	private static final Rectangle STAND_RECT = new Rectangle(575, 610, 105, 44);
+	private static final Rectangle DOUBLE_RECT = new Rectangle(690, 610, 105, 44);
+	private static final Rectangle DEAL_RECT = new Rectangle(805, 610, 115, 44);
 
 	private static final Color GOLD = new Color(244, 195, 65);
 	private static final Color DARK_GOLD = new Color(145, 105, 34);
@@ -107,8 +107,8 @@ public final class CasinoScenePanel extends JPanel
 	{
 		this.state = initialState;
 		this.actionHandler = actionHandler;
-		setPreferredSize(new Dimension(240, 940));
-		setMinimumSize(new Dimension(180, 520));
+		setPreferredSize(new Dimension(LOGICAL_WIDTH, LOGICAL_HEIGHT));
+		setMinimumSize(new Dimension(720, 560));
 		setOpaque(true);
 		setBackground(Color.BLACK);
 
@@ -194,10 +194,11 @@ public final class CasinoScenePanel extends JPanel
 		{
 			g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
 				RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-			// Deliberately fill the entire available Rogue body. The logical scene
-			// matches the narrow host aspect ratio closely enough that the tiny
-			// amount of non-uniform scaling is preferable to giant black bars.
-			g.drawImage(frame, 0, 0, Math.max(1, getWidth()), Math.max(1, getHeight()), null);
+			Rectangle sceneBounds = scaledSceneBounds();
+			drawTavernSurround(g, sceneBounds);
+			// Preserve the 4:3 scene ratio. Fullscreen now gets architectural side
+			// framing instead of stretching the table and NPCs wider than intended.
+			g.drawImage(frame, sceneBounds.x, sceneBounds.y, sceneBounds.width, sceneBounds.height, null);
 		}
 		finally
 		{
@@ -205,22 +206,662 @@ public final class CasinoScenePanel extends JPanel
 		}
 	}
 
+	private Rectangle scaledSceneBounds()
+	{
+		int width = Math.max(1, getWidth());
+		int height = Math.max(1, getHeight());
+		double scale = Math.min(width / (double) LOGICAL_WIDTH, height / (double) LOGICAL_HEIGHT);
+		int sceneWidth = Math.max(1, (int) Math.round(LOGICAL_WIDTH * scale));
+		int sceneHeight = Math.max(1, (int) Math.round(LOGICAL_HEIGHT * scale));
+		return new Rectangle((width - sceneWidth) / 2, (height - sceneHeight) / 2, sceneWidth, sceneHeight);
+	}
+
+	private void drawTavernSurround(Graphics2D g, Rectangle sceneBounds)
+	{
+		int width = Math.max(1, getWidth());
+		int height = Math.max(1, getHeight());
+		g.setColor(new Color(25, 18, 14));
+		g.fillRect(0, 0, width, height);
+
+		// Letterbox space becomes the same timber-and-stone architecture as the
+		// scene instead of an accidental black void.
+		g.setColor(new Color(73, 45, 29));
+		g.fillRect(0, 0, width, height);
+		for (int y = 0; y < height; y += 34)
+		{
+			g.setColor(new Color(91, 54, 32));
+			g.drawLine(0, y, width, y);
+		}
+		for (int x = 0; x < width; x += 96)
+		{
+			g.setColor(new Color(51, 30, 21));
+			g.drawLine(x, 0, x, height);
+		}
+
+		int pillarWidth = Math.max(42, Math.min(86, sceneBounds.width / 18));
+		if (sceneBounds.x > 0)
+		{
+			drawTavernPillar(g, sceneBounds.x - pillarWidth / 2, height, pillarWidth);
+			drawTavernPillar(g, sceneBounds.x + sceneBounds.width - pillarWidth / 2, height, pillarWidth);
+		}
+		if (sceneBounds.y > 0)
+		{
+			g.setColor(new Color(45, 27, 19));
+			g.fillRect(0, sceneBounds.y - 12, width, 24);
+			g.setColor(new Color(125, 77, 37));
+			g.drawLine(0, sceneBounds.y - 8, width, sceneBounds.y - 8);
+			g.drawLine(0, sceneBounds.y + 8, width, sceneBounds.y + 8);
+		}
+		if (sceneBounds.y + sceneBounds.height < height)
+		{
+			int bottom = sceneBounds.y + sceneBounds.height;
+			g.setColor(new Color(45, 27, 19));
+			g.fillRect(0, bottom - 12, width, 24);
+			g.setColor(new Color(125, 77, 37));
+			g.drawLine(0, bottom - 8, width, bottom - 8);
+			g.drawLine(0, bottom + 8, width, bottom + 8);
+		}
+	}
+
+	private static void drawTavernPillar(Graphics2D g, int x, int height, int width)
+	{
+		g.setColor(new Color(47, 28, 19));
+		g.fillRect(x, 0, width, height);
+		g.setColor(new Color(92, 53, 29));
+		g.fillRect(x + 7, 0, Math.max(1, width - 14), height);
+		g.setColor(new Color(126, 77, 37));
+		g.drawLine(x + 10, 0, x + 10, height);
+		g.drawLine(x + width - 11, 0, x + width - 11, height);
+		g.setColor(new Color(43, 25, 17));
+		for (int y = 28; y < height; y += 66)
+		{
+			g.fillRect(x + 2, y, Math.max(1, width - 4), 7);
+		}
+	}
+
 	private void renderScene(Graphics2D g)
 	{
 		List<RogueNpcManager.SeatSnapshot> npcSeats = npcManager.snapshot(System.nanoTime());
-		drawRoom(g);
-		drawHeader(g, npcSeats);
-		drawLounge(g);
-		drawMainTable(g);
-		drawOpenSeats(g, npcSeats);
-		drawTableClutter(g);
-		drawNpcWagers(g, npcSeats);
-		drawHands(g);
-		drawNpcSpeech(g, npcSeats);
-		drawWagerTray(g);
-		drawActionArea(g);
-		drawEventLog(g);
-		drawReveal(g);
+		drawWideRoom(g);
+		drawWideHeader(g, npcSeats);
+		drawWideLounge(g);
+		drawWideMainTable(g);
+		drawWideSeats(g, npcSeats);
+		drawWideTableClutter(g);
+		drawWideNpcWagers(g, npcSeats);
+		drawWideHands(g);
+		drawWideNpcSpeech(g, npcSeats);
+		drawWideWagerTray(g);
+		drawWideActionArea(g);
+		drawWideEventLog(g);
+		drawWideReveal(g);
+	}
+
+	/*
+	 * The original Rogue canvas was deliberately portrait-shaped.  These wide
+	 * scene methods keep the same art primitives and NPC snapshots, but give
+	 * them a real desktop composition instead of stretching a 240px strip.
+	 */
+	private static void drawWideRoom(Graphics2D g)
+	{
+		g.setColor(new Color(58, 39, 28));
+		g.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+		g.setColor(new Color(105, 86, 67));
+		g.fillRect(0, 0, LOGICAL_WIDTH, 214);
+		for (int row = 0, y = 5; y < 205; row++, y += 25)
+		{
+			int offset = (row & 1) == 0 ? -24 : 8;
+			for (int x = offset; x < LOGICAL_WIDTH; x += 58)
+			{
+				int width = 53 + ((x + row * 11) & 7);
+				g.setColor(new Color(118 + (row % 3) * 4, 98 + (row % 2) * 4, 78));
+				g.fillRect(x, y, width, 21);
+				g.setColor(new Color(69, 55, 44));
+				g.drawLine(x, y + 21, x + width, y + 21);
+				g.drawLine(x + width, y + 2, x + width, y + 19);
+			}
+		}
+
+		g.setColor(new Color(74, 44, 27));
+		g.fillRect(0, 205, LOGICAL_WIDTH, LOGICAL_HEIGHT - 205);
+		for (int y = 208; y < LOGICAL_HEIGHT; y += 28)
+		{
+			g.setColor(new Color(103, 60, 34));
+			g.drawLine(0, y, LOGICAL_WIDTH, y);
+			int offset = ((y / 28) & 1) == 0 ? 20 : 52;
+			for (int x = offset; x < LOGICAL_WIDTH; x += 88)
+			{
+				g.drawLine(x, y, x, Math.min(LOGICAL_HEIGHT, y + 28));
+			}
+		}
+
+		Color timber = new Color(55, 33, 22);
+		g.setColor(timber);
+		g.fillRect(0, 0, 12, LOGICAL_HEIGHT);
+		g.fillRect(LOGICAL_WIDTH - 12, 0, 12, LOGICAL_HEIGHT);
+		g.fillRect(0, 64, LOGICAL_WIDTH, 10);
+		g.fillRect(0, 198, LOGICAL_WIDTH, 12);
+		g.setColor(new Color(115, 69, 37));
+		g.drawLine(12, 68, LOGICAL_WIDTH - 12, 68);
+		g.drawLine(12, 202, LOGICAL_WIDTH - 12, 202);
+	}
+
+	private void drawWideHeader(Graphics2D g, List<RogueNpcManager.SeatSnapshot> npcSeats)
+	{
+		g.setColor(PANEL_DARK);
+		g.fillRect(14, 10, LOGICAL_WIDTH - 28, 48);
+		g.setColor(GOLD);
+		g.drawRect(14, 10, LOGICAL_WIDTH - 29, 47);
+		g.setColor(DARK_GOLD);
+		g.drawRect(18, 14, LOGICAL_WIDTH - 37, 39);
+		g.setFont(new Font(Font.SERIF, Font.BOLD, 24));
+		g.setColor(GOLD);
+		drawCentered(g, "THE ROGUE'S DEN", 35);
+		g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 10));
+		g.setColor(new Color(240, 229, 197));
+		drawCenteredShadowed(g, "BLACKJACK & BAD DECISIONS", 51);
+
+		BlackjackState current = state;
+		long coins = current == null ? 0 : current.getCoins();
+		g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
+		g.setColor(GOLD);
+		drawStringShadowed(g, "ROGUE COINS  " + coins, 30, 90);
+		String bet = "BET  " + selectedBet;
+		FontMetrics metrics = g.getFontMetrics();
+		drawStringShadowed(g, bet, LOGICAL_WIDTH - 30 - metrics.stringWidth(bet), 90);
+
+		int occupied = 0;
+		for (RogueNpcManager.SeatSnapshot seat : npcSeats)
+		{
+			if (seat.getPresence() >= 0.65f)
+			{
+				occupied++;
+			}
+		}
+		String tableStatus = occupied == 4 ? "TABLE FULL" : (4 - occupied) + " OPEN SEAT" + (occupied == 3 ? "" : "S");
+		g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 11));
+		g.setColor(new Color(235, 220, 179));
+		drawCenteredShadowed(g, "SOLO RULES  //  " + tableStatus, 111);
+	}
+
+	private static void drawWideLounge(Graphics2D g)
+	{
+		g.setColor(new Color(47, 28, 20));
+		g.fillRect(34, 122, 892, 64);
+		g.setColor(new Color(123, 74, 38));
+		g.fillRect(29, 181, 902, 10);
+		g.setColor(new Color(84, 48, 28));
+		g.fillRect(48, 132, 164, 9);
+		g.fillRect(748, 132, 164, 9);
+		Color[] bottleColors = {
+			new Color(47, 104, 66), new Color(126, 58, 43),
+			new Color(65, 82, 132), new Color(113, 96, 36)
+		};
+		for (int i = 0; i < bottleColors.length; i++)
+		{
+			int bx = 60 + i * 25;
+			g.setColor(bottleColors[i]);
+			g.fillRect(bx, 145 + (i & 1) * 4, 12, 31 - (i & 1) * 4);
+			g.fillRect(bx + 4, 137 + (i & 1) * 4, 4, 9);
+		}
+		for (int i = 0; i < bottleColors.length; i++)
+		{
+			int bx = 760 + i * 25;
+			g.setColor(bottleColors[(i + 1) % bottleColors.length]);
+			g.fillRect(bx, 145 + (i & 1) * 4, 12, 31 - (i & 1) * 4);
+			g.fillRect(bx + 4, 137 + (i & 1) * 4, 4, 9);
+		}
+
+		Graphics2D leftPatron = (Graphics2D) g.create();
+		try
+		{
+			leftPatron.translate(120, 181);
+			leftPatron.scale(1.65, 1.65);
+			drawPatron(leftPatron, 0, 0, new Color(131, 48, 73), 0.0, false);
+		}
+		finally
+		{
+			leftPatron.dispose();
+		}
+		Graphics2D rightPatron = (Graphics2D) g.create();
+		try
+		{
+			rightPatron.translate(840, 181);
+			rightPatron.scale(1.65, 1.65);
+			drawPatron(rightPatron, 0, 0, new Color(67, 64, 137), 2.2, true);
+		}
+		finally
+		{
+			rightPatron.dispose();
+		}
+
+		Graphics2D dealer = (Graphics2D) g.create();
+		try
+		{
+			dealer.translate(480, 193);
+			dealer.scale(1.75, 1.75);
+			drawDealer(dealer, 0, 0);
+		}
+		finally
+		{
+			dealer.dispose();
+		}
+		long phase = (System.nanoTime() / 3_800_000_000L) % 5;
+		if (phase == 0)
+		{
+			g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
+			g.setColor(NPC_CHAT_COLOR);
+			drawStringShadowed(g, "Buying gf", 785, 128);
+		}
+		g.setColor(new Color(241, 224, 186));
+		drawCenteredShadowed(g, "THE DEALER", 184);
+	}
+
+	private static void drawWideMainTable(Graphics2D g)
+	{
+		g.setColor(new Color(54, 31, 19));
+		g.fillRoundRect(164, 190, 632, 298, 54, 54);
+		g.setColor(FELT_DARK);
+		g.fillRoundRect(174, 200, 612, 278, 45, 45);
+		g.setColor(FELT);
+		g.fillRoundRect(184, 210, 592, 258, 38, 38);
+		g.setColor(new Color(202, 155, 52));
+		g.setStroke(new BasicStroke(2f));
+		g.drawRoundRect(198, 224, 564, 230, 30, 30);
+		g.setStroke(new BasicStroke(1f));
+		g.setFont(new Font(Font.SERIF, Font.BOLD, 15));
+		g.setColor(new Color(246, 207, 92));
+		drawCenteredShadowed(g, "BLACKJACK PAYS 3 TO 2", 246);
+	}
+
+	private void drawWideSeats(Graphics2D g, List<RogueNpcManager.SeatSnapshot> npcSeats)
+	{
+		int[] xs = {38, 812, 38, 812};
+		int[] ys = {224, 224, 365, 365};
+		for (int index = 0; index < npcSeats.size(); index++)
+		{
+			drawWideSeat(g, xs[index], ys[index], "SEAT " + (index + 1), npcSeats.get(index));
+		}
+	}
+
+	private static void drawWideSeat(
+		Graphics2D g,
+		int x,
+		int y,
+		String label,
+		RogueNpcManager.SeatSnapshot npc)
+	{
+		final int width = 110;
+		final int height = 120;
+		g.setColor(new Color(43, 29, 22));
+		g.fillRoundRect(x, y, width, height, 12, 12);
+		g.setColor(DARK_GOLD);
+		g.drawRoundRect(x, y, width - 1, height - 1, 12, 12);
+		float presence = npc == null ? 0.0f : npc.getPresence();
+		if (presence <= 0.01f)
+		{
+			g.setColor(new Color(39, 43, 39));
+			g.fillOval(x + 39, y + 20, 32, 32);
+			g.fillRect(x + 27, y + 57, 56, 31);
+			g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 13));
+			g.setColor(GOLD);
+			drawCenteredInShadowed(g, "OPEN", x, width, y + 101);
+			g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 10));
+			g.setColor(new Color(226, 214, 183));
+			drawCenteredInShadowed(g, label, x, width, y + 116);
+			return;
+		}
+
+		boolean rightSide = npc.getSeatIndex() == 1 || npc.getSeatIndex() == 3;
+		int direction = rightSide ? 1 : -1;
+		int drift = Math.round((1.0f - presence) * 28.0f) * direction;
+		int bob = (int) Math.round(Math.sin(System.nanoTime() / 850_000_000.0 + npc.getSeatIndex()) * 1.2);
+		Graphics2D figure = (Graphics2D) g.create();
+		try
+		{
+			figure.setComposite(AlphaComposite.SrcOver.derive(Math.max(0.08f, presence)));
+			figure.translate(x + width / 2.0 + drift, y + 8 + bob);
+			figure.scale(1.65, 1.65);
+			drawNpcPortrait(figure, 0, 0, npc, rightSide);
+		}
+		finally
+		{
+			figure.dispose();
+		}
+		String name = npc.getName() == null ? "ROGUE" : npc.getName();
+		String status = npc.getPhase() == RogueNpcManager.Phase.ARRIVING && presence < 0.55f
+			? "ARRIVING"
+			: (npc.getPhase() == RogueNpcManager.Phase.LEAVING && presence < 0.55f
+				? "LEAVING" : "BET " + npc.getWager());
+		drawWideNpcPlaque(g, x - 5, y - 18, width + 10, 17, name, new Color(255, 221, 101));
+		drawWideNpcPlaque(g, x - 5, y + height + 3, width + 10, 17, status, new Color(240, 232, 202));
+	}
+
+	private static void drawWideNpcPlaque(Graphics2D g, int x, int y, int width, int height, String text, Color textColor)
+	{
+		g.setColor(new Color(14, 11, 9, 235));
+		g.fillRoundRect(x, y, width, height, 5, 5);
+		g.setColor(new Color(116, 82, 30));
+		g.drawRoundRect(x, y, width - 1, height - 1, 5, 5);
+		g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 11));
+		FontMetrics metrics = g.getFontMetrics();
+		int textX = x + Math.max(3, (width - metrics.stringWidth(text)) / 2);
+		int textY = y + ((height - metrics.getHeight()) / 2) + metrics.getAscent();
+		g.setColor(new Color(0, 0, 0, 210));
+		g.drawString(text, textX + 1, textY + 1);
+		g.setColor(textColor);
+		g.drawString(text, textX, textY);
+	}
+
+	private static void drawWideTableClutter(Graphics2D g)
+	{
+		drawCardShoe(g, 706, 257);
+		drawTankard(g, 229, 239, 0);
+		drawChipPile(g, 295, 311, new Color(157, 45, 43), 4, false);
+		drawChipPile(g, 666, 311, new Color(48, 122, 73), 5, true);
+		drawDice(g, 720, 410, 2, 6);
+		drawDice(g, 230, 410, 3, 4);
+		drawLooseChip(g, 326, 335, new Color(48, 122, 73));
+		drawLooseChip(g, 635, 334, new Color(199, 164, 54));
+	}
+
+	private static void drawWideNpcWagers(Graphics2D g, List<RogueNpcManager.SeatSnapshot> npcSeats)
+	{
+		int[] wagerX = {318, 642, 318, 642};
+		int[] wagerY = {295, 295, 423, 423};
+		for (RogueNpcManager.SeatSnapshot npc : npcSeats)
+		{
+			float presence = npc.getPresence();
+			if (presence <= 0.08f)
+			{
+				continue;
+			}
+			int index = npc.getSeatIndex();
+			boolean rightSide = index == 1 || index == 3;
+			Graphics2D chips = (Graphics2D) g.create();
+			try
+			{
+				chips.setComposite(AlphaComposite.SrcOver.derive(Math.max(0.08f, presence)));
+				int actionShift = npc.getIdleAction() == RogueNpcManager.IdleAction.FIDDLE_CHIPS
+					? Math.round(npc.getActionProgress() * (rightSide ? -8.0f : 8.0f)) : 0;
+				drawChipPile(chips, wagerX[index] + actionShift, wagerY[index], npc.getChipColor(),
+					Math.max(1, Math.min(8, npc.getChipCount())), rightSide);
+			}
+			finally
+			{
+				chips.dispose();
+			}
+		}
+	}
+
+	private void drawWideHands(Graphics2D g)
+	{
+		BlackjackState current = state;
+		if (current == null)
+		{
+			return;
+		}
+		g.setColor(LIGHT_TEXT);
+		g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 17));
+		String dealerLabel = current.getDealerCards().isEmpty() ? "DEALER" : "DEALER  " + dealerDisplayTotal(current);
+		drawCenteredShadowed(g, dealerLabel, 266);
+		drawWideCardRow(g, current.getDealerCards(), 272, current.isDealerHoleHidden());
+
+		g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
+		g.setColor(new Color(248, 238, 206));
+		drawCenteredShadowed(g, current.getMessage(), 354);
+		if (current.getResult() != BlackjackResult.NONE)
+		{
+			drawWideResultBadge(g, current.getResult());
+		}
+
+		g.setColor(LIGHT_TEXT);
+		g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 17));
+		String playerLabel = current.getPlayerCards().isEmpty() ? "YOU" : "YOU  " + current.getPlayerTotal();
+		drawCenteredShadowed(g, playerLabel, 371);
+		drawWideCardRow(g, current.getPlayerCards(), 378, false);
+		g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
+		g.setColor(new Color(248, 224, 157));
+		drawCenteredShadowed(g, current.getBet() > 0 ? "ON FELT: " + current.getBet() : "YOUR SEAT", 466);
+	}
+
+	private static void drawWideCardRow(Graphics2D g, List<Card> cards, int y, boolean hideSecond)
+	{
+		if (cards == null || cards.isEmpty())
+		{
+			return;
+		}
+		int rowWidth = CARD_WIDTH + CARD_STEP * Math.max(0, cards.size() - 1);
+		int startX = Math.max(250, (LOGICAL_WIDTH - rowWidth) / 2);
+		for (int index = 0; index < cards.size(); index++)
+		{
+			int x = startX + index * CARD_STEP;
+			if (hideSecond && index == 1)
+			{
+				drawCardBack(g, x, y);
+			}
+			else
+			{
+				drawCard(g, cards.get(index), x, y);
+			}
+		}
+	}
+
+	private static void drawWideResultBadge(Graphics2D g, BlackjackResult result)
+	{
+		String text;
+		switch (result)
+		{
+			case PLAYER_BLACKJACK: text = "BLACKJACK!"; break;
+			case PLAYER_WIN: text = "YOU WIN"; break;
+			case PLAYER_BUST: text = "BUST"; break;
+			case DEALER_WIN: text = "DEALER WINS"; break;
+			case PUSH: text = "PUSH"; break;
+			default: return;
+		}
+		g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
+		FontMetrics metrics = g.getFontMetrics();
+		int width = metrics.stringWidth(text) + 24;
+		int x = (LOGICAL_WIDTH - width) / 2;
+		g.setColor(new Color(15, 12, 11, 235));
+		g.fillRect(x, 320, width, 26);
+		g.setColor(GOLD);
+		g.drawRect(x, 320, width, 26);
+		g.setColor(LIGHT_TEXT);
+		drawCentered(g, text, 339);
+	}
+
+	private static void drawWideNpcSpeech(Graphics2D g, List<RogueNpcManager.SeatSnapshot> npcSeats)
+	{
+		int[] baselineY = {350, 350, 490, 490};
+		for (RogueNpcManager.SeatSnapshot npc : npcSeats)
+		{
+			String line = npc.getSpeechLine();
+			float alpha = Math.min(npc.getPresence(), npc.getSpeechAlpha());
+			if (line == null || line.isEmpty() || alpha <= 0.03f)
+			{
+				continue;
+			}
+			boolean rightSide = npc.getSeatIndex() == 1 || npc.getSeatIndex() == 3;
+			Graphics2D speech = (Graphics2D) g.create();
+			try
+			{
+				speech.setComposite(AlphaComposite.SrcOver.derive(Math.max(0.05f, alpha)));
+				speech.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
+				FontMetrics metrics = speech.getFontMetrics();
+				int width = metrics.stringWidth(line);
+				int x = rightSide ? 800 - width : 160;
+				int y = baselineY[npc.getSeatIndex()];
+				speech.setColor(new Color(22, 16, 10));
+				speech.drawString(line, x + 1, y + 1);
+				speech.setColor(NPC_CHAT_COLOR);
+				speech.drawString(line, x, y);
+			}
+			finally
+			{
+				speech.dispose();
+			}
+		}
+	}
+
+	private void drawWideWagerTray(Graphics2D g)
+	{
+		g.setColor(PANEL_DARK);
+		g.fillRoundRect(20, 500, 920, 68, 8, 8);
+		g.setColor(DARK_GOLD);
+		g.drawRoundRect(20, 500, 919, 67, 8, 8);
+		g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 13));
+		g.setColor(GOLD);
+		g.drawString("CHOOSE YOUR CHIP", 40, 526);
+		int[] colors = {
+			new Color(160, 48, 48).getRGB(), new Color(55, 83, 151).getRGB(),
+			new Color(48, 126, 76).getRGB(), new Color(42, 42, 42).getRGB(),
+			new Color(113, 56, 137).getRGB()
+		};
+		for (int i = 0; i < BETS.length; i++)
+		{
+			int cx = wideChipCenterX(i);
+			int cy = 538;
+			long wager = BETS[i];
+			boolean affordable = state != null && state.canDeal() && state.getCoins() >= wager;
+			boolean hovered = isChipHovered(i);
+			boolean selected = selectedBet == wager;
+			g.setColor(new Color(colors[i], true));
+			g.fillOval(cx - 23, cy - 23, 46, 46);
+			g.setColor(selected ? GOLD : (hovered && affordable ? new Color(255, 238, 170) : new Color(215, 198, 151)));
+			g.setStroke(new BasicStroke(selected ? 3f : 2f));
+			g.drawOval(cx - 23, cy - 23, 46, 46);
+			g.setStroke(new BasicStroke(1f));
+			g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, wager >= 100 ? 11 : 13));
+			g.setColor(affordable || selected ? Color.WHITE : new Color(154, 149, 136));
+			drawCenteredInShadowed(g, String.valueOf(wager), cx - 23, 46, cy + 5);
+		}
+	}
+
+	private void drawWideActionArea(Graphics2D g)
+	{
+		BlackjackState current = state;
+		boolean canHit = current != null && current.canHit();
+		boolean canStand = current != null && current.canStand();
+		boolean canDouble = current != null && current.canDouble();
+		boolean canRefill = current != null && current.canDeal() && current.getCoins() < BETS[0];
+		boolean canDeal = current != null && current.canDeal() && current.getCoins() >= selectedBet;
+		drawWideButton(g, HIT_RECT, "HIT", canHit, isHovered(HIT_RECT));
+		drawWideButton(g, STAND_RECT, "STAND", canStand, isHovered(STAND_RECT));
+		drawWideButton(g, DOUBLE_RECT, "DOUBLE", canDouble, isHovered(DOUBLE_RECT));
+		drawWideButton(g, DEAL_RECT, canRefill ? "BEG" : "DEAL", canRefill || canDeal, isHovered(DEAL_RECT));
+		g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 11));
+		g.setColor(new Color(240, 229, 200));
+		String hint = canRefill ? "THE HOUSE HAS NOT LEARNED ITS LESSON" : (current != null && current.canDeal() ? "SELECT A CHIP, THEN DEAL" : "PLAY THE HAND");
+		drawCenteredInShadowed(g, hint, 460, 460, 680);
+	}
+
+	private static void drawWideButton(Graphics2D g, Rectangle rect, String label, boolean enabled, boolean hovered)
+	{
+		Color fill;
+		Color border;
+		Color text;
+		if (!enabled)
+		{
+			fill = new Color(35, 32, 30); border = new Color(79, 70, 62); text = new Color(119, 113, 105);
+		}
+		else if (hovered)
+		{
+			fill = new Color(81, 61, 35); border = new Color(255, 220, 111); text = Color.WHITE;
+		}
+		else
+		{
+			fill = PANEL_MID; border = GOLD; text = new Color(244, 232, 199);
+		}
+		g.setColor(fill);
+		g.fillRoundRect(rect.x, rect.y, rect.width, rect.height, 7, 7);
+		g.setColor(border);
+		g.drawRoundRect(rect.x, rect.y, rect.width - 1, rect.height - 1, 7, 7);
+		g.drawRoundRect(rect.x + 4, rect.y + 4, rect.width - 9, rect.height - 9, 5, 5);
+		g.setFont(new Font(Font.SERIF, Font.BOLD, 16));
+		g.setColor(text);
+		FontMetrics metrics = g.getFontMetrics();
+		g.drawString(label, rect.x + (rect.width - metrics.stringWidth(label)) / 2,
+			rect.y + (rect.height + metrics.getAscent() - metrics.getDescent()) / 2);
+	}
+
+	private void drawWideEventLog(Graphics2D g)
+	{
+		g.setColor(new Color(13, 12, 11, 245));
+		g.fillRoundRect(20, 588, 420, 112, 8, 8);
+		g.setColor(DARK_GOLD);
+		g.drawRoundRect(20, 588, 419, 111, 8, 8);
+		g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
+		g.setColor(GOLD);
+		drawStringShadowed(g, "TABLE EVENTS", 34, 612);
+		g.setColor(new Color(127, 110, 84));
+		g.drawLine(30, 620, 430, 620);
+		List<String> wrapped = new ArrayList<>();
+		for (String line : eventLines)
+		{
+			wrapped.addAll(wrap(line, 54));
+		}
+		int start = Math.max(0, wrapped.size() - 5);
+		g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
+		int y = 640;
+		for (int index = start; index < wrapped.size(); index++)
+		{
+			g.setColor(index == wrapped.size() - 1 ? new Color(255, 239, 191) : new Color(214, 207, 191));
+			drawStringShadowed(g, "> " + wrapped.get(index), 32, y);
+			y += 13;
+		}
+	}
+
+	private void drawWideReveal(Graphics2D g)
+	{
+		if (revealStartedNanos == Long.MIN_VALUE)
+		{
+			return;
+		}
+		long elapsed = System.nanoTime() - revealStartedNanos;
+		if (elapsed >= REVEAL_NANOS)
+		{
+			revealStartedNanos = Long.MIN_VALUE;
+			return;
+		}
+		double seconds = elapsed / 1_000_000_000.0;
+		double progress = elapsed / (double) REVEAL_NANOS;
+		int alpha = progress < 0.18 ? (int) (242 * (progress / 0.18)) : (int) (242 * Math.max(0.0, 1.0 - ((progress - 0.72) / 0.28)));
+		alpha = Math.max(0, Math.min(242, alpha));
+		g.setColor(new Color(0, 0, 0, alpha));
+		g.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+		drawWideRainbowWave(g, "ROGUE MODE", 350, seconds);
+		g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 15));
+		g.setColor(new Color(241, 232, 202));
+		drawCentered(g, "WELCOME TO THE ROGUE'S DEN", 412);
+		g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
+		g.setColor(new Color(221, 211, 181));
+		drawCentered(g, "BLACKJACK & BAD DECISIONS", 433);
+	}
+
+	private static void drawWideRainbowWave(Graphics2D g, String text, int baseY, double seconds)
+	{
+		g.setFont(new Font(Font.SERIF, Font.BOLD, 44));
+		FontMetrics metrics = g.getFontMetrics();
+		int spacing = 4;
+		int totalWidth = metrics.stringWidth(text) + spacing * Math.max(0, text.length() - 1);
+		int x = (LOGICAL_WIDTH - totalWidth) / 2;
+		for (int index = 0; index < text.length(); index++)
+		{
+			String letter = String.valueOf(text.charAt(index));
+			int y = baseY + (int) Math.round(Math.sin(seconds * 8.0 + index * 0.82) * 10.0);
+			float hue = (float) ((seconds * 0.65 + index * 0.11) % 1.0);
+			g.setColor(new Color(0, 0, 0, 220));
+			g.drawString(letter, x + 3, y + 3);
+			g.setColor(Color.getHSBColor(hue, 0.95f, 1.0f));
+			g.drawString(letter, x, y);
+			x += metrics.stringWidth(letter) + spacing;
+		}
+	}
+
+	private static int wideChipCenterX(int index)
+	{
+		return 330 + index * 112;
 	}
 
 	private static void drawRoom(Graphics2D g)
@@ -1516,24 +2157,36 @@ public final class CasinoScenePanel extends JPanel
 
 	private static boolean isInsideChip(int x, int y, int index)
 	{
-		int dx = x - chipCenterX(index);
-		int dy = y - 672;
-		return dx * dx + dy * dy <= 22 * 22;
+		int dx = x - wideChipCenterX(index);
+		int dy = y - 538;
+		return dx * dx + dy * dy <= 25 * 25;
 	}
 
 	private static int chipCenterX(int index)
 	{
-		return 28 + index * 46;
+		return wideChipCenterX(index);
 	}
 
 	private int toLogicalX(int componentX)
 	{
-		return getWidth() <= 0 ? -1 : componentX * LOGICAL_WIDTH / getWidth();
+		Rectangle bounds = scaledSceneBounds();
+		if (componentX < bounds.x || componentX >= bounds.x + bounds.width)
+		{
+			return -1;
+		}
+		return Math.max(0, Math.min(LOGICAL_WIDTH - 1,
+			(componentX - bounds.x) * LOGICAL_WIDTH / bounds.width));
 	}
 
 	private int toLogicalY(int componentY)
 	{
-		return getHeight() <= 0 ? -1 : componentY * LOGICAL_HEIGHT / getHeight();
+		Rectangle bounds = scaledSceneBounds();
+		if (componentY < bounds.y || componentY >= bounds.y + bounds.height)
+		{
+			return -1;
+		}
+		return Math.max(0, Math.min(LOGICAL_HEIGHT - 1,
+			(componentY - bounds.y) * LOGICAL_HEIGHT / bounds.height));
 	}
 
 	private void ensureSelectedBetMakesSense()

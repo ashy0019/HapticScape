@@ -122,6 +122,7 @@ public final class HapticScapePanel extends JPanel
 	private final JButton testLevelUpButton = new JButton("Test level-up");
 	private final JButton previewLevel99Button = new JButton("Test 99");
 	private final JButton resetRogueDiscoveryButton = new JButton("Reset Rogue");
+	private final JButton hideRogueBannerButton = new JButton("Hide Rogue banner");
 	private final JButton clearSettingsLockButton = new JButton("Clear settings lock");
 	private final JButton stopButton = new JButton("STOP ALL");
 	private final JPanel settingsLockBanner = new JPanel(new BorderLayout(6, 0));
@@ -326,6 +327,11 @@ public final class HapticScapePanel extends JPanel
 		resetRogueDiscoveryButton.setToolTipText(
 			"Forget Rogue discovery and the unlock sting so the Konami code can be tested again"
 		);
+		hideRogueBannerButton.setMargin(new java.awt.Insets(2, 6, 2, 6));
+		hideRogueBannerButton.setToolTipText(
+			"Hide Rogue Mode and require the Konami code to reveal the banner again"
+		);
+		hideRogueBannerButton.setVisible(false);
 		clearSettingsLockButton.setMargin(new java.awt.Insets(2, 6, 2, 6));
 		clearSettingsLockButton.setText("Release all locks");
 		clearSettingsLockButton.setVisible(false);
@@ -537,6 +543,7 @@ public final class HapticScapePanel extends JPanel
 		testLevelUpButton.addActionListener(event -> testLevelUpAction.run());
 		previewLevel99Button.addActionListener(event -> previewLevel99Action.run());
 		resetRogueDiscoveryButton.addActionListener(event -> resetRogueDiscovery());
+		hideRogueBannerButton.addActionListener(event -> hideRogueBanner());
 		clearSettingsLockButton.addActionListener(event -> clearSettingsLockFromDeveloperMode());
 		unlockSettingsButton.addActionListener(event -> unlockSettings());
 		stopButton.addActionListener(event ->
@@ -605,7 +612,11 @@ public final class HapticScapePanel extends JPanel
 		pageTitleLabel.setName("applicationPageTitle");
 		pageTitleLabel.setFont(pageTitleLabel.getFont().deriveFont(Font.BOLD));
 		applicationHeader.add(pageTitleLabel, BorderLayout.WEST);
-		applicationHeader.add(clearSettingsLockButton, BorderLayout.CENTER);
+		JPanel developerHeaderButtons = new JPanel(new FlowLayout(FlowLayout.CENTER, 4, 0));
+		developerHeaderButtons.setOpaque(false);
+		developerHeaderButtons.add(hideRogueBannerButton);
+		developerHeaderButtons.add(clearSettingsLockButton);
+		applicationHeader.add(developerHeaderButtons, BorderLayout.CENTER);
 		applicationHeader.add(primaryButtons, BorderLayout.EAST);
 
 		JPanel fixedHeader = new JPanel();
@@ -631,11 +642,6 @@ public final class HapticScapePanel extends JPanel
 		// nested list/textarea scrolling and the existing remote viewport anchor.
 		pageScrollRouting = globalUiHooks.installPageScrollRouting(pageScrollPane, this);
 		contentLayout.show(contentHost, NORMAL_CARD);
-
-		if (Boolean.parseBoolean(settingsStore.get(HapticScapeSettingKeys.ROGUE_UNLOCKED)))
-		{
-			ensureRogueAccess(false, false);
-		}
 
 		remoteSessionManager.addListener(this);
 		settingsLockService.addListener(this);
@@ -1350,13 +1356,20 @@ public final class HapticScapePanel extends JPanel
 
 	private void resetRogueDiscovery()
 	{
+		hideRogueBanner();
+		settingsStore.set(HapticScapeSettingKeys.ROGUE_UNLOCK_STING_PLAYED, false);
+		statusLabel.setText("Rogue discovery reset - enter the Konami code again");
+		developerStatusTimer.restart();
+	}
+
+	private void hideRogueBanner()
+	{
 		showNormalView();
 		rogueModeUnlocked = false;
 		konamiCodeDetector.reset();
 		rogueLauncher.resetLocked();
 		settingsStore.set(HapticScapeSettingKeys.ROGUE_UNLOCKED, false);
-		settingsStore.set(HapticScapeSettingKeys.ROGUE_UNLOCK_STING_PLAYED, false);
-		statusLabel.setText("Rogue discovery reset - enter the Konami code again");
+		statusLabel.setText("Rogue banner hidden - enter the Konami code to reveal it again");
 		developerStatusTimer.restart();
 	}
 
@@ -1463,6 +1476,7 @@ public final class HapticScapePanel extends JPanel
 		developerUnlockClickCount = 0;
 		developerControlsUnlocked = !developerControlsUnlocked;
 		developerControlsRow.setVisible(developerControlsUnlocked);
+		hideRogueBannerButton.setVisible(developerControlsUnlocked);
 		clearSettingsLockButton.setVisible(developerControlsUnlocked);
 		refreshDeveloperControlsLayout();
 		revalidate();
