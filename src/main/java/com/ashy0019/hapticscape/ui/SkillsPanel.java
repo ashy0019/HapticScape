@@ -89,6 +89,7 @@ final class SkillsPanel extends JPanel
 		setBorder(PanelUi.createSectionBorder("Skills"));
 
 		JPanel header = new JPanel(new GridBagLayout());
+		header.setName("skillMatrixHeader");
 		addCell(header, new JLabel("Skill"), 0, 0, 1.0, GridBagConstraints.HORIZONTAL);
 		for (SkillOutput output : SkillOutput.values())
 		{
@@ -97,10 +98,12 @@ final class SkillsPanel extends JPanel
 			setOutputColumnWidth(label);
 			addCell(header, label, output.column, 0, 0.0, GridBagConstraints.NONE);
 
-			JLabel count = new JLabel("", SwingConstants.CENTER);
+			JLabel count = new JLabel("0/0", SwingConstants.CENTER);
 			count.setName("skillCount-" + output.name().toLowerCase());
+			setOutputColumnWidth(count);
 			enabledCountLabels.put(output, count);
 			JPanel actions = new JPanel(new GridLayout(1, 2, 2, 0));
+			actions.setName("skillActions-" + output.name().toLowerCase());
 			JButton all = compactButton("All");
 			JButton none = compactButton("None");
 			all.setToolTipText("Enable " + output.toString().toLowerCase() + " for every editable skill");
@@ -111,15 +114,13 @@ final class SkillsPanel extends JPanel
 			noneButtons.put(output, none);
 			actions.add(all);
 			actions.add(none);
-			JPanel countAndActions = new JPanel(new BorderLayout(0, 2));
-			countAndActions.add(count, BorderLayout.NORTH);
-			countAndActions.add(actions, BorderLayout.SOUTH);
-			setOutputColumnWidth(countAndActions);
-			addCell(header, countAndActions, output.column, 1, 0.0, GridBagConstraints.NONE);
+			setOutputColumnWidth(actions);
+			addCell(header, count, output.column, 1, 0.0, GridBagConstraints.NONE);
+			addCell(header, actions, output.column, 2, 0.0, GridBagConstraints.NONE);
 		}
 		JLabel hint = new JLabel("Select a row to edit its XP override");
 		hint.setEnabled(false);
-		addCell(header, hint, 0, 1, 1.0, GridBagConstraints.HORIZONTAL);
+		addCell(header, hint, 0, 2, 1.0, GridBagConstraints.HORIZONTAL);
 		add(header, BorderLayout.NORTH);
 
 		JPanel rows = new JPanel(new GridLayout(0, 1, 0, 1));

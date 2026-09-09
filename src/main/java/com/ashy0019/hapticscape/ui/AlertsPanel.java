@@ -12,6 +12,8 @@ import com.ashy0019.hapticscape.HapticScapeSettingKeys;
 import com.ashy0019.hapticscape.HapticScapeSettingsSource;
 import com.ashy0019.hapticscape.NotificationFeedbackSettings;
 import com.ashy0019.hapticscape.clicker.ClickerAlertSettings;
+import com.ashy0019.hapticscape.remote.RemoteLockSnapshot;
+import com.ashy0019.hapticscape.remote.RemoteLockState;
 import com.ashy0019.hapticscape.remote.RemoteSessionManager;
 import com.ashy0019.hapticscape.remote.SettingsLockCatalog;
 import com.ashy0019.hapticscape.remote.SettingsLockService;
@@ -21,11 +23,16 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.Graphics;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.Rectangle;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
+import java.awt.event.InputEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -34,6 +41,7 @@ import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.Icon;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
@@ -51,6 +59,11 @@ final class AlertsPanel extends JPanel
 
 	private final SettingsChangeSink settingsSink;
 	private final Supplier<CustomPatternLibrary> customPatternsSupplier;
+	private final RemoteSessionManager sessionManager;
+	private final SettingsLockService lockService;
+	private final SettingsLockDraft lockDraft;
+	private final BooleanSupplier editingRemoteSubject;
+	private final BooleanSupplier lockSelectionEnabled;
 	private final JPanel layoutPanel = new JPanel(new GridBagLayout());
 	private final JList<AlertCategory> categoryList =
 		new JList<>(AlertCategory.values());
@@ -88,7 +101,6 @@ final class AlertsPanel extends JPanel
 	private final LockableCheckBoxBinding respectFocusLockBinding;
 	private final LockableCheckBoxBinding specificClickLockBinding;
 	private final LockableSectionHeader genericBlockHeader;
-	private final LockableSectionHeader specificBlockHeader;
 
 	private volatile boolean genericEnabled;
 	private volatile boolean genericClickEnabled;
@@ -121,6 +133,11 @@ final class AlertsPanel extends JPanel
 	{
 		this.settingsSink = settingsSink;
 		this.customPatternsSupplier = customPatternsSupplier;
+		this.sessionManager = sessionManager;
+		this.lockService = lockService;
+		this.lockDraft = lockDraft;
+		this.editingRemoteSubject = editingRemoteSubject;
+		this.lockSelectionEnabled = lockSelectionEnabled;
 		genericEnabled = config.notificationFeedbackEnabled();
 		genericClickEnabled = config.clickerGenericNotificationEnabled();
 		respectFocus = config.notificationRespectFocus();
@@ -192,16 +209,6 @@ final class AlertsPanel extends JPanel
 			editingRemoteSubject,
 			lockSelectionEnabled
 		);
-		specificBlockHeader = new LockableSectionHeader(
-			"Alert outputs",
-			() -> SettingsLockCatalog.alertBlock(selectedCategory),
-			lockDraft,
-			lockService,
-			sessionManager::getLockSnapshot,
-			editingRemoteSubject,
-			lockSelectionEnabled
-		);
-
 		categoryList.setName("alertCategoryList");
 		categoryList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 		categoryList.setVisibleRowCount(AlertCategory.values().length);
@@ -265,6 +272,7 @@ final class AlertsPanel extends JPanel
 			() -> clickerAlertSettings.isEnabled(selectedCategory)
 		);
 		configureListeners(testGenericAction, testSpecificAction);
+		lockDraft.addListener(this::refreshAlertLockState);
 
 		persistMigratedSettings(configuredProfiles, config.alertTriggerSettings());
 		loadSelectedCategory();
@@ -414,6 +422,9 @@ final class AlertsPanel extends JPanel
 		panel.add(help, BorderLayout.NORTH);
 		JScrollPane scrollPane = new JScrollPane(categoryList);
 		scrollPane.setBorder(BorderFactory.createEmptyBorder());
+		scrollPane.setToolTipText(
+			"Shift-click an alert during Remote Play to select its post-session lock."
+		);
 		panel.add(scrollPane, BorderLayout.CENTER);
 		return panel;
 	}
@@ -475,7 +486,6 @@ final class AlertsPanel extends JPanel
 		);
 		selectedCategoryLabel.setBorder(BorderFactory.createEmptyBorder(2, 2, 5, 2));
 		PanelUi.addPreferredHeightComponent(panel, selectedCategoryLabel);
-		PanelUi.addPreferredHeightComponent(panel, specificBlockHeader);
 		specificClickEnabledCheckBox.setToolTipText(
 			"Play one click for the selected semantic alert"
 		);
@@ -628,8 +638,15 @@ final class AlertsPanel extends JPanel
 			if (!event.getValueIsAdjusting() && category != null)
 			{
 				selectedCategory = category;
-				specificBlockHeader.refresh();
 				loadSelectedCategory();
+			}
+		});
+		categoryList.addMouseListener(new MouseAdapter()
+		{
+			@Override
+			public void mouseClicked(MouseEvent event)
+			{
+				handleCategoryShiftClick(event);
 			}
 		});
 		specificClickEnabledCheckBox.addActionListener(event ->
@@ -787,8 +804,7 @@ final class AlertsPanel extends JPanel
 	private void updateSpecificControlState()
 	{
 		boolean editable = !remoteReadOnly;
-		specificBlockHeader.refresh();
-		boolean blockEditable = editable && !specificBlockHeader.isEditLocked();
+		boolean blockEditable = editable && !isSelectedAlertPersistentlyLocked();
 		AlertBehavior behavior = (AlertBehavior) behaviorComboBox.getSelectedItem();
 		boolean customConfiguration = behavior == AlertBehavior.CUSTOM;
 		HapticPatternSelection pattern =
@@ -902,7 +918,65 @@ final class AlertsPanel extends JPanel
 
 	private boolean isSpecificReadOnly()
 	{
-		return remoteReadOnly || specificBlockHeader.isEditLocked();
+		return remoteReadOnly || isSelectedAlertPersistentlyLocked();
+	}
+
+	private boolean isSelectedAlertPersistentlyLocked()
+	{
+		return !editingRemoteSubject.getAsBoolean()
+			&& lockService.isLocked(SettingsLockCatalog.alertBlock(selectedCategory));
+	}
+
+	private void handleCategoryShiftClick(MouseEvent event)
+	{
+		if ((event.getModifiersEx() & InputEvent.SHIFT_DOWN_MASK) == 0
+			|| !editingRemoteSubject.getAsBoolean()
+			|| !lockSelectionEnabled.getAsBoolean())
+		{
+			return;
+		}
+		int index = categoryList.locationToIndex(event.getPoint());
+		if (index < 0)
+		{
+			return;
+		}
+		Rectangle bounds = categoryList.getCellBounds(index, index);
+		if (bounds == null || !bounds.contains(event.getPoint()))
+		{
+			return;
+		}
+		AlertCategory category = categoryList.getModel().getElementAt(index);
+		categoryList.setSelectedIndex(index);
+		lockDraft.toggle(SettingsLockCatalog.alertBlock(category));
+		event.consume();
+	}
+
+	private void refreshAlertLockState()
+	{
+		categoryList.repaint();
+		updateSpecificControlState();
+	}
+
+	private AlertLockState alertLockState(AlertCategory category)
+	{
+		SettingsLockTarget target = SettingsLockCatalog.alertBlock(category);
+		if (editingRemoteSubject.getAsBoolean())
+		{
+			RemoteLockSnapshot remote = sessionManager.getLockSnapshot();
+			if (remote.getTargets().contains(target)
+				&& remote.getState() == RemoteLockState.ARMED)
+			{
+				return AlertLockState.ARMED;
+			}
+			if (remote.getTargets().contains(target) || lockDraft.contains(target))
+			{
+				return AlertLockState.PROPOSED;
+			}
+			return AlertLockState.NONE;
+		}
+		return lockService.isLocked(target)
+			? AlertLockState.PERSISTENT
+			: AlertLockState.NONE;
 	}
 
 	private void persistClickerAlertSettings(SettingsLockTarget target)
@@ -1028,6 +1102,7 @@ final class AlertsPanel extends JPanel
 	{
 		private final JLabel title = new JLabel();
 		private final JLabel summary = new JLabel();
+		private final JLabel lockMarker = new JLabel();
 
 		private AlertCategoryRenderer()
 		{
@@ -1037,6 +1112,7 @@ final class AlertsPanel extends JPanel
 			summary.setFont(summary.getFont().deriveFont(10f));
 			add(title, BorderLayout.NORTH);
 			add(summary, BorderLayout.SOUTH);
+			add(lockMarker, BorderLayout.EAST);
 		}
 
 		@Override
@@ -1049,6 +1125,7 @@ final class AlertsPanel extends JPanel
 		{
 			title.setText(value.getDisplayName());
 			summary.setText(categorySummary(value));
+			lockMarker.setIcon(new AlertLockIcon(value));
 			Color background = selected
 				? list.getSelectionBackground()
 				: list.getBackground();
@@ -1060,6 +1137,58 @@ final class AlertsPanel extends JPanel
 			summary.setForeground(foreground);
 			setOpaque(true);
 			return this;
+		}
+	}
+
+	private enum AlertLockState
+	{
+		NONE,
+		PROPOSED,
+		ARMED,
+		PERSISTENT
+	}
+
+	private final class AlertLockIcon implements Icon
+	{
+		private final AlertCategory category;
+
+		private AlertLockIcon(AlertCategory category)
+		{
+			this.category = category;
+		}
+
+		@Override
+		public int getIconWidth()
+		{
+			return 11;
+		}
+
+		@Override
+		public int getIconHeight()
+		{
+			return 11;
+		}
+
+		@Override
+		public void paintIcon(Component component, Graphics graphics, int x, int y)
+		{
+			AlertLockState state = alertLockState(category);
+			if (state == AlertLockState.NONE)
+			{
+				return;
+			}
+			graphics.setColor(state == AlertLockState.PERSISTENT
+				? new Color(170, 170, 170)
+				: new Color(255, 174, 0));
+			graphics.drawArc(x + 2, y, 5, 6, 0, 180);
+			if (state == AlertLockState.ARMED || state == AlertLockState.PERSISTENT)
+			{
+				graphics.fillRect(x + 1, y + 5, 8, 6);
+			}
+			else
+			{
+				graphics.drawRect(x + 1, y + 5, 7, 5);
+			}
 		}
 	}
 
