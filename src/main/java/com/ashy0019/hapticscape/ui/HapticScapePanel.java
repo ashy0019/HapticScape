@@ -52,9 +52,9 @@ import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.Font;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
-import java.awt.Rectangle;
 import java.awt.event.InputEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -76,14 +76,13 @@ import javax.swing.JScrollPane;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
-import javax.swing.Scrollable;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 
 public final class HapticScapePanel extends JPanel
-	implements RemoteSessionListener, SettingsLockListener, Scrollable
+	implements RemoteSessionListener, SettingsLockListener
 {
 	private static final int DEVELOPER_UNLOCK_CLICKS = 9;
 	private static final long DEVELOPER_UNLOCK_WINDOW_NANOS = TimeUnit.SECONDS.toNanos(4);
@@ -107,16 +106,19 @@ public final class HapticScapePanel extends JPanel
 	private final JTabbedPane tabs;
 	private final CardLayout contentLayout = new CardLayout();
 	private final JPanel contentHost = new JPanel(contentLayout);
-	private final JLabel statusLabel = new JLabel("Disconnected", SwingConstants.CENTER);
+	private final JLabel statusLabel = new JLabel("Disconnected");
+	private final JLabel connectionIndicator = new JLabel("\u25cf");
+	private final JLabel deviceSummaryLabel = new JLabel("No device connected");
+	private final JLabel pageTitleLabel = new JLabel("Gameplay");
 	private final DefaultListModel<DeviceInfo> deviceModel = new DefaultListModel<>();
 	private final JButton connectButton = new JButton("Connect");
 	private final JButton disconnectButton = new JButton("Disconnect");
-	private final JButton testButton = new JButton("Test pattern");
+	private final JButton testButton = new JButton("Test");
 	private final JButton testLevelUpButton = new JButton("Test level-up");
 	private final JButton previewLevel99Button = new JButton("Test 99");
 	private final JButton resetRogueDiscoveryButton = new JButton("Reset Rogue");
 	private final JButton clearSettingsLockButton = new JButton("Clear settings lock");
-	private final JButton stopButton = new JButton("Stop now");
+	private final JButton stopButton = new JButton("STOP ALL");
 	private final JPanel settingsLockBanner = new JPanel(new BorderLayout(6, 0));
 	private final JLabel settingsLockLabel = new JLabel(SETTINGS_LOCKED_MESSAGE);
 	private final JButton unlockSettingsButton = new JButton("Unlock");
@@ -154,7 +156,7 @@ public final class HapticScapePanel extends JPanel
 	private final LockableSectionHeader feedbackBlockHeader;
 	private final RemoteControlPanel remoteControlPanel;
 	private final ForgeWorkspacePanel forgeWorkspacePanel;
-	private final WorkspaceShell workspaceShell = new WorkspaceShell();
+	private final WorkspaceShell workspaceShell;
 	private final JScrollPane pageScrollPane;
 	private final GlobalUiHooks.Registration pageScrollRouting;
 	private final RoguePanel roguePanel;
@@ -227,10 +229,16 @@ public final class HapticScapePanel extends JPanel
 			pageScrollPane,
 			"pageScrollPane"
 		);
-		setLayout(new BorderLayout(0, 6));
-		setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+		workspaceShell = new WorkspaceShell(this.pageScrollPane);
+		setLayout(new BorderLayout());
+		setBorder(BorderFactory.createEmptyBorder());
 
-		statusLabel.setBorder(BorderFactory.createEmptyBorder(4, 2, 4, 2));
+		statusLabel.setName("connectionStatusText");
+		statusLabel.setForeground(HapticScapeTheme.TEXT);
+		deviceSummaryLabel.setName("connectionDeviceSummary");
+		deviceSummaryLabel.setForeground(HapticScapeTheme.MUTED_TEXT);
+		connectionIndicator.setName("connectionStatusIndicator");
+		connectionIndicator.setForeground(HapticScapeTheme.MUTED_TEXT);
 		developerStatusTimer = new Timer(1600, event ->
 			statusLabel.setText(latestConnectionSnapshot.getMessage()));
 		developerStatusTimer.setRepeats(false);
@@ -507,6 +515,10 @@ public final class HapticScapePanel extends JPanel
 		remoteEndButton.addActionListener(event -> remoteSessionManager.endSession());
 
 		JPanel primaryButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+		primaryButtons.setOpaque(false);
+		testButton.setToolTipText("Preview the current feedback pattern");
+		stopButton.setToolTipText("Immediately stop every active output");
+		stopButton.putClientProperty("JComponent.outline", "error");
 		primaryButtons.add(testButton);
 		primaryButtons.add(stopButton);
 
@@ -534,21 +546,43 @@ public final class HapticScapePanel extends JPanel
 		workspaceShell.addWorkspace(REMOTE_WORKSPACE, "Remote Play", remoteControlPanel);
 		workspaceShell.addWorkspace(SETTINGS_WORKSPACE, "Settings", settingsWorkspace);
 		workspaceShell.setUserSelectionAction(this::handleWorkspaceSelected);
+		workspaceShell.setSelectionAction(workspace ->
+			pageTitleLabel.setText(workspaceShell.getWorkspaceLabel(workspace)));
+		workspaceShell.setStatusComponent(createConnectionStatusPanel());
 
-		JPanel normalContent = new JPanel(new BorderLayout(0, 8));
-		normalContent.add(topPanel, BorderLayout.NORTH);
+		JPanel applicationHeader = new JPanel(new BorderLayout(8, 0));
+		applicationHeader.setName("applicationHeader");
+		applicationHeader.setBackground(HapticScapeTheme.SURFACE);
+		applicationHeader.setBorder(BorderFactory.createCompoundBorder(
+			BorderFactory.createMatteBorder(0, 0, 1, 0, HapticScapeTheme.BORDER),
+			BorderFactory.createEmptyBorder(7, 12, 7, 12)
+		));
+		pageTitleLabel.setName("applicationPageTitle");
+		pageTitleLabel.setFont(pageTitleLabel.getFont().deriveFont(Font.BOLD));
+		applicationHeader.add(pageTitleLabel, BorderLayout.WEST);
+		applicationHeader.add(primaryButtons, BorderLayout.EAST);
+
+		JPanel fixedHeader = new JPanel();
+		fixedHeader.setName("applicationFixedHeader");
+		fixedHeader.setLayout(new BoxLayout(fixedHeader, BoxLayout.Y_AXIS));
+		PanelUi.addFlexibleVerticalComponent(fixedHeader, applicationHeader);
+		PanelUi.addFlexibleVerticalComponent(fixedHeader, topPanel);
+
+		JPanel normalContent = new JPanel(new BorderLayout());
+		normalContent.add(fixedHeader, BorderLayout.NORTH);
 		normalContent.add(workspaceShell, BorderLayout.CENTER);
-		JPanel statusBar = new JPanel(new BorderLayout(8, 0));
-		statusBar.add(statusLabel, BorderLayout.CENTER);
-		statusBar.add(primaryButtons, BorderLayout.EAST);
-		normalContent.add(statusBar, BorderLayout.SOUTH);
 
 		contentHost.add(normalContent, NORMAL_CARD);
-		contentHost.add(roguePanel, ROGUE_CARD);
+		JScrollPane rogueScrollPane = new JScrollPane(roguePanel);
+		rogueScrollPane.setName("roguePageScrollPane");
+		rogueScrollPane.setBorder(BorderFactory.createEmptyBorder());
+		rogueScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+		rogueScrollPane.getVerticalScrollBar().setUnitIncrement(16);
+		contentHost.add(rogueScrollPane, ROGUE_CARD);
 		add(rogueLauncher, BorderLayout.NORTH);
 		add(contentHost, BorderLayout.CENTER);
-		// The host owns the page viewport and supplies the surrounding scroll pane.
-		pageScrollPane.getVerticalScrollBar().setUnitIncrement(16);
+		// WorkspaceShell owns the normal page viewport; global routing preserves
+		// nested list/textarea scrolling and the existing remote viewport anchor.
 		pageScrollRouting = globalUiHooks.installPageScrollRouting(pageScrollPane, this);
 		contentLayout.show(contentHost, NORMAL_CARD);
 
@@ -564,47 +598,30 @@ public final class HapticScapePanel extends JPanel
 		rogueKeyHook = globalUiHooks.onScopedKeyPress(this, this::handleRogueKeyPress);
 	}
 
+	private JPanel createConnectionStatusPanel()
+	{
+		JPanel status = new JPanel(new BorderLayout(7, 0));
+		status.setName("connectionStatus");
+		status.setBackground(HapticScapeTheme.SIDEBAR);
+		status.setBorder(BorderFactory.createEmptyBorder(9, 10, 9, 10));
+		connectionIndicator.setVerticalAlignment(SwingConstants.TOP);
+		status.add(connectionIndicator, BorderLayout.WEST);
+
+		JPanel details = new JPanel();
+		details.setOpaque(false);
+		details.setLayout(new BoxLayout(details, BoxLayout.Y_AXIS));
+		statusLabel.setAlignmentX(LEFT_ALIGNMENT);
+		deviceSummaryLabel.setAlignmentX(LEFT_ALIGNMENT);
+		details.add(statusLabel);
+		details.add(javax.swing.Box.createVerticalStrut(3));
+		details.add(deviceSummaryLabel);
+		status.add(details, BorderLayout.CENTER);
+		return status;
+	}
+
 	public int getIntensityPercent()
 	{
 		return intensityPercent;
-	}
-
-	@Override
-	public Dimension getPreferredScrollableViewportSize()
-	{
-		return getPreferredSize();
-	}
-
-	@Override
-	public int getScrollableUnitIncrement(
-		Rectangle visibleRect,
-		int orientation,
-		int direction)
-	{
-		return 16;
-	}
-
-	@Override
-	public int getScrollableBlockIncrement(
-		Rectangle visibleRect,
-		int orientation,
-		int direction)
-	{
-		return Math.max(16, orientation == SwingConstants.VERTICAL
-			? visibleRect.height - 16
-			: visibleRect.width - 16);
-	}
-
-	@Override
-	public boolean getScrollableTracksViewportWidth()
-	{
-		return true;
-	}
-
-	@Override
-	public boolean getScrollableTracksViewportHeight()
-	{
-		return false;
 	}
 
 	public void showDiscordRemoteView()
@@ -1653,7 +1670,7 @@ public final class HapticScapePanel extends JPanel
 		boolean workspaceVisible = controllerSession
 			&& snapshot.getState() != RemoteSessionState.DISCONNECTED;
 		boolean subjectAvailable = isControllerSubjectAvailable(snapshot);
-		stopButton.setText(participantControlled ? "Emergency Off" : "Stop now");
+		stopButton.setText(participantControlled ? "EMERGENCY OFF" : "STOP ALL");
 		boolean workspaceWasVisible = controllerWorkspaceAvailable;
 		boolean subjectBecameAvailable = subjectAvailable && !controllerSubjectAvailable;
 		controllerSubjectAvailable = subjectAvailable;
@@ -1809,6 +1826,10 @@ public final class HapticScapePanel extends JPanel
 		{
 			statusLabel.setText(snapshot.getMessage());
 		}
+		statusLabel.setToolTipText(snapshot.getMessage());
+		connectionIndicator.setForeground(connectionColor(snapshot.getState()));
+		deviceSummaryLabel.setText(deviceSummary(snapshot));
+		deviceSummaryLabel.setToolTipText(deviceSummaryLabel.getText());
 
 		deviceModel.clear();
 		for (DeviceInfo device : snapshot.getDevices())
@@ -1827,6 +1848,32 @@ public final class HapticScapePanel extends JPanel
 		customPatternsPanel.setConnected(connected);
 		stopButton.setEnabled(connected);
 		applyRemoteSessionState(remoteSessionManager.getSnapshot());
+	}
+
+	private static java.awt.Color connectionColor(ConnectionState state)
+	{
+		if (state == ConnectionState.CONNECTED)
+		{
+			return HapticScapeTheme.SUCCESS;
+		}
+		if (state == ConnectionState.CONNECTING || state == ConnectionState.DISCONNECTING)
+		{
+			return HapticScapeTheme.ACCENT;
+		}
+		return HapticScapeTheme.MUTED_TEXT;
+	}
+
+	private static String deviceSummary(ConnectionSnapshot snapshot)
+	{
+		if (snapshot.getDevices().isEmpty())
+		{
+			return "No device connected";
+		}
+		if (snapshot.getDevices().size() == 1)
+		{
+			return snapshot.getDevices().get(0).getName();
+		}
+		return snapshot.getDevices().size() + " devices";
 	}
 
 	private static int clamp(int value, int minimum, int maximum)

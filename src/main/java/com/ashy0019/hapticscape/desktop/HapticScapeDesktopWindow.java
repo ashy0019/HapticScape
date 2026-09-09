@@ -63,6 +63,9 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 		Objects.requireNonNull(skillCatalog, "skillCatalog");
 		Objects.requireNonNull(settingsStore, "settingsStore");
 
+		pageScrollPane.setBorder(BorderFactory.createEmptyBorder());
+		pageScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+		pageScrollPane.getVerticalScrollBar().setUnitIncrement(16);
 		panel = new HapticScapePanel(
 			settings,
 			skillCatalog,
@@ -93,10 +96,6 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 			runtime::playRogueUnlockStingAsync,
 			runtime::stopAll
 		);
-		pageScrollPane.setBorder(BorderFactory.createEmptyBorder());
-		pageScrollPane.setViewportView(panel);
-		pageScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-		pageScrollPane.getVerticalScrollBar().setUnitIncrement(16);
 
 		sourceMessageLabel.setBorder(BorderFactory.createEmptyBorder(5, 8, 6, 8));
 		sourceMessageLabel.setOpaque(true);
@@ -104,7 +103,7 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 		sourceMessageLabel.setForeground(new Color(220, 220, 220));
 
 		JPanel content = new JPanel(new BorderLayout());
-		content.add(pageScrollPane, BorderLayout.CENTER);
+		content.add(panel, BorderLayout.CENTER);
 		content.add(sourceMessageLabel, BorderLayout.SOUTH);
 		frame.setContentPane(content);
 		frame.setGlassPane(new StandaloneLevel99GlassPane(runtime.getLevel99CelebrationController()));

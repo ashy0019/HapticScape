@@ -1,10 +1,14 @@
 package com.ashy0019.hapticscape.ui;
 
+import com.ashy0019.hapticscape.update.HapticScapeVersion;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.Font;
 import java.awt.GridLayout;
+import java.awt.Rectangle;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.util.LinkedHashMap;
@@ -14,33 +18,72 @@ import java.util.function.Consumer;
 import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
+import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.JToggleButton;
+import javax.swing.Scrollable;
+import javax.swing.SwingConstants;
 
-/** Compact, responsive navigation shell for the standalone desktop application. */
+/** Fixed application navigation surrounding one independently scrolling workspace. */
 final class WorkspaceShell extends JPanel
 {
 	private static final int COMPACT_BREAKPOINT = 820;
+	private static final int RAIL_WIDTH = 164;
 
 	private final CardLayout cards = new CardLayout();
 	private final JPanel content = new JPanel(cards);
+	private final ScrollableWorkspace viewportContent = new ScrollableWorkspace();
+	private final JScrollPane pageScrollPane;
 	private final JPanel navigationHost = new JPanel(new BorderLayout());
+	private final JPanel navigationBody = new JPanel(new BorderLayout());
 	private final JPanel navigation = new JPanel();
+	private final JPanel brand = new JPanel();
+	private final JPanel railStatusHost = new JPanel(new BorderLayout());
+	private final JPanel compactStatusHost = new JPanel(new BorderLayout());
 	private final Map<String, JToggleButton> buttons = new LinkedHashMap<>();
+	private final Map<String, String> labels = new LinkedHashMap<>();
 	private final ButtonGroup buttonGroup = new ButtonGroup();
 	private Consumer<String> userSelectionAction = ignored -> { };
+	private Consumer<String> selectionAction = ignored -> { };
+	private Component statusComponent;
 	private String selectedId;
 	private boolean compact;
 
-	WorkspaceShell()
+	WorkspaceShell(JScrollPane pageScrollPane)
 	{
 		super(new BorderLayout());
+		this.pageScrollPane = Objects.requireNonNull(pageScrollPane, "pageScrollPane");
 		setName("workspaceShell");
+		setBackground(HapticScapeTheme.CANVAS);
+
+		configureBrand();
 		navigationHost.setName("workspaceNavigationHost");
+		navigationHost.setBackground(HapticScapeTheme.SIDEBAR);
+		navigationBody.setBackground(HapticScapeTheme.SIDEBAR);
 		navigation.setName("workspaceNavigation");
-		navigationHost.add(navigation, BorderLayout.NORTH);
+		navigation.setBackground(HapticScapeTheme.SIDEBAR);
+		railStatusHost.setName("workspaceRailStatus");
+		railStatusHost.setBackground(HapticScapeTheme.SIDEBAR);
+		compactStatusHost.setName("workspaceCompactStatus");
+		compactStatusHost.setBackground(HapticScapeTheme.SURFACE);
+
+		navigationBody.add(navigation, BorderLayout.NORTH);
+		navigationHost.add(brand, BorderLayout.NORTH);
+		navigationHost.add(navigationBody, BorderLayout.CENTER);
+		navigationHost.add(railStatusHost, BorderLayout.SOUTH);
+
+		viewportContent.setName("workspaceViewportContent");
+		viewportContent.setBorder(BorderFactory.createEmptyBorder(10, 12, 12, 12));
+		viewportContent.add(content, BorderLayout.CENTER);
+		pageScrollPane.setName("workspacePageScrollPane");
+		pageScrollPane.setBorder(BorderFactory.createEmptyBorder());
+		pageScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+		pageScrollPane.getVerticalScrollBar().setUnitIncrement(16);
+		pageScrollPane.setViewportView(viewportContent);
+
 		add(navigationHost, BorderLayout.WEST);
-		add(content, BorderLayout.CENTER);
+		add(pageScrollPane, BorderLayout.CENTER);
 		setNavigationOrientation(false);
 		addComponentListener(new ComponentAdapter()
 		{
@@ -65,12 +108,14 @@ final class WorkspaceShell extends JPanel
 		button.setName("workspace-" + id);
 		button.setHorizontalAlignment(JButton.LEFT);
 		button.setFocusPainted(false);
+		button.setBackground(HapticScapeTheme.SIDEBAR);
 		button.addActionListener(event ->
 		{
 			showWorkspace(id);
 			userSelectionAction.accept(id);
 		});
 		buttons.put(id, button);
+		labels.put(id, label);
 		buttonGroup.add(button);
 		navigation.add(button);
 		content.add(component, id);
@@ -80,9 +125,24 @@ final class WorkspaceShell extends JPanel
 		}
 	}
 
+	void setStatusComponent(Component component)
+	{
+		statusComponent = Objects.requireNonNull(component, "component");
+		placeStatusComponent();
+	}
+
 	void setUserSelectionAction(Consumer<String> action)
 	{
 		userSelectionAction = Objects.requireNonNull(action, "action");
+	}
+
+	void setSelectionAction(Consumer<String> action)
+	{
+		selectionAction = Objects.requireNonNull(action, "action");
+		if (selectedId != null)
+		{
+			selectionAction.accept(selectedId);
+		}
 	}
 
 	void showWorkspace(String id)
@@ -92,16 +152,59 @@ final class WorkspaceShell extends JPanel
 		{
 			throw new IllegalArgumentException("Unknown workspace: " + id);
 		}
+		boolean changed = !id.equals(selectedId);
 		selectedId = id;
 		button.setSelected(true);
 		cards.show(content, id);
+		updateNavigationBorders();
 		content.revalidate();
 		content.repaint();
+		if (changed)
+		{
+			selectionAction.accept(id);
+		}
 	}
 
 	String getSelectedWorkspace()
 	{
 		return selectedId;
+	}
+
+	String getWorkspaceLabel(String id)
+	{
+		String label = labels.get(id);
+		if (label == null)
+		{
+			throw new IllegalArgumentException("Unknown workspace: " + id);
+		}
+		return label;
+	}
+
+	private void configureBrand()
+	{
+		brand.setName("workspaceBrand");
+		brand.setLayout(new javax.swing.BoxLayout(brand, javax.swing.BoxLayout.Y_AXIS));
+		brand.setBackground(HapticScapeTheme.SIDEBAR);
+		brand.setBorder(BorderFactory.createEmptyBorder(16, 12, 12, 10));
+		JLabel name = new JLabel("HapticScape");
+		name.setName("workspaceBrandName");
+		name.setForeground(HapticScapeTheme.ACCENT);
+		name.setFont(name.getFont().deriveFont(Font.BOLD));
+		JLabel version = new JLabel(displayVersion());
+		version.setName("workspaceBrandVersion");
+		version.setForeground(HapticScapeTheme.MUTED_TEXT);
+		version.setFont(version.getFont().deriveFont(
+			Math.max(9.0f, version.getFont().getSize2D() - 1.0f)
+		));
+		brand.add(name);
+		brand.add(javax.swing.Box.createVerticalStrut(5));
+		brand.add(version);
+	}
+
+	private static String displayVersion()
+	{
+		String version = HapticScapeVersion.current();
+		return "development".equalsIgnoreCase(version) ? version : "v" + version;
 	}
 
 	private void refreshResponsiveLayout()
@@ -113,10 +216,32 @@ final class WorkspaceShell extends JPanel
 		}
 		compact = shouldBeCompact;
 		remove(navigationHost);
+		remove(compactStatusHost);
+		brand.setVisible(!compact);
 		add(navigationHost, compact ? BorderLayout.NORTH : BorderLayout.WEST);
+		if (compact)
+		{
+			add(compactStatusHost, BorderLayout.SOUTH);
+		}
 		setNavigationOrientation(compact);
+		placeStatusComponent();
 		revalidate();
 		repaint();
+	}
+
+	private void placeStatusComponent()
+	{
+		railStatusHost.removeAll();
+		compactStatusHost.removeAll();
+		if (statusComponent != null)
+		{
+			(compact ? compactStatusHost : railStatusHost).add(
+				statusComponent,
+				BorderLayout.CENTER
+			);
+		}
+		railStatusHost.revalidate();
+		compactStatusHost.revalidate();
 	}
 
 	private void setNavigationOrientation(boolean horizontal)
@@ -125,15 +250,78 @@ final class WorkspaceShell extends JPanel
 			? new GridLayout(1, 0, 0, 0)
 			: new GridLayout(0, 1, 0, 0));
 		navigationHost.setBorder(horizontal
-			? BorderFactory.createMatteBorder(0, 0, 1, 0, navigationHost.getForeground())
-			: BorderFactory.createMatteBorder(0, 0, 0, 1, navigationHost.getForeground()));
-		if (!horizontal)
+			? BorderFactory.createMatteBorder(0, 0, 1, 0, HapticScapeTheme.BORDER)
+			: BorderFactory.createMatteBorder(0, 0, 0, 1, HapticScapeTheme.BORDER));
+		compactStatusHost.setBorder(BorderFactory.createMatteBorder(
+			1,
+			0,
+			0,
+			0,
+			HapticScapeTheme.BORDER
+		));
+		navigationHost.setPreferredSize(horizontal ? null : new Dimension(RAIL_WIDTH, 0));
+		updateNavigationBorders();
+	}
+
+	private void updateNavigationBorders()
+	{
+		for (Map.Entry<String, JToggleButton> entry : buttons.entrySet())
 		{
-			navigationHost.setPreferredSize(new Dimension(152, 0));
+			boolean selected = entry.getKey().equals(selectedId);
+			Color marker = selected ? HapticScapeTheme.ACCENT : HapticScapeTheme.SIDEBAR;
+			entry.getValue().setBorder(BorderFactory.createCompoundBorder(
+				compact
+					? BorderFactory.createMatteBorder(0, 0, 2, 0, marker)
+					: BorderFactory.createMatteBorder(0, 2, 0, 0, marker),
+				BorderFactory.createEmptyBorder(4, compact ? 6 : 10, 4, 6)
+			));
+			entry.getValue().setHorizontalAlignment(compact ? JButton.CENTER : JButton.LEFT);
 		}
-		else
+	}
+
+	private static final class ScrollableWorkspace extends JPanel implements Scrollable
+	{
+		private ScrollableWorkspace()
 		{
-			navigationHost.setPreferredSize(null);
+			super(new BorderLayout(0, 8));
+		}
+
+		@Override
+		public Dimension getPreferredScrollableViewportSize()
+		{
+			return getPreferredSize();
+		}
+
+		@Override
+		public int getScrollableUnitIncrement(
+			Rectangle visibleRect,
+			int orientation,
+			int direction)
+		{
+			return 16;
+		}
+
+		@Override
+		public int getScrollableBlockIncrement(
+			Rectangle visibleRect,
+			int orientation,
+			int direction)
+		{
+			return Math.max(16, orientation == SwingConstants.VERTICAL
+				? visibleRect.height - 16
+				: visibleRect.width - 16);
+		}
+
+		@Override
+		public boolean getScrollableTracksViewportWidth()
+		{
+			return true;
+		}
+
+		@Override
+		public boolean getScrollableTracksViewportHeight()
+		{
+			return getParent() != null && getParent().getHeight() > getPreferredSize().height;
 		}
 	}
 }

@@ -5,6 +5,7 @@ import java.awt.Component;
 import java.awt.Container;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.Scrollable;
 import javax.swing.SwingUtilities;
@@ -48,7 +49,9 @@ public class PatternForgePanelTest
 	@Test
 	public void applicationPageUsesTheScrollableViewportContract()
 	{
-		assertTrue(Scrollable.class.isAssignableFrom(HapticScapePanel.class));
+		JScrollPane page = new JScrollPane();
+		new WorkspaceShell(page);
+		assertTrue(page.getViewport().getView() instanceof Scrollable);
 	}
 
 	@Test

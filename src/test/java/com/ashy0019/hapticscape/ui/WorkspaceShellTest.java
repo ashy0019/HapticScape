@@ -1,6 +1,7 @@
 package com.ashy0019.hapticscape.ui;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import java.awt.BorderLayout;
@@ -11,6 +12,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.AbstractButton;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
 import org.junit.Test;
 
@@ -22,7 +24,7 @@ public class WorkspaceShellTest
 		AtomicReference<String> selected = new AtomicReference<>();
 		WorkspaceShell shell = onEdt(() ->
 		{
-			WorkspaceShell created = new WorkspaceShell();
+			WorkspaceShell created = new WorkspaceShell(new JScrollPane());
 			created.addWorkspace("gameplay", "Gameplay", new JPanel());
 			created.addWorkspace("remote", "Remote Play", new JPanel());
 			created.setUserSelectionAction(selected::set);
@@ -50,7 +52,7 @@ public class WorkspaceShellTest
 	{
 		WorkspaceShell shell = onEdt(() ->
 		{
-			WorkspaceShell created = new WorkspaceShell();
+			WorkspaceShell created = new WorkspaceShell(new JScrollPane());
 			created.addWorkspace("gameplay", "Gameplay", new JPanel());
 			created.addWorkspace("remote", "Remote Play", new JPanel());
 			return created;
@@ -81,6 +83,56 @@ public class WorkspaceShellTest
 			((BorderLayout) shell.getLayout()).getConstraints(navigationHost)
 		);
 		assertTrue(navigationHost.getPreferredSize().width >= 140);
+	}
+
+	@Test
+	public void suppliedViewportScrollsInsideFixedShell() throws Exception
+	{
+		JScrollPane page = new JScrollPane();
+		JPanel status = new JPanel();
+		WorkspaceShell shell = onEdt(() ->
+		{
+			WorkspaceShell created = new WorkspaceShell(page);
+			created.addWorkspace("gameplay", "Gameplay", new JPanel());
+			created.setStatusComponent(status);
+			return created;
+		});
+
+		assertSame(
+			component(shell, "workspaceViewportContent", JPanel.class),
+			page.getViewport().getView()
+		);
+		assertEquals(
+			BorderLayout.CENTER,
+			((BorderLayout) shell.getLayout()).getConstraints(page)
+		);
+		assertSame(
+			component(shell, "workspaceRailStatus", Container.class),
+			status.getParent()
+		);
+	}
+
+	@Test
+	public void selectionActionTracksProgrammaticWorkspaceChanges() throws Exception
+	{
+		AtomicReference<String> selected = new AtomicReference<>();
+		WorkspaceShell shell = onEdt(() ->
+		{
+			WorkspaceShell created = new WorkspaceShell(new JScrollPane());
+			created.addWorkspace("gameplay", "Gameplay", new JPanel());
+			created.addWorkspace("remote", "Remote Play", new JPanel());
+			created.setSelectionAction(selected::set);
+			return created;
+		});
+		assertEquals("gameplay", selected.get());
+
+		onEdt(() ->
+		{
+			shell.showWorkspace("remote");
+			return null;
+		});
+		assertEquals("remote", selected.get());
+		assertEquals("Remote Play", shell.getWorkspaceLabel("remote"));
 	}
 
 	private static <T extends Component> T component(
