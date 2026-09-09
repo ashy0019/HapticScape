@@ -444,11 +444,12 @@ public final class RemoteSessionManager implements AutoCloseable
 		java.util.Collection<SettingsLockTarget> targets)
 	{
 		if (targets != null
-			&& targets.contains(SettingsLockCatalog.PROTECTED_EXIT)
+			&& (targets.contains(SettingsLockCatalog.PROTECTED_EXIT)
+				|| targets.contains(SettingsLockCatalog.STARTUP_BEHAVIOR))
 			&& !permissionsCoordinator.getPeer().isProtectedExitAllowed())
 		{
 			throw new IllegalStateException(
-				"The participant has not allowed protected exit requests"
+				"The participant has not allowed protected startup/exit requests"
 			);
 		}
 		lockCoordinator.propose(role, snapshot.getState(), password, targets);

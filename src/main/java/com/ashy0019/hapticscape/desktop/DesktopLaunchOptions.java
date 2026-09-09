@@ -12,16 +12,18 @@ public final class DesktopLaunchOptions
 
 	private final String profile;
 	private final int gameplayPort;
+	private final boolean minimized;
 
-	private DesktopLaunchOptions(String profile, int gameplayPort)
+	private DesktopLaunchOptions(String profile, int gameplayPort, boolean minimized)
 	{
 		this.profile = profile;
 		this.gameplayPort = gameplayPort;
+		this.minimized = minimized;
 	}
 
 	public static DesktopLaunchOptions defaults()
 	{
-		return new DesktopLaunchOptions(null, LocalhostTransportEndpoint.DEFAULT_PORT);
+		return new DesktopLaunchOptions(null, LocalhostTransportEndpoint.DEFAULT_PORT, false);
 	}
 
 	public static DesktopLaunchOptions parse(String[] args)
@@ -31,6 +33,7 @@ public final class DesktopLaunchOptions
 		int gameplayPort = LocalhostTransportEndpoint.DEFAULT_PORT;
 		boolean profileSeen = false;
 		boolean portSeen = false;
+		boolean minimized = false;
 		for (int index = 0; index < args.length; index++)
 		{
 			String argument = Objects.requireNonNull(args[index], "argument");
@@ -54,12 +57,16 @@ public final class DesktopLaunchOptions
 				portSeen = requireUnique(portSeen, argument);
 				gameplayPort = parsePort(requireValue(args, ++index, argument));
 			}
+			else if ("--minimized".equals(argument))
+			{
+				minimized = true;
+			}
 			else
 			{
 				throw new IllegalArgumentException("Unknown launch option: " + argument);
 			}
 		}
-		return new DesktopLaunchOptions(profile, gameplayPort);
+		return new DesktopLaunchOptions(profile, gameplayPort, minimized);
 	}
 
 	private static boolean requireUnique(boolean seen, String option)
@@ -122,6 +129,11 @@ public final class DesktopLaunchOptions
 	public int getGameplayPort()
 	{
 		return gameplayPort;
+	}
+
+	public boolean isMinimized()
+	{
+		return minimized;
 	}
 
 	public String getWindowTitle()

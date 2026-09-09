@@ -42,6 +42,11 @@ public final class SettingsLockCatalog
 		"Application",
 		"Protected application exit"
 	);
+	public static final SettingsLockTarget STARTUP_BEHAVIOR = register(
+		"application.startup",
+		"Application",
+		"Start with Windows"
+	);
 
 	public static final SettingsLockTarget LEVEL_UP_HAPTICS = register(
 		"feature.level-ups.haptics",
@@ -409,6 +414,7 @@ public final class SettingsLockCatalog
 		Set<SettingsLockTarget> targets = new LinkedHashSet<>(allTargets());
 		// Protected exit always requires its own explicit participant consent.
 		targets.remove(PROTECTED_EXIT);
+		targets.remove(STARTUP_BEHAVIOR);
 		return Collections.unmodifiableSet(targets);
 	}
 

@@ -56,6 +56,7 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 	private final ProtectedExitAuditStore protectedExitAudit;
 	private ProtectedExitDialog protectedExitDialog;
 	private boolean exitScheduled;
+	private boolean trayAvailable;
 
 	public HapticScapeDesktopWindow(
 		HapticScapeRuntime runtime,
@@ -126,7 +127,14 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 			@Override
 			public void windowClosing(WindowEvent event)
 			{
-				requestClose();
+				if (trayAvailable)
+				{
+					frame.setVisible(false);
+				}
+				else
+				{
+					requestClose();
+				}
 			}
 		});
 		loadWindowIcon();
@@ -204,6 +212,19 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 	{
 		requireEventDispatchThread();
 		frame.setVisible(true);
+	}
+
+	void setTrayAvailable(boolean available)
+	{
+		trayAvailable = available;
+	}
+
+	void hideToTray()
+	{
+		if (trayAvailable)
+		{
+			frame.setVisible(false);
+		}
 	}
 
 	void restoreFromTray()

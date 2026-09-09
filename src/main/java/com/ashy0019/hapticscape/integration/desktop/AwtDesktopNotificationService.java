@@ -37,14 +37,14 @@ public final class AwtDesktopNotificationService implements DesktopNotificationS
 	}
 
 	/** Installs the persistent tray icon and its application controls. */
-	public synchronized void installApplicationMenu(Runnable openAction, Runnable exitAction)
+	public synchronized boolean installApplicationMenu(Runnable openAction, Runnable exitAction)
 	{
 		Objects.requireNonNull(openAction, "openAction");
 		Objects.requireNonNull(exitAction, "exitAction");
 		TrayIcon icon = ensureTrayIcon();
 		if (icon == null)
 		{
-			return;
+			return false;
 		}
 
 		PopupMenu menu = new PopupMenu();
@@ -57,6 +57,7 @@ public final class AwtDesktopNotificationService implements DesktopNotificationS
 		menu.add(exit);
 		icon.setPopupMenu(menu);
 		icon.addActionListener(event -> EventQueue.invokeLater(openAction));
+		return true;
 	}
 
 	private TrayIcon ensureTrayIcon()

@@ -23,7 +23,7 @@ final class RemotePermissionsPanel extends JPanel
 	private final JCheckBox clicks = new JCheckBox("Click sounds");
 	private final JCheckBox notifications = new JCheckBox("Desktop notifications");
 	private final JCheckBox chatbox = new JCheckBox("Local chatbox notices");
-	private final JCheckBox protectedExit = new JCheckBox("Protected exit requests");
+	private final JCheckBox protectedExit = new JCheckBox("Protected startup and exit requests");
 	private final JSlider maximumIntensity = new JSlider(0, 100);
 	private final JLabel maximumIntensityValue = new JLabel();
 	private final JSpinner maximumDuration = new JSpinner(new SpinnerNumberModel(
@@ -63,7 +63,7 @@ final class RemotePermissionsPanel extends JPanel
 			"Show a local-only HapticScape console line; nothing is sent to game chat"
 		);
 		protectedExit.setToolTipText(
-			"Allow the controller to request a password-protected application exit lock"
+			"Allow the controller to request password-protected startup and exit locks"
 		);
 		PanelUi.addPreferredHeightComponent(this, settings);
 		PanelUi.addPreferredHeightComponent(this, haptics);

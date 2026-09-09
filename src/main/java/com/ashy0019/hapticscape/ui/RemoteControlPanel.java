@@ -107,7 +107,8 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 			editSubjectSettingsAction,
 			this::armSettingsLock,
 			sessionManager::cancelSettingsLock,
-			() -> settingsLockDraft.toggle(SettingsLockCatalog.PROTECTED_EXIT)
+			() -> settingsLockDraft.toggle(SettingsLockCatalog.PROTECTED_EXIT),
+			() -> settingsLockDraft.toggle(SettingsLockCatalog.STARTUP_BEHAVIOR)
 		);
 		this.pairingPanel = new RemotePairingPanel(
 			config,
@@ -301,11 +302,12 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 
 	private void confirmSettingsLockProposal(SettingsLockProposal proposal)
 	{
-		if (proposal.getTargets().contains(SettingsLockCatalog.PROTECTED_EXIT)
+		if ((proposal.getTargets().contains(SettingsLockCatalog.PROTECTED_EXIT)
+			|| proposal.getTargets().contains(SettingsLockCatalog.STARTUP_BEHAVIOR))
 			&& !sessionManager.getVisiblePermissions().isProtectedExitAllowed())
 		{
 			sessionManager.declinePendingSettingsLock();
-			showError("Protected exit requests are not permitted on this client.");
+			showError("Protected startup/exit requests are not permitted on this client.");
 			return;
 		}
 		if (!phraseTargetsExist(proposal.getTargets()))
@@ -437,6 +439,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 			controllerActive,
 			permissions.isSettingsAllowed(),
 			settingsLockDraft.contains(SettingsLockCatalog.PROTECTED_EXIT),
+			settingsLockDraft.contains(SettingsLockCatalog.STARTUP_BEHAVIOR),
 			permissions.isProtectedExitAllowed(),
 			sessionManager.isSavedUnlockKeyVaultAvailable(),
 			sessionManager.getSavedUnlockKeyVaultMessage()

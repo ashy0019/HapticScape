@@ -17,6 +17,17 @@ public class DesktopLaunchOptionsTest
 		assertEquals(null, options.getProfile());
 		assertEquals(41713, options.getGameplayPort());
 		assertEquals("HapticScape", options.getWindowTitle());
+		assertFalse(options.isMinimized());
+	}
+
+	@Test
+	public void startupLaunchCanBeginInTray()
+	{
+		DesktopLaunchOptions options = DesktopLaunchOptions.parse(
+			new String[] {"--minimized"}
+		);
+		assertTrue(options.isMinimized());
+		assertFalse(options.isNamedProfile());
 	}
 
 	@Test

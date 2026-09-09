@@ -84,7 +84,7 @@ import javax.swing.Timer;
 public final class HapticScapePanel extends JPanel
 	implements RemoteSessionListener, SettingsLockListener
 {
-	private static final int DEVELOPER_UNLOCK_CLICKS = 9;
+	private static final int DEVELOPER_UNLOCK_CLICKS = 8;
 	private static final long DEVELOPER_UNLOCK_WINDOW_NANOS = TimeUnit.SECONDS.toNanos(4);
 	private static final String NORMAL_CARD = "normal";
 	private static final String ROGUE_CARD = "rogue";
@@ -152,6 +152,7 @@ public final class HapticScapePanel extends JPanel
 	private final MusicPanel musicPanel;
 	private final ClickerPanel clickerPanel;
 	private final UpdatesPanel updatesPanel;
+	private final ApplicationStartupPanel applicationStartupPanel;
 	private final RemoteSessionManager remoteSessionManager;
 	private final SettingsLockService settingsLockService;
 	private final SettingsLockDraft settingsLockDraft = new SettingsLockDraft();
@@ -326,8 +327,10 @@ public final class HapticScapePanel extends JPanel
 			"Forget Rogue discovery and the unlock sting so the Konami code can be tested again"
 		);
 		clearSettingsLockButton.setMargin(new java.awt.Insets(2, 6, 2, 6));
+		clearSettingsLockButton.setText("Release all locks");
+		clearSettingsLockButton.setVisible(false);
 		clearSettingsLockButton.setToolTipText(
-			"Emergency recovery: remove the persistent feedback-settings lock"
+			"Developer recovery: release every persistent settings lock"
 		);
 		developerControlsRow.setVisible(false);
 		levelUpLockBinding = bindLockableCheckBox(
@@ -430,6 +433,16 @@ public final class HapticScapePanel extends JPanel
 			this::isLockSelectionEnabled
 		);
 		updatesPanel = new UpdatesPanel(updatePreferencesStore, updateCheckService);
+		applicationStartupPanel = new ApplicationStartupPanel(
+			(key, value) -> writeFeedbackSetting(
+				SettingsLockCatalog.STARTUP_BEHAVIOR, key, value),
+			settingsLockService,
+			settingsLockDraft,
+			remoteSessionManager::getLockSnapshot,
+			this::isSubjectWorkspaceActive,
+			this::isLockSelectionEnabled
+		);
+		applicationStartupPanel.apply(config.startWithWindows(), config.startMinimized());
 		RemoteLiveForgePanel liveForgePanel = new RemoteLiveForgePanel(
 			remoteSessionManager,
 			globalUiHooks
@@ -556,9 +569,13 @@ public final class HapticScapePanel extends JPanel
 		deviceButtons.add(disconnectButton);
 		deviceSettings.add(deviceButtons, BorderLayout.SOUTH);
 
+		JPanel applicationSettings = new JPanel();
+		applicationSettings.setLayout(new BoxLayout(applicationSettings, BoxLayout.Y_AXIS));
+		PanelUi.addPreferredHeightComponent(applicationSettings, applicationStartupPanel);
+		PanelUi.addPreferredHeightComponent(applicationSettings, updatesPanel);
 		JPanel settingsWorkspace = new ResponsiveColumnsPanel(
 			deviceSettings,
-			updatesPanel,
+			applicationSettings,
 			developerControlsRow
 		);
 
@@ -588,6 +605,7 @@ public final class HapticScapePanel extends JPanel
 		pageTitleLabel.setName("applicationPageTitle");
 		pageTitleLabel.setFont(pageTitleLabel.getFont().deriveFont(Font.BOLD));
 		applicationHeader.add(pageTitleLabel, BorderLayout.WEST);
+		applicationHeader.add(clearSettingsLockButton, BorderLayout.CENTER);
 		applicationHeader.add(primaryButtons, BorderLayout.EAST);
 
 		JPanel fixedHeader = new JPanel();
@@ -996,6 +1014,14 @@ public final class HapticScapePanel extends JPanel
 				handleDeveloperUnlockClick(event);
 			}
 		});
+		pageTitleLabel.addMouseListener(new MouseAdapter()
+		{
+			@Override
+			public void mouseClicked(MouseEvent event)
+			{
+				handleDeveloperUnlockClick(event);
+			}
+		});
 	}
 
 	private void writeFeedbackSetting(
@@ -1075,7 +1101,6 @@ public final class HapticScapePanel extends JPanel
 
 		developerControlsRow.add(previewLevel99Button);
 		developerControlsRow.add(resetRogueDiscoveryButton);
-		developerControlsRow.add(clearSettingsLockButton);
 		PanelUi.addPreferredHeightComponent(settings, developerControlsRow);
 		return settings;
 	}
@@ -1438,6 +1463,7 @@ public final class HapticScapePanel extends JPanel
 		developerUnlockClickCount = 0;
 		developerControlsUnlocked = !developerControlsUnlocked;
 		developerControlsRow.setVisible(developerControlsUnlocked);
+		clearSettingsLockButton.setVisible(developerControlsUnlocked);
 		refreshDeveloperControlsLayout();
 		revalidate();
 		repaint();
@@ -1596,6 +1622,10 @@ public final class HapticScapePanel extends JPanel
 				settings.getClickerSettings(),
 				settings.getClickerXpSettings(),
 				settings.getClickerPhraseRules()
+			);
+			applicationStartupPanel.apply(
+				settings.isStartWithWindows(),
+				settings.isStartMinimized()
 			);
 		}
 		finally
@@ -1906,6 +1936,7 @@ public final class HapticScapePanel extends JPanel
 		unlockSettingsButton.setVisible(locked && localWorkspace);
 		unlockSettingsButton.setEnabled(locked && localWorkspace);
 		clearSettingsLockButton.setEnabled(locked);
+		applicationStartupPanel.refreshLockState();
 		refreshSettingsAccessMode();
 		revalidate();
 		repaint();

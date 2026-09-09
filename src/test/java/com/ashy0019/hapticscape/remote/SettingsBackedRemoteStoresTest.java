@@ -128,6 +128,8 @@ public class SettingsBackedRemoteStoresTest
 		values.put("clickerGenericNotificationEnabled", false);
 		values.put("clickerAlertSettings", "");
 		values.put("clickerPhraseRules", "");
+		values.put("startWithWindows", false);
+		values.put("startMinimized", false);
 		return values;
 	}
 

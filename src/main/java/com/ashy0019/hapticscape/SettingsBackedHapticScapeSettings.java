@@ -250,6 +250,18 @@ public final class SettingsBackedHapticScapeSettings implements HapticScapeSetti
     }
 
     @Override
+    public boolean startWithWindows()
+    {
+        return booleanValue(HapticScapeSettingKeys.START_WITH_WINDOWS, false);
+    }
+
+    @Override
+    public boolean startMinimized()
+    {
+        return booleanValue(HapticScapeSettingKeys.START_MINIMIZED, false);
+    }
+
+    @Override
     public boolean remoteSettingsAllowed()
     {
         return booleanValue(HapticScapeSettingKeys.REMOTE_SETTINGS_ALLOWED, true);

@@ -39,7 +39,7 @@ final class RemotePermissionSummaryPanel extends JPanel
 				: "Blocked")
 			+ "\nClicks: " + allowed(permissions.isClicksAllowed())
 			+ "\nMessages: " + messageDestinations(permissions)
-			+ "\nProtected exit: " + allowed(permissions.isProtectedExitAllowed());
+			+ "\nProtected startup/exit: " + allowed(permissions.isProtectedExitAllowed());
 	}
 
 	private static String messageDestinations(RemotePermissions permissions)

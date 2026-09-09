@@ -11,8 +11,9 @@ internal sealed class HapticScapeLaunchOptions
 
 	internal string Profile { get; private set; }
 	internal int GameplayPort { get; private set; }
+	internal bool Minimized { get; private set; }
 	internal bool IsNamedProfile { get { return Profile != null; } }
-	internal bool IsDefault { get { return !IsNamedProfile && GameplayPort == 41713; } }
+	internal bool IsDefault { get { return !IsNamedProfile && GameplayPort == 41713 && !Minimized; } }
 	internal string MutexName
 	{
 		get
@@ -22,15 +23,16 @@ internal sealed class HapticScapeLaunchOptions
 		}
 	}
 
-	private HapticScapeLaunchOptions(string profile, int gameplayPort)
+	private HapticScapeLaunchOptions(string profile, int gameplayPort, bool minimized)
 	{
 		Profile = profile;
 		GameplayPort = gameplayPort;
+		Minimized = minimized;
 	}
 
 	internal static HapticScapeLaunchOptions Defaults()
 	{
-		return new HapticScapeLaunchOptions(null, 41713);
+		return new HapticScapeLaunchOptions(null, 41713, false);
 	}
 
 	internal static HapticScapeLaunchOptions Parse(string[] args)
@@ -39,6 +41,7 @@ internal sealed class HapticScapeLaunchOptions
 		int gameplayPort = 41713;
 		bool profileSeen = false;
 		bool portSeen = false;
+		bool minimized = false;
 		for (int index = 0; index < args.Length; index++)
 		{
 			string argument = args[index];
@@ -62,12 +65,16 @@ internal sealed class HapticScapeLaunchOptions
 				RequireUnique(ref portSeen, argument);
 				gameplayPort = ParsePort(RequireValue(args, ref index, argument));
 			}
+			else if (string.Equals(argument, "--minimized", StringComparison.Ordinal))
+			{
+				minimized = true;
+			}
 			else
 			{
 				throw new InvalidOperationException("Unknown launch option: " + argument);
 			}
 		}
-		return new HapticScapeLaunchOptions(profile, gameplayPort);
+		return new HapticScapeLaunchOptions(profile, gameplayPort, minimized);
 	}
 
 	internal string JavaArguments()
@@ -81,6 +88,10 @@ internal sealed class HapticScapeLaunchOptions
 		{
 			arguments.Append(" --gameplay-port ")
 				.Append(GameplayPort.ToString(CultureInfo.InvariantCulture));
+		}
+		if (Minimized)
+		{
+			arguments.Append(" --minimized");
 		}
 		return arguments.ToString();
 	}

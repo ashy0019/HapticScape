@@ -21,18 +21,21 @@ final class RemoteLockPreparationPanel extends JPanel
 	private final JButton requestButton = new JButton("Generate key & request");
 	private final JButton cancelButton = new JButton("Cancel request");
 	private final JCheckBox protectedExit = new JCheckBox("Protect application exit");
+	private final JCheckBox startupBehavior = new JCheckBox("Protect startup behavior");
 	private final JPanel actions = new JPanel(new GridLayout(0, 1, 0, 4));
 
 	RemoteLockPreparationPanel(
 		Runnable openSubjectSettings,
 		Runnable requestLock,
 		Runnable cancelLock,
-		Runnable toggleProtectedExit)
+		Runnable toggleProtectedExit,
+		Runnable toggleStartupBehavior)
 	{
 		Objects.requireNonNull(openSubjectSettings, "openSubjectSettings");
 		Objects.requireNonNull(requestLock, "requestLock");
 		Objects.requireNonNull(cancelLock, "cancelLock");
 		Objects.requireNonNull(toggleProtectedExit, "toggleProtectedExit");
+		Objects.requireNonNull(toggleStartupBehavior, "toggleStartupBehavior");
 		setName("remoteLockPreparation");
 		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
 		setBorder(PanelUi.createSectionBorder("Post-session lock"));
@@ -44,6 +47,7 @@ final class RemoteLockPreparationPanel extends JPanel
 		requestButton.setName("remoteLockRequest");
 		cancelButton.setName("remoteLockCancel");
 		protectedExit.setName("remoteLockProtectedExit");
+		startupBehavior.setName("remoteLockStartupBehavior");
 		protectedExit.setToolTipText(
 			"The participant must explicitly allow and approve protected exit"
 		);
@@ -57,11 +61,13 @@ final class RemoteLockPreparationPanel extends JPanel
 		PanelUi.addPreferredHeightComponent(this, stateLabel);
 		PanelUi.addFlexibleVerticalComponent(this, detailLabel);
 		PanelUi.addPreferredHeightComponent(this, protectedExit);
+		PanelUi.addPreferredHeightComponent(this, startupBehavior);
 		PanelUi.addPreferredHeightComponent(this, actions);
 		openSubjectButton.addActionListener(event -> openSubjectSettings.run());
 		requestButton.addActionListener(event -> requestLock.run());
 		cancelButton.addActionListener(event -> cancelLock.run());
 		protectedExit.addActionListener(event -> toggleProtectedExit.run());
+		startupBehavior.addActionListener(event -> toggleStartupBehavior.run());
 	}
 
 	void apply(
@@ -70,6 +76,7 @@ final class RemoteLockPreparationPanel extends JPanel
 		boolean controllerActive,
 		boolean subjectSettingsAvailable,
 		boolean protectedExitSelected,
+		boolean startupBehaviorSelected,
 		boolean protectedExitAllowed,
 		boolean vaultAvailable,
 		String vaultMessage)
@@ -87,6 +94,7 @@ final class RemoteLockPreparationPanel extends JPanel
 			? null
 			: "The participant has not allowed settings changes");
 		protectedExit.setSelected(protectedExitSelected);
+		startupBehavior.setSelected(startupBehaviorSelected);
 		protectedExit.setEnabled(
 			controllerActive
 				&& protectedExitAllowed
@@ -95,6 +103,10 @@ final class RemoteLockPreparationPanel extends JPanel
 		protectedExit.setToolTipText(protectedExitAllowed
 			? "Include password-protected application exit in this lock request"
 			: "The participant has not allowed protected exit requests");
+		startupBehavior.setEnabled(protectedExit.isEnabled());
+		startupBehavior.setToolTipText(protectedExitAllowed
+			? "Preserve the accepted Start with Windows and minimized settings"
+			: "The participant has not allowed protected startup requests");
 		requestButton.setEnabled(controllerActive && effectiveCount > 0 && vaultAvailable);
 		requestButton.setToolTipText(vaultAvailable ? null : vaultMessage);
 		cancelButton.setText(view.getCancelLabel());

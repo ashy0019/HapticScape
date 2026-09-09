@@ -144,7 +144,7 @@ public class RemoteSessionDashboardTest
 				+ "Live Forge: Up to 30 s\n"
 				+ "Clicks: Allowed\n"
 				+ "Messages: Desktop only\n"
-				+ "Protected exit: Blocked",
+				+ "Protected startup/exit: Blocked",
 			RemotePermissionSummaryPanel.describe(permissions)
 		);
 
@@ -165,7 +165,7 @@ public class RemoteSessionDashboardTest
 				+ "Live Forge: Blocked\n"
 				+ "Clicks: Blocked\n"
 				+ "Messages: Blocked\n"
-				+ "Protected exit: Blocked",
+				+ "Protected startup/exit: Blocked",
 			RemotePermissionSummaryPanel.describe(blocked)
 		);
 	}

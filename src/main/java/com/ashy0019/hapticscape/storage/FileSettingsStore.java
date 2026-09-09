@@ -11,6 +11,8 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Objects;
 import java.util.Properties;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.BiConsumer;
 
 /**
  * Durable standalone settings store backed by a UTF-8 properties file.
@@ -24,6 +26,8 @@ public final class FileSettingsStore implements SettingsStore
 {
 	private final Path settingsPath;
 	private final Properties values = new Properties();
+	private final CopyOnWriteArrayList<BiConsumer<String, String>> listeners =
+		new CopyOnWriteArrayList<>();
 
 	public FileSettingsStore(Path settingsPath)
 	{
@@ -45,6 +49,15 @@ public final class FileSettingsStore implements SettingsStore
 		Objects.requireNonNull(value, "value");
 		values.setProperty(key, String.valueOf(value));
 		persist();
+		for (BiConsumer<String, String> listener : listeners)
+		{
+			listener.accept(key, String.valueOf(value));
+		}
+	}
+
+	public void addChangeListener(BiConsumer<String, String> listener)
+	{
+		listeners.add(Objects.requireNonNull(listener, "listener"));
 	}
 
 	public Path getSettingsPath()

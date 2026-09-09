@@ -291,13 +291,14 @@ final class RemoteLockCoordinator
 			}
 			proposal.validate();
 			String proposalId = proposal.getProposalId();
-			if (proposal.getTargets().contains(SettingsLockCatalog.PROTECTED_EXIT)
+			if ((proposal.getTargets().contains(SettingsLockCatalog.PROTECTED_EXIT)
+				|| proposal.getTargets().contains(SettingsLockCatalog.STARTUP_BEHAVIOR))
 				&& !protectedExitAllowed.getAsBoolean())
 			{
 				participantDeclinedLockId = proposalId;
 				publish(
 					RemoteLockState.DECLINED,
-					"Protected exit permission was not granted"
+					"Protected startup/exit permission was not granted"
 				);
 				sender.send(RemoteMessageType.LOCK_DECLINED, 0, proposalId);
 				return;

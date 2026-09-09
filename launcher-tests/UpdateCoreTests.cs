@@ -55,6 +55,12 @@ internal static class UpdateCoreTests
 		Assert(controller.JavaArguments() == " --profile controller --gameplay-port 41714",
 			"validated options are forwarded to Java");
 
+		HapticScapeLaunchOptions minimized = HapticScapeLaunchOptions.Parse(
+			new[] { "--minimized" });
+		Assert(minimized.Minimized, "minimized startup should be parsed");
+		Assert(minimized.JavaArguments() == " --minimized",
+			"minimized startup should be forwarded to Java");
+
 		AssertThrows<InvalidOperationException>(delegate
 		{
 			HapticScapeLaunchOptions.Parse(new[] { "--profile", "../escape" });
