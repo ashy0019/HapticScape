@@ -1,6 +1,7 @@
 package com.ashy0019.hapticscape.ui;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
@@ -85,6 +86,16 @@ public class WorkspaceShellTest
 			return null;
 		});
 		assertEquals(
+			BorderLayout.NORTH,
+			((BorderLayout) shell.getLayout()).getConstraints(navigationHost)
+		);
+		onEdt(() ->
+		{
+			shell.setSize(1000, 600);
+			shell.dispatchEvent(new ComponentEvent(shell, ComponentEvent.COMPONENT_RESIZED));
+			return null;
+		});
+		assertEquals(
 			BorderLayout.WEST,
 			((BorderLayout) shell.getLayout()).getConstraints(navigationHost)
 		);
@@ -92,10 +103,94 @@ public class WorkspaceShellTest
 	}
 
 	@Test
+	public void workspaceCompositionStopsGrowingAtReferenceWidth()
+		throws Exception
+	{
+		assertEquals(0, WorkspaceShell.workspaceContentWidthFor(-20));
+		assertEquals(520, WorkspaceShell.workspaceContentWidthFor(520));
+		assertEquals(800, WorkspaceShell.workspaceContentWidthFor(800));
+		assertEquals(800, WorkspaceShell.workspaceContentWidthFor(1600));
+
+		WorkspaceShell shell = onEdt(() ->
+		{
+			WorkspaceShell created = new WorkspaceShell(new JScrollPane());
+			created.addWorkspace("gameplay", "Gameplay", new JPanel());
+			return created;
+		});
+		Container widthHost = component(
+			shell,
+			"workspaceContentWidthHost",
+			Container.class
+		);
+		Component cards = component(shell, "workspaceCards", Component.class);
+		onEdt(() ->
+		{
+			widthHost.setSize(1400, 600);
+			widthHost.doLayout();
+			return null;
+		});
+		assertEquals(800, cards.getWidth());
+		onEdt(() ->
+		{
+			widthHost.setSize(620, 600);
+			widthHost.doLayout();
+			return null;
+		});
+		assertEquals(620, cards.getWidth());
+	}
+
+	@Test
+	public void wideWindowsExposeAnAdjacentDockWithoutStretchingTheWorkspace()
+		throws Exception
+	{
+		AtomicReference<Boolean> dockVisible = new AtomicReference<>();
+		JPanel dockContent = new JPanel();
+		WorkspaceShell shell = onEdt(() ->
+		{
+			WorkspaceShell created = new WorkspaceShell(new JScrollPane());
+			created.addWorkspace("gameplay", "Gameplay", new JPanel());
+			created.setWideDockComponent(dockContent);
+			created.setWideDockVisibilityAction(dockVisible::set);
+			return created;
+		});
+		Container dock = component(shell, "workspaceWideDock", Container.class);
+		Container body = component(shell, "workspaceBody", Container.class);
+		Component cards = component(shell, "workspaceCards", Component.class);
+
+		onEdt(() ->
+		{
+			shell.setSize(1599, 700);
+			shell.dispatchEvent(new ComponentEvent(shell, ComponentEvent.COMPONENT_RESIZED));
+			return null;
+		});
+		assertFalse(shell.isWideDockVisible());
+		assertEquals(Boolean.FALSE, dockVisible.get());
+		assertFalse(dock.isVisible());
+
+		onEdt(() ->
+		{
+			shell.setSize(1600, 700);
+			shell.dispatchEvent(new ComponentEvent(shell, ComponentEvent.COMPONENT_RESIZED));
+			body.setSize(1412, 650);
+			body.doLayout();
+			component(shell, "workspaceContentWidthHost", Container.class).doLayout();
+			return null;
+		});
+		assertTrue(shell.isWideDockVisible());
+		assertEquals(Boolean.TRUE, dockVisible.get());
+		assertTrue(dock.isVisible());
+		assertSame(dock, dockContent.getParent());
+		assertEquals(800, cards.getWidth());
+		assertEquals(808, dock.getX());
+		assertEquals(604, dock.getWidth());
+	}
+
+	@Test
 	public void suppliedViewportScrollsInsideFixedShell() throws Exception
 	{
 		JScrollPane page = new JScrollPane();
 		JPanel status = new JPanel();
+		status.setPreferredSize(new java.awt.Dimension(100, 32));
 		WorkspaceShell shell = onEdt(() ->
 		{
 			WorkspaceShell created = new WorkspaceShell(page);
@@ -113,9 +208,21 @@ public class WorkspaceShellTest
 			((BorderLayout) shell.getLayout()).getConstraints(page)
 		);
 		assertSame(
-			component(shell, "workspaceRailStatus", Container.class),
+			component(shell, "workspaceStatusBar", Container.class),
 			status.getParent()
 		);
+		assertEquals(
+			BorderLayout.SOUTH,
+			((BorderLayout) shell.getLayout()).getConstraints(status.getParent())
+		);
+		onEdt(() ->
+		{
+			shell.setSize(1000, 700);
+			shell.doLayout();
+			return null;
+		});
+		Container footer = status.getParent();
+		assertEquals(shell.getHeight(), footer.getY() + footer.getHeight());
 	}
 
 	@Test

@@ -30,6 +30,16 @@ public class MusicPanelTest
 		assertTrue(component(panel, "musicSensitivity", JSlider.class).isEnabled());
 		assertTrue(component(panel, "musicMinimumIntensity", JSlider.class).isEnabled());
 		assertTrue(component(panel, "musicMaximumIntensity", JSlider.class).isEnabled());
+		AbstractButton action = component(panel, "musicSyncToggle", AbstractButton.class);
+		assertTrue(
+			action.getPreferredSize().height
+				>= action.getFontMetrics(action.getFont()).getHeight()
+		);
+		JProgressBar meter = component(panel, "musicOutputMeter", JProgressBar.class);
+		assertTrue(
+			meter.getPreferredSize().height
+				>= meter.getFontMetrics(meter.getFont()).getHeight() + 4
+		);
 	}
 
 	@Test

@@ -24,7 +24,6 @@ import java.awt.event.MouseEvent;
 import java.math.BigDecimal;
 import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.function.Consumer;
 import javax.swing.BorderFactory;
@@ -37,6 +36,7 @@ import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JSlider;
 import javax.swing.JSpinner;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
@@ -47,6 +47,15 @@ final class PatternForgePanel extends JPanel
 	private static final int MAXIMUM_UNDO_STATES = 20;
 	private static final int WIDE_BREAKPOINT = 1120;
 	private static final int MEDIUM_BREAKPOINT = 720;
+	private static final int FINE_DURATION_MAX_MILLIS = 2_000;
+	private static final int FINE_DURATION_STEP_MILLIS = 50;
+	private static final int COARSE_DURATION_STEP_MILLIS = 250;
+	private static final int FINE_DURATION_STEPS =
+		(FINE_DURATION_MAX_MILLIS - CustomPatternEntry.MINIMUM_BEAT_DURATION_MILLIS)
+			/ FINE_DURATION_STEP_MILLIS;
+	private static final int DURATION_SLIDER_MAX = FINE_DURATION_STEPS
+		+ (CustomPatternEntry.MAXIMUM_BEAT_DURATION_MILLIS
+			- FINE_DURATION_MAX_MILLIS) / COARSE_DURATION_STEP_MILLIS;
 
 	private final SettingsChangeSink settingsSink;
 	private final Consumer<CustomPatternEntry> previewAction;
@@ -60,12 +69,11 @@ final class PatternForgePanel extends JPanel
 	private final JButton clearButton = new JButton("Clear");
 	private final JButton previewButton = new JButton("Preview");
 	private final JButton saveButton = new JButton("Save");
-	private final JSpinner beatDurationSpinner = new JSpinner(new SpinnerNumberModel(
-		CustomPatternEntry.DEFAULT_BEAT_DURATION_MILLIS,
-		CustomPatternEntry.MINIMUM_BEAT_DURATION_MILLIS,
-		CustomPatternEntry.MAXIMUM_BEAT_DURATION_MILLIS,
-		50
-	));
+	private final JSlider beatDurationSlider = new JSlider(
+		0,
+		DURATION_SLIDER_MAX,
+		sliderValueForDuration(CustomPatternEntry.DEFAULT_BEAT_DURATION_MILLIS)
+	);
 	private final JSpinner beatCountSpinner = new JSpinner(new SpinnerNumberModel(
 		CustomPatternEntry.DEFAULT_BEAT_COUNT,
 		CustomPatternEntry.MINIMUM_BEAT_COUNT,
@@ -74,6 +82,7 @@ final class PatternForgePanel extends JPanel
 	));
 	private final JLabel playbackSummaryLabel = new JLabel();
 	private final JLabel beatSummaryLabel = new JLabel("", SwingConstants.RIGHT);
+	private final JLabel beatDurationValueLabel = new JLabel("", SwingConstants.RIGHT);
 	private final JLabel saveStateLabel = new JLabel("Saved", SwingConstants.RIGHT);
 	private final PatternTimeline outputTimeline = new PatternTimeline();
 	private final Deque<CustomPattern> undoStates = new ArrayDeque<>();
@@ -182,13 +191,14 @@ final class PatternForgePanel extends JPanel
 		shapeFooter.add(drawingButtons, BorderLayout.SOUTH);
 		shapePanel.add(shapeFooter, BorderLayout.SOUTH);
 
-		configureCompactSpinner(beatDurationSpinner);
 		configureCompactSpinner(beatCountSpinner);
-		beatDurationSpinner.setName("patternBeatDuration");
+		beatDurationSlider.setName("patternBeatDuration");
+		beatDurationValueLabel.setName("patternBeatDurationValue");
 		beatCountSpinner.setName("patternBeatCount");
-		beatDurationSpinner.setToolTipText(
-			"Length of one drawn beat, from 50 ms to 10 seconds"
+		beatDurationSlider.setToolTipText(
+			"Beat length from 250 ms to 10 seconds; finer steps below 2 seconds"
 		);
+		beatDurationSlider.getAccessibleContext().setAccessibleName("Beat length");
 		beatCountSpinner.setToolTipText(
 			"Number of times to repeat the drawn beat, from 1 to 72"
 		);
@@ -197,9 +207,10 @@ final class PatternForgePanel extends JPanel
 		playbackPanel.setLayout(new BoxLayout(playbackPanel, BoxLayout.Y_AXIS));
 		playbackPanel.setBorder(PanelUi.createSectionBorder("Playback"));
 		JPanel beatDurationRow = new JPanel(new BorderLayout(8, 0));
-		beatDurationRow.add(new JLabel("Beat length (ms)"), BorderLayout.CENTER);
-		beatDurationRow.add(beatDurationSpinner, BorderLayout.EAST);
+		beatDurationRow.add(new JLabel("Beat length"), BorderLayout.CENTER);
+		beatDurationRow.add(beatDurationValueLabel, BorderLayout.EAST);
 		PanelUi.addPreferredHeightComponent(playbackPanel, beatDurationRow);
+		PanelUi.addPreferredHeightComponent(playbackPanel, beatDurationSlider);
 
 		JPanel beatCountRow = new JPanel(new BorderLayout(8, 0));
 		beatCountRow.add(new JLabel("Repeat"), BorderLayout.CENTER);
@@ -244,7 +255,7 @@ final class PatternForgePanel extends JPanel
 		clearButton.addActionListener(event -> changeDraft(CustomPattern.silent(), true));
 		previewButton.addActionListener(event -> preview());
 		saveButton.addActionListener(event -> saveDraft());
-		beatDurationSpinner.addChangeListener(event -> changePlaybackSettings());
+		beatDurationSlider.addChangeListener(event -> changePlaybackSettings());
 		beatCountSpinner.addChangeListener(event -> changePlaybackSettings());
 
 		int initialId = library.getPatterns().get(0).getId();
@@ -352,7 +363,9 @@ final class PatternForgePanel extends JPanel
 			patternComboBox.setSelectedItem(entry);
 			draft = entry.getPattern();
 			canvas.setPattern(draft);
-			beatDurationSpinner.setValue(entry.getBeatDurationMillis());
+			beatDurationSlider.setValue(sliderValueForDuration(
+				entry.getBeatDurationMillis()
+			));
 			beatCountSpinner.setValue(entry.getBeatCount());
 			updatePlaybackSummary();
 			undoStates.clear();
@@ -578,7 +591,7 @@ final class PatternForgePanel extends JPanel
 		boolean editable = !remoteReadOnly;
 		// Pattern selection is navigation only and remains available while locked.
 		patternComboBox.setEnabled(true);
-		beatDurationSpinner.setEnabled(editable);
+		beatDurationSlider.setEnabled(editable);
 		beatCountSpinner.setEnabled(editable);
 		canvas.setEditable(editable);
 		clearButton.setEnabled(editable);
@@ -648,7 +661,7 @@ final class PatternForgePanel extends JPanel
 
 	private int getBeatDurationMillis()
 	{
-		return ((Number) beatDurationSpinner.getValue()).intValue();
+		return durationForSliderValue(beatDurationSlider.getValue());
 	}
 
 	private int getBeatCount()
@@ -662,9 +675,38 @@ final class PatternForgePanel extends JPanel
 		int beatCount = getBeatCount();
 		long totalMillis = (long) beatDurationMillis * beatCount;
 		beatSummaryLabel.setText("One beat · " + formatDuration(beatDurationMillis));
+		beatDurationValueLabel.setText(formatDuration(beatDurationMillis));
 		playbackSummaryLabel.setText("Total " + formatDuration(totalMillis));
 		canvas.setBeatDurationMillis(beatDurationMillis);
 		outputTimeline.setPlayback(beatDurationMillis, beatCount);
+	}
+
+	static int durationForSliderValue(int sliderValue)
+	{
+		int clamped = Math.max(0, Math.min(DURATION_SLIDER_MAX, sliderValue));
+		if (clamped <= FINE_DURATION_STEPS)
+		{
+			return CustomPatternEntry.MINIMUM_BEAT_DURATION_MILLIS
+				+ clamped * FINE_DURATION_STEP_MILLIS;
+		}
+		return FINE_DURATION_MAX_MILLIS
+			+ (clamped - FINE_DURATION_STEPS) * COARSE_DURATION_STEP_MILLIS;
+	}
+
+	static int sliderValueForDuration(int durationMillis)
+	{
+		int clamped = Math.max(
+			CustomPatternEntry.MINIMUM_BEAT_DURATION_MILLIS,
+			Math.min(CustomPatternEntry.MAXIMUM_BEAT_DURATION_MILLIS, durationMillis)
+		);
+		if (clamped <= FINE_DURATION_MAX_MILLIS)
+		{
+			return (clamped - CustomPatternEntry.MINIMUM_BEAT_DURATION_MILLIS
+				+ FINE_DURATION_STEP_MILLIS / 2) / FINE_DURATION_STEP_MILLIS;
+		}
+		return FINE_DURATION_STEPS
+			+ (clamped - FINE_DURATION_MAX_MILLIS
+				+ COARSE_DURATION_STEP_MILLIS / 2) / COARSE_DURATION_STEP_MILLIS;
 	}
 
 	private static String formatDuration(long durationMillis)
@@ -673,11 +715,9 @@ final class PatternForgePanel extends JPanel
 		{
 			return durationMillis + " ms";
 		}
-		if (durationMillis % 1_000 == 0)
-		{
-			return (durationMillis / 1_000) + " s";
-		}
-		return String.format(Locale.ROOT, "%.1f s", durationMillis / 1_000.0);
+		return BigDecimal.valueOf(durationMillis, 3)
+			.stripTrailingZeros()
+			.toPlainString() + " s";
 	}
 
 	static String formatTimelineOffset(int durationMillis)

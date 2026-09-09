@@ -98,9 +98,41 @@ final class PanelUi
 	static void addPreferredHeightComponent(JPanel panel, JComponent component)
 	{
 		Dimension preferredSize = component.getPreferredSize();
+		int stableHeight = preferredSize.height;
+		if (component instanceof JLabel && component.getFont() != null)
+		{
+			Insets insets = component.getInsets();
+			stableHeight = Math.max(
+				stableHeight,
+				component.getFontMetrics(component.getFont()).getHeight()
+					+ insets.top + insets.bottom
+			);
+		}
+		Dimension minimumSize = component.getMinimumSize();
 		component.setAlignmentX(Component.LEFT_ALIGNMENT);
-		component.setMaximumSize(new Dimension(Integer.MAX_VALUE, preferredSize.height));
+		component.setMinimumSize(new Dimension(
+			minimumSize.width,
+			Math.max(minimumSize.height, stableHeight)
+		));
+		component.setMaximumSize(new Dimension(Integer.MAX_VALUE, stableHeight));
 		panel.add(component);
+	}
+
+	static void reserveSingleLineTextHeight(JComponent component, int verticalPadding)
+	{
+		Insets insets = component.getInsets();
+		int textHeight = component.getFontMetrics(component.getFont()).getHeight()
+			+ insets.top + insets.bottom + Math.max(0, verticalPadding) * 2;
+		Dimension preferred = component.getPreferredSize();
+		Dimension minimum = component.getMinimumSize();
+		component.setPreferredSize(new Dimension(
+			preferred.width,
+			Math.max(preferred.height, textHeight)
+		));
+		component.setMinimumSize(new Dimension(
+			minimum.width,
+			Math.max(minimum.height, textHeight)
+		));
 	}
 
 	/**

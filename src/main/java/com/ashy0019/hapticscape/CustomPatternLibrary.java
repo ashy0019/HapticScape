@@ -24,6 +24,7 @@ public final class CustomPatternLibrary
 	private static final String VERSION_THREE_PREFIX = "v3|";
 	private static final String VERSION_TWO_PREFIX = "v2|";
 	private static final int MAXIMUM_NAME_LENGTH = 18;
+	private static final int LEGACY_MINIMUM_BEAT_DURATION_MILLIS = 50;
 
 	private final List<CustomPatternEntry> patterns;
 	private final int nextPatternId;
@@ -311,7 +312,7 @@ public final class CustomPatternLibrary
 				}
 				String name = migrateLegacyName(valueFields[0], id, legacySlots);
 				int beatDurationMillis = includesPlayback
-					? Integer.parseInt(valueFields[1])
+					? migrateBeatDuration(Integer.parseInt(valueFields[1]))
 					: CustomPatternEntry.DEFAULT_BEAT_DURATION_MILLIS;
 				int beatCount = includesPlayback
 					? Integer.parseInt(valueFields[2])
@@ -331,6 +332,16 @@ public final class CustomPatternLibrary
 			}
 		}
 		return parsed;
+	}
+
+	private static int migrateBeatDuration(int configuredDurationMillis)
+	{
+		if (configuredDurationMillis >= LEGACY_MINIMUM_BEAT_DURATION_MILLIS
+			&& configuredDurationMillis < CustomPatternEntry.MINIMUM_BEAT_DURATION_MILLIS)
+		{
+			return CustomPatternEntry.MINIMUM_BEAT_DURATION_MILLIS;
+		}
+		return configuredDurationMillis;
 	}
 
 	private static int legacySlotId(String slot)

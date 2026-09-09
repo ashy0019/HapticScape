@@ -4,7 +4,9 @@ import java.awt.Dimension;
 import java.awt.Insets;
 import java.awt.image.BufferedImage;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
+import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
@@ -17,6 +19,28 @@ import static org.junit.Assert.assertTrue;
 
 public class PanelUiTest
 {
+	@Test
+	public void preferredHeightRowsReserveSpaceForTextAddedLater() throws Exception
+	{
+		AtomicReference<JLabel> result = new AtomicReference<>();
+		SwingUtilities.invokeAndWait(() ->
+		{
+			JPanel host = new JPanel();
+			host.setLayout(new BoxLayout(host, BoxLayout.Y_AXIS));
+			JLabel dynamic = new JLabel();
+			dynamic.setBorder(BorderFactory.createEmptyBorder(3, 2, 4, 2));
+			PanelUi.addPreferredHeightComponent(host, dynamic);
+			dynamic.setText("Uses the settings in Generic defaults.");
+			result.set(dynamic);
+		});
+
+		JLabel dynamic = result.get();
+		int requiredHeight = dynamic.getFontMetrics(dynamic.getFont()).getHeight()
+			+ dynamic.getInsets().top + dynamic.getInsets().bottom;
+		assertTrue(dynamic.getMinimumSize().height >= requiredHeight);
+		assertTrue(dynamic.getMaximumSize().height >= requiredHeight);
+	}
+
 	@Test
 	public void flexibleWidthHeightHintDoesNotImposeOldWorkspaceWidths()
 		throws Exception

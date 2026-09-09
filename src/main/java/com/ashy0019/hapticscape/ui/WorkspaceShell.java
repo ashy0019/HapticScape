@@ -30,27 +30,35 @@ import javax.swing.SwingConstants;
 /** Fixed application navigation surrounding one independently scrolling workspace. */
 final class WorkspaceShell extends JPanel
 {
-	private static final int COMPACT_BREAKPOINT = 820;
+	private static final int COMPACT_BREAKPOINT = 960;
+	private static final int WIDE_DOCK_BREAKPOINT = 1600;
 	private static final int RAIL_WIDTH = 164;
+	private static final int WORKSPACE_CONTENT_WIDTH = 800;
+	private static final int WIDE_DOCK_GAP = 8;
+	private static final int WIDE_DOCK_MAX_WIDTH = 900;
 
 	private final CardLayout cards = new CardLayout();
 	private final JPanel content = new JPanel(cards);
+	private final JPanel contentWidthHost = new BoundedWidthHost(content);
+	private final JPanel wideDockHost = new JPanel(new BorderLayout());
+	private final WorkspaceBody workspaceBody = new WorkspaceBody();
 	private final ScrollableWorkspace viewportContent = new ScrollableWorkspace();
 	private final JScrollPane pageScrollPane;
 	private final JPanel navigationHost = new JPanel(new BorderLayout());
 	private final JPanel navigationBody = new JPanel(new BorderLayout());
 	private final JPanel navigation = new JPanel();
 	private final JPanel brand = new JPanel();
-	private final JPanel railStatusHost = new JPanel(new BorderLayout());
-	private final JPanel compactStatusHost = new JPanel(new BorderLayout());
+	private final JPanel statusBar = new JPanel(new BorderLayout());
 	private final Map<String, JToggleButton> buttons = new LinkedHashMap<>();
 	private final Map<String, String> labels = new LinkedHashMap<>();
 	private final ButtonGroup buttonGroup = new ButtonGroup();
 	private Consumer<String> userSelectionAction = ignored -> { };
 	private Consumer<String> selectionAction = ignored -> { };
+	private Consumer<Boolean> wideDockVisibilityAction = ignored -> { };
 	private Component statusComponent;
 	private String selectedId;
 	private boolean compact;
+	private boolean wideDockVisible;
 
 	WorkspaceShell(JScrollPane pageScrollPane)
 	{
@@ -65,19 +73,29 @@ final class WorkspaceShell extends JPanel
 		navigationBody.setBackground(HapticScapeTheme.SIDEBAR);
 		navigation.setName("workspaceNavigation");
 		navigation.setBackground(HapticScapeTheme.SIDEBAR);
-		railStatusHost.setName("workspaceRailStatus");
-		railStatusHost.setBackground(HapticScapeTheme.SIDEBAR);
-		compactStatusHost.setName("workspaceCompactStatus");
-		compactStatusHost.setBackground(HapticScapeTheme.SURFACE);
+		statusBar.setName("workspaceStatusBar");
+		statusBar.setBackground(HapticScapeTheme.SURFACE);
+		statusBar.setBorder(BorderFactory.createMatteBorder(
+			1,
+			0,
+			0,
+			0,
+			HapticScapeTheme.BORDER
+		));
 
 		navigationBody.add(navigation, BorderLayout.NORTH);
 		navigationHost.add(brand, BorderLayout.NORTH);
 		navigationHost.add(navigationBody, BorderLayout.CENTER);
-		navigationHost.add(railStatusHost, BorderLayout.SOUTH);
 
 		viewportContent.setName("workspaceViewportContent");
 		viewportContent.setBorder(BorderFactory.createEmptyBorder(10, 12, 12, 12));
-		viewportContent.add(content, BorderLayout.CENTER);
+		content.setName("workspaceCards");
+		contentWidthHost.setName("workspaceContentWidthHost");
+		wideDockHost.setName("workspaceWideDock");
+		wideDockHost.setOpaque(false);
+		wideDockHost.setVisible(false);
+		workspaceBody.setName("workspaceBody");
+		viewportContent.add(workspaceBody, BorderLayout.CENTER);
 		pageScrollPane.setName("workspacePageScrollPane");
 		pageScrollPane.setBorder(BorderFactory.createEmptyBorder());
 		pageScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
@@ -86,6 +104,7 @@ final class WorkspaceShell extends JPanel
 
 		add(navigationHost, BorderLayout.WEST);
 		add(pageScrollPane, BorderLayout.CENTER);
+		add(statusBar, BorderLayout.SOUTH);
 		setNavigationOrientation(false);
 		addComponentListener(new ComponentAdapter()
 		{
@@ -171,6 +190,36 @@ final class WorkspaceShell extends JPanel
 		}
 	}
 
+	void setWideDockVisibilityAction(Consumer<Boolean> action)
+	{
+		wideDockVisibilityAction = Objects.requireNonNull(action, "action");
+		wideDockVisibilityAction.accept(wideDockVisible);
+	}
+
+	void setWideDockComponent(Component component)
+	{
+		Objects.requireNonNull(component, "component");
+		wideDockHost.removeAll();
+		wideDockHost.add(component, BorderLayout.CENTER);
+		workspaceBody.revalidate();
+		workspaceBody.repaint();
+	}
+
+	void clearWideDockComponent(Component component)
+	{
+		if (component != null && component.getParent() == wideDockHost)
+		{
+			wideDockHost.remove(component);
+			workspaceBody.revalidate();
+			workspaceBody.repaint();
+		}
+	}
+
+	boolean isWideDockVisible()
+	{
+		return wideDockVisible;
+	}
+
 	void showWorkspace(String id)
 	{
 		JToggleButton button = buttons.get(id);
@@ -236,38 +285,41 @@ final class WorkspaceShell extends JPanel
 	private void refreshResponsiveLayout()
 	{
 		boolean shouldBeCompact = getWidth() > 0 && getWidth() < COMPACT_BREAKPOINT;
-		if (shouldBeCompact == compact)
+		boolean shouldShowWideDock = getWidth() >= WIDE_DOCK_BREAKPOINT;
+		boolean changed = false;
+		if (shouldBeCompact != compact)
 		{
-			return;
+			compact = shouldBeCompact;
+			remove(navigationHost);
+			brand.setVisible(!compact);
+			add(navigationHost, compact ? BorderLayout.NORTH : BorderLayout.WEST);
+			setNavigationOrientation(compact);
+			changed = true;
 		}
-		compact = shouldBeCompact;
-		remove(navigationHost);
-		remove(compactStatusHost);
-		brand.setVisible(!compact);
-		add(navigationHost, compact ? BorderLayout.NORTH : BorderLayout.WEST);
-		if (compact)
+		if (shouldShowWideDock != wideDockVisible)
 		{
-			add(compactStatusHost, BorderLayout.SOUTH);
+			wideDockVisible = shouldShowWideDock;
+			wideDockHost.setVisible(wideDockVisible);
+			workspaceBody.revalidate();
+			wideDockVisibilityAction.accept(wideDockVisible);
+			changed = true;
 		}
-		setNavigationOrientation(compact);
-		placeStatusComponent();
-		revalidate();
-		repaint();
+		if (changed)
+		{
+			revalidate();
+			repaint();
+		}
 	}
 
 	private void placeStatusComponent()
 	{
-		railStatusHost.removeAll();
-		compactStatusHost.removeAll();
+		statusBar.removeAll();
 		if (statusComponent != null)
 		{
-			(compact ? compactStatusHost : railStatusHost).add(
-				statusComponent,
-				BorderLayout.CENTER
-			);
+			statusBar.add(statusComponent, BorderLayout.CENTER);
 		}
-		railStatusHost.revalidate();
-		compactStatusHost.revalidate();
+		statusBar.revalidate();
+		statusBar.repaint();
 	}
 
 	private void setNavigationOrientation(boolean horizontal)
@@ -278,13 +330,6 @@ final class WorkspaceShell extends JPanel
 		navigationHost.setBorder(horizontal
 			? BorderFactory.createMatteBorder(0, 0, 1, 0, HapticScapeTheme.BORDER)
 			: BorderFactory.createMatteBorder(0, 0, 0, 1, HapticScapeTheme.BORDER));
-		compactStatusHost.setBorder(BorderFactory.createMatteBorder(
-			1,
-			0,
-			0,
-			0,
-			HapticScapeTheme.BORDER
-		));
 		navigationHost.setPreferredSize(horizontal ? null : new Dimension(RAIL_WIDTH, 0));
 		updateNavigationBorders();
 	}
@@ -355,6 +400,101 @@ final class WorkspaceShell extends JPanel
 		public boolean getScrollableTracksViewportHeight()
 		{
 			return getParent() != null && getParent().getHeight() > getPreferredSize().height;
+		}
+	}
+
+	static int workspaceContentWidthFor(int availableWidth)
+	{
+		return Math.max(0, Math.min(WORKSPACE_CONTENT_WIDTH, availableWidth));
+	}
+
+	private final class WorkspaceBody extends JPanel
+	{
+		private WorkspaceBody()
+		{
+			super(null);
+			setOpaque(false);
+			add(contentWidthHost);
+			add(wideDockHost);
+		}
+
+		@Override
+		public void doLayout()
+		{
+			int leftWidth = workspaceContentWidthFor(getWidth());
+			contentWidthHost.setBounds(0, 0, leftWidth, getHeight());
+			if (!wideDockVisible)
+			{
+				wideDockHost.setBounds(0, 0, 0, 0);
+				return;
+			}
+			int dockX = Math.min(getWidth(), leftWidth + WIDE_DOCK_GAP);
+			int dockWidth = Math.min(
+				WIDE_DOCK_MAX_WIDTH,
+				Math.max(0, getWidth() - dockX)
+			);
+			wideDockHost.setBounds(dockX, 0, dockWidth, getHeight());
+		}
+
+		@Override
+		public Dimension getPreferredSize()
+		{
+			Dimension left = contentWidthHost.getPreferredSize();
+			if (!wideDockVisible)
+			{
+				return left;
+			}
+			Dimension dock = wideDockHost.getPreferredSize();
+			return new Dimension(
+				left.width + WIDE_DOCK_GAP
+					+ Math.min(WIDE_DOCK_MAX_WIDTH, dock.width),
+				Math.max(left.height, dock.height)
+			);
+		}
+
+		@Override
+		public Dimension getMinimumSize()
+		{
+			return new Dimension(0, Math.max(
+				contentWidthHost.getMinimumSize().height,
+				wideDockVisible ? wideDockHost.getMinimumSize().height : 0
+			));
+		}
+	}
+
+	/** Keeps the desktop composition stable while still filling narrow windows. */
+	private static final class BoundedWidthHost extends JPanel
+	{
+		private final Component child;
+
+		private BoundedWidthHost(Component child)
+		{
+			super(null);
+			this.child = Objects.requireNonNull(child, "child");
+			setOpaque(false);
+			add(child);
+		}
+
+		@Override
+		public void doLayout()
+		{
+			child.setBounds(0, 0, workspaceContentWidthFor(getWidth()), getHeight());
+		}
+
+		@Override
+		public Dimension getPreferredSize()
+		{
+			Dimension preferred = child.getPreferredSize();
+			return new Dimension(
+				workspaceContentWidthFor(preferred.width),
+				preferred.height
+			);
+		}
+
+		@Override
+		public Dimension getMinimumSize()
+		{
+			return new Dimension(0, child.getMinimumSize().height);
 		}
 	}
 }

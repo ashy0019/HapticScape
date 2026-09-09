@@ -11,7 +11,7 @@ import java.util.Objects;
  */
 public final class CustomPatternEntry
 {
-	public static final int MINIMUM_BEAT_DURATION_MILLIS = 50;
+	public static final int MINIMUM_BEAT_DURATION_MILLIS = 250;
 	public static final int MAXIMUM_BEAT_DURATION_MILLIS = 10_000;
 	public static final int DEFAULT_BEAT_DURATION_MILLIS = 500;
 	public static final int MINIMUM_BEAT_COUNT = 1;

@@ -18,8 +18,6 @@ import com.ashy0019.hapticscape.remote.DiscordJoinRequest;
 import com.ashy0019.hapticscape.remote.DiscordPairingBridge;
 import com.ashy0019.hapticscape.remote.SettingsStore;
 import com.ashy0019.hapticscape.ui.HapticScapePanel;
-import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.EventQueue;
 import java.awt.Image;
@@ -32,18 +30,20 @@ import java.util.concurrent.CompletableFuture;
 import javax.imageio.ImageIO;
 import javax.swing.BorderFactory;
 import javax.swing.JFrame;
-import javax.swing.JLabel;
-import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
 
 /** Hosts the reusable HapticScape Swing panel in a standalone desktop window. */
 public final class HapticScapeDesktopWindow implements AutoCloseable
 {
+	static final int DEFAULT_WINDOW_WIDTH = 1024;
+	static final int DEFAULT_WINDOW_HEIGHT = 900;
+	static final int MINIMUM_WINDOW_WIDTH = 480;
+	static final int MINIMUM_WINDOW_HEIGHT = 640;
+
 	private final HapticScapeRuntime runtime;
 	private final JFrame frame = new JFrame("HapticScape");
 	private final JScrollPane pageScrollPane = new JScrollPane();
-	private final JLabel sourceMessageLabel = new JLabel(" ");
 	private final HapticScapePanel panel;
 	private final DesktopSourceMessageService sourceMessages;
 	private final Runnable closeAction;
@@ -97,20 +97,12 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 			runtime::stopAll
 		);
 
-		sourceMessageLabel.setBorder(BorderFactory.createEmptyBorder(5, 8, 6, 8));
-		sourceMessageLabel.setOpaque(true);
-		sourceMessageLabel.setBackground(new Color(25, 25, 25));
-		sourceMessageLabel.setForeground(new Color(220, 220, 220));
-
-		JPanel content = new JPanel(new BorderLayout());
-		content.add(panel, BorderLayout.CENTER);
-		content.add(sourceMessageLabel, BorderLayout.SOUTH);
-		frame.setContentPane(content);
+		frame.setContentPane(panel);
 		frame.setGlassPane(new StandaloneLevel99GlassPane(runtime.getLevel99CelebrationController()));
 		frame.getGlassPane().setVisible(true);
 		frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
-		frame.setMinimumSize(new Dimension(390, 600));
-		frame.setSize(500, 900);
+		frame.setMinimumSize(new Dimension(MINIMUM_WINDOW_WIDTH, MINIMUM_WINDOW_HEIGHT));
+		frame.setSize(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT);
 		frame.setLocationByPlatform(true);
 		frame.addWindowListener(new WindowAdapter()
 		{
@@ -271,14 +263,7 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 
 	private void showSourceMessage(DesktopSourceMessageService.Message message)
 	{
-		SwingUtilities.invokeLater(() ->
-		{
-			sourceMessageLabel.setText(message.getText());
-			Integer rgb = message.getRgb();
-			sourceMessageLabel.setForeground(
-				rgb == null ? new Color(220, 220, 220) : new Color(rgb)
-			);
-		});
+		panel.updateSourceStatus(message.getText(), message.getRgb());
 	}
 
 	private void loadWindowIcon()

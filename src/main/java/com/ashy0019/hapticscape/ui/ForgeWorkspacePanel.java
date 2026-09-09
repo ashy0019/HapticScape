@@ -115,6 +115,14 @@ final class ForgeWorkspacePanel extends JPanel implements RemoteSessionListener
 		livePanel.setWorkspaceActive(false);
 	}
 
+	void enterWorkspace()
+	{
+		if (liveButton.isSelected() && liveButton.isEnabled())
+		{
+			livePanel.setWorkspaceActive(true);
+		}
+	}
+
 	void close()
 	{
 		leaveWorkspace();

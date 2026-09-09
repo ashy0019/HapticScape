@@ -6,7 +6,7 @@ import java.awt.Container;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JScrollPane;
-import javax.swing.JSpinner;
+import javax.swing.JSlider;
 import javax.swing.Scrollable;
 import javax.swing.SwingUtilities;
 import org.junit.Test;
@@ -66,15 +66,28 @@ public class PatternForgePanelTest
 		try
 		{
 			JLabel summary = component(panel, "patternBeatSummary", JLabel.class);
-			JSpinner duration = component(panel, "patternBeatDuration", JSpinner.class);
+			JSlider duration = component(panel, "patternBeatDuration", JSlider.class);
 			assertEquals("One beat · 500 ms", summary.getText());
-			SwingUtilities.invokeAndWait(() -> duration.setValue(1_500));
+			SwingUtilities.invokeAndWait(() -> duration.setValue(
+				PatternForgePanel.sliderValueForDuration(1_500)
+			));
 			assertEquals("One beat · 1.5 s", summary.getText());
 		}
 		finally
 		{
 			panel.close();
 		}
+	}
+
+	@Test
+	public void durationSliderFavorsCommonShortPatterns()
+	{
+		assertEquals(250, PatternForgePanel.durationForSliderValue(0));
+		assertEquals(0, PatternForgePanel.sliderValueForDuration(250));
+		assertEquals(35, PatternForgePanel.sliderValueForDuration(2_000));
+		assertEquals(2_250, PatternForgePanel.durationForSliderValue(36));
+		assertEquals(67, PatternForgePanel.sliderValueForDuration(10_000));
+		assertEquals(10_000, PatternForgePanel.durationForSliderValue(67));
 	}
 
 	@Test

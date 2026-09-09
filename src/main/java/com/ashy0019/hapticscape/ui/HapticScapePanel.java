@@ -104,11 +104,13 @@ public final class HapticScapePanel extends JPanel
 	private final KonamiCodeDetector konamiCodeDetector = new KonamiCodeDetector();
 	private final GlobalUiHooks.Registration rogueKeyHook;
 	private final JTabbedPane tabs;
+	private final JTabbedPane patternTabs;
 	private final CardLayout contentLayout = new CardLayout();
 	private final JPanel contentHost = new JPanel(contentLayout);
 	private final JLabel statusLabel = new JLabel("Disconnected");
 	private final JLabel connectionIndicator = new JLabel("\u25cf");
 	private final JLabel deviceSummaryLabel = new JLabel("No device connected");
+	private final JLabel sourceStatusLabel = new JLabel(" ", SwingConstants.RIGHT);
 	private final JLabel pageTitleLabel = new JLabel("Gameplay");
 	private final DefaultListModel<DeviceInfo> deviceModel = new DefaultListModel<>();
 	private final JButton connectButton = new JButton("Connect");
@@ -163,6 +165,7 @@ public final class HapticScapePanel extends JPanel
 	private final RogueLauncherPanel rogueLauncher;
 	private boolean rogueModeUnlocked;
 	private boolean rogueViewActive;
+	private boolean forgeDocked;
 	private final Timer developerStatusTimer;
 
 	private volatile int intensityPercent;
@@ -237,6 +240,9 @@ public final class HapticScapePanel extends JPanel
 		statusLabel.setForeground(HapticScapeTheme.TEXT);
 		deviceSummaryLabel.setName("connectionDeviceSummary");
 		deviceSummaryLabel.setForeground(HapticScapeTheme.MUTED_TEXT);
+		sourceStatusLabel.setName("gameplaySourceStatus");
+		sourceStatusLabel.setForeground(HapticScapeTheme.MUTED_TEXT);
+		sourceStatusLabel.setBorder(BorderFactory.createEmptyBorder(0, 16, 0, 0));
 		connectionIndicator.setName("connectionStatusIndicator");
 		connectionIndicator.setForeground(HapticScapeTheme.MUTED_TEXT);
 		developerStatusTimer = new Timer(1600, event ->
@@ -533,7 +539,7 @@ public final class HapticScapePanel extends JPanel
 			developerControlsRow
 		);
 
-		JTabbedPane patternTabs = new JTabbedPane(JTabbedPane.TOP);
+		patternTabs = new JTabbedPane(JTabbedPane.TOP);
 		patternTabs.setName("patternsWorkspaceTabs");
 		PanelUi.configureWorkspaceTabs(patternTabs);
 		PanelUi.addCompactTab(patternTabs, "Forge", forgeWorkspacePanel);
@@ -547,6 +553,7 @@ public final class HapticScapePanel extends JPanel
 		workspaceShell.setSelectionAction(workspace ->
 			pageTitleLabel.setText(workspaceShell.getWorkspaceLabel(workspace)));
 		workspaceShell.setStatusComponent(createConnectionStatusPanel());
+		workspaceShell.setWideDockVisibilityAction(this::setForgeDocked);
 
 		JPanel applicationHeader = new JPanel(new BorderLayout(8, 0));
 		applicationHeader.setName("applicationHeader");
@@ -598,22 +605,26 @@ public final class HapticScapePanel extends JPanel
 
 	private JPanel createConnectionStatusPanel()
 	{
-		JPanel status = new JPanel(new BorderLayout(7, 0));
+		JPanel status = new JPanel(new BorderLayout(12, 0));
 		status.setName("connectionStatus");
-		status.setBackground(HapticScapeTheme.SIDEBAR);
-		status.setBorder(BorderFactory.createEmptyBorder(9, 10, 9, 10));
-		connectionIndicator.setVerticalAlignment(SwingConstants.TOP);
-		status.add(connectionIndicator, BorderLayout.WEST);
+		status.setBackground(HapticScapeTheme.SURFACE);
+		status.setBorder(BorderFactory.createEmptyBorder(7, 12, 7, 12));
 
-		JPanel details = new JPanel();
+		JPanel connection = new JPanel(new BorderLayout(7, 0));
+		connection.setOpaque(false);
+		connectionIndicator.setVerticalAlignment(SwingConstants.CENTER);
+		connection.add(connectionIndicator, BorderLayout.WEST);
+
+		JPanel details = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
 		details.setOpaque(false);
-		details.setLayout(new BoxLayout(details, BoxLayout.Y_AXIS));
-		statusLabel.setAlignmentX(LEFT_ALIGNMENT);
-		deviceSummaryLabel.setAlignmentX(LEFT_ALIGNMENT);
 		details.add(statusLabel);
-		details.add(javax.swing.Box.createVerticalStrut(3));
+		JLabel separator = new JLabel("  \u2022  ");
+		separator.setForeground(HapticScapeTheme.BORDER_HOVER);
+		details.add(separator);
 		details.add(deviceSummaryLabel);
-		status.add(details, BorderLayout.CENTER);
+		connection.add(details, BorderLayout.CENTER);
+		status.add(connection, BorderLayout.WEST);
+		status.add(sourceStatusLabel, BorderLayout.CENTER);
 		return status;
 	}
 
@@ -625,6 +636,21 @@ public final class HapticScapePanel extends JPanel
 	public void showDiscordRemoteView()
 	{
 		showRemoteView();
+	}
+
+	public void updateSourceStatus(String message, Integer rgb)
+	{
+		if (!SwingUtilities.isEventDispatchThread())
+		{
+			SwingUtilities.invokeLater(() -> updateSourceStatus(message, rgb));
+			return;
+		}
+		String displayed = message == null || message.trim().isEmpty() ? " " : message;
+		sourceStatusLabel.setText(displayed);
+		sourceStatusLabel.setToolTipText(displayed.trim().isEmpty() ? null : displayed);
+		sourceStatusLabel.setForeground(rgb == null
+			? HapticScapeTheme.MUTED_TEXT
+			: new java.awt.Color(rgb));
 	}
 
 	public boolean confirmDiscordRemoteControl(DiscordJoinRequest request)
@@ -1178,6 +1204,7 @@ public final class HapticScapePanel extends JPanel
 
 	private void showRogueView()
 	{
+		forgeWorkspacePanel.leaveWorkspace();
 		rogueViewActive = true;
 		contentLayout.show(contentHost, ROGUE_CARD);
 		rogueLauncher.setActive(true);
@@ -1197,7 +1224,10 @@ public final class HapticScapePanel extends JPanel
 	private void showRemoteView()
 	{
 		showNormalView();
-		forgeWorkspacePanel.leaveWorkspace();
+		if (!forgeDocked)
+		{
+			forgeWorkspacePanel.leaveWorkspace();
+		}
 		workspaceShell.showWorkspace(REMOTE_WORKSPACE);
 	}
 
@@ -1206,7 +1236,10 @@ public final class HapticScapePanel extends JPanel
 		selectControllerWorkspace(false);
 		showNormalView();
 		forgeWorkspacePanel.showLive();
-		workspaceShell.showWorkspace(PATTERNS_WORKSPACE);
+		if (!forgeDocked)
+		{
+			workspaceShell.showWorkspace(PATTERNS_WORKSPACE);
+		}
 	}
 
 	private void openSubjectSettings()
@@ -1218,7 +1251,11 @@ public final class HapticScapePanel extends JPanel
 
 	private void handleWorkspaceSelected(String workspace)
 	{
-		if (!PATTERNS_WORKSPACE.equals(workspace))
+		if (PATTERNS_WORKSPACE.equals(workspace) && !forgeDocked)
+		{
+			forgeWorkspacePanel.enterWorkspace();
+		}
+		else if (!forgeDocked)
 		{
 			forgeWorkspacePanel.leaveWorkspace();
 		}
@@ -1228,6 +1265,45 @@ public final class HapticScapePanel extends JPanel
 		{
 			selectControllerWorkspace(false);
 		}
+	}
+
+	private void setForgeDocked(boolean docked)
+	{
+		if (forgeDocked == docked)
+		{
+			return;
+		}
+		forgeDocked = docked;
+		if (docked)
+		{
+			boolean wasVisible = PATTERNS_WORKSPACE.equals(
+				workspaceShell.getSelectedWorkspace()
+			);
+			patternTabs.remove(forgeWorkspacePanel);
+			workspaceShell.setWideDockComponent(forgeWorkspacePanel);
+			if (!wasVisible)
+			{
+				forgeWorkspacePanel.showCompose();
+			}
+		}
+		else
+		{
+			workspaceShell.clearWideDockComponent(forgeWorkspacePanel);
+			if (patternTabs.indexOfComponent(forgeWorkspacePanel) < 0)
+			{
+				patternTabs.insertTab("Forge", null, forgeWorkspacePanel, null, 0);
+			}
+			if (PATTERNS_WORKSPACE.equals(workspaceShell.getSelectedWorkspace()))
+			{
+				patternTabs.setSelectedComponent(forgeWorkspacePanel);
+			}
+			else
+			{
+				forgeWorkspacePanel.leaveWorkspace();
+			}
+		}
+		patternTabs.revalidate();
+		patternTabs.repaint();
 	}
 
 	private void resetRogueDiscovery()

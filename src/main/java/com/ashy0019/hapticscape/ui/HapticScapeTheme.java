@@ -198,10 +198,13 @@ public final class HapticScapeTheme
 		put("ScrollBar.showButtons", false);
 		put("ScrollBar.thumbInsets", insets(1, 1, 1, 1));
 
+		put("Slider.trackValueColor", accent);
 		put("Slider.trackColor", border);
-		put("Slider.thumbColor", accent);
-		put("Slider.hoverThumbColor", accentHover);
-		put("Slider.pressedThumbColor", accent);
+		put("Slider.thumbColor", raised);
+		put("Slider.thumbBorderColor", borderHover);
+		put("Slider.focusedThumbBorderColor", accentHover);
+		put("Slider.hoverThumbColor", borderHover);
+		put("Slider.pressedThumbColor", surface);
 		put("ProgressBar.background", surface);
 		put("ProgressBar.foreground", accent);
 		put("ProgressBar.arc", 0);

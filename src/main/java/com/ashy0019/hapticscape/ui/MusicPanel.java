@@ -7,7 +7,6 @@ import com.ashy0019.hapticscape.music.MusicSyncSettings;
 import com.ashy0019.hapticscape.music.MusicSyncSnapshot;
 import java.awt.BorderLayout;
 import java.awt.Component;
-import java.awt.GridLayout;
 import java.util.function.Consumer;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -24,7 +23,7 @@ final class MusicPanel extends JPanel
 {
 	private final SettingsChangeSink settingsSink;
 	private final Consumer<MusicSyncSettings> settingsListener;
-	private final JToggleButton enabledButton = new JToggleButton();
+	private final JToggleButton enabledButton = new JToggleButton("Start music sync");
 	private final JComboBox<MusicResponse> responseComboBox =
 		new JComboBox<>(MusicResponse.values());
 	private final JSlider sensitivitySlider = new JSlider(25, 200);
@@ -76,6 +75,7 @@ final class MusicPanel extends JPanel
 		outputMeter.setName("musicOutputMeter");
 		outputMeter.setStringPainted(true);
 		outputMeter.setString("Output 0%");
+		PanelUi.reserveSingleLineTextHeight(outputMeter, 2);
 
 		ResponsiveColumnsPanel sections = new ResponsiveColumnsPanel(
 			capturePanel(),
@@ -177,9 +177,7 @@ final class MusicPanel extends JPanel
 
 		statusLabel.setBorder(BorderFactory.createEmptyBorder(5, 1, 5, 1));
 		PanelUi.addPreferredHeightComponent(panel, statusLabel);
-		JPanel buttonRow = new JPanel(new GridLayout(1, 1));
-		buttonRow.add(enabledButton);
-		PanelUi.addPreferredHeightComponent(panel, buttonRow);
+		PanelUi.addPreferredHeightComponent(panel, enabledButton);
 
 		JLabel privacy = new JLabel("Analyzed locally; audio is never recorded.");
 		privacy.setToolTipText("Audio samples remain in memory on this computer");
