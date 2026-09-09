@@ -48,4 +48,9 @@ public final class HapticScapeStoragePaths
 	{
 		return dataDirectory.resolve("updater-settings.json");
 	}
+
+	public Path getProtectedExitStatePath()
+	{
+		return dataDirectory.resolve("protected-exit-state.properties");
+	}
 }

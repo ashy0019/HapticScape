@@ -143,7 +143,8 @@ public class RemoteSessionDashboardTest
 				+ "Haptics: Up to 60% for 3 s\n"
 				+ "Live Forge: Up to 30 s\n"
 				+ "Clicks: Allowed\n"
-				+ "Messages: Desktop only",
+				+ "Messages: Desktop only\n"
+				+ "Protected exit: Blocked",
 			RemotePermissionSummaryPanel.describe(permissions)
 		);
 
@@ -163,7 +164,8 @@ public class RemoteSessionDashboardTest
 				+ "Haptics: Blocked\n"
 				+ "Live Forge: Blocked\n"
 				+ "Clicks: Blocked\n"
-				+ "Messages: Blocked",
+				+ "Messages: Blocked\n"
+				+ "Protected exit: Blocked",
 			RemotePermissionSummaryPanel.describe(blocked)
 		);
 	}

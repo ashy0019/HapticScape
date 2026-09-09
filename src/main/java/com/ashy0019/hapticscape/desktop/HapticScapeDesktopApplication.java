@@ -17,6 +17,9 @@ import com.ashy0019.hapticscape.protocol.LocalhostTransportEndpoint;
 import com.ashy0019.hapticscape.remote.DiscordDeepLinkInbox;
 import com.ashy0019.hapticscape.remote.DiscordPairingBridge;
 import com.ashy0019.hapticscape.remote.SettingsStore;
+import com.ashy0019.hapticscape.remote.RemoteSessionListener;
+import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
+import com.ashy0019.hapticscape.remote.SettingsLockCatalog;
 import com.ashy0019.hapticscape.storage.FileSettingsStore;
 import com.ashy0019.hapticscape.storage.HapticScapeStoragePaths;
 import com.google.gson.Gson;
@@ -34,6 +37,7 @@ public final class HapticScapeDesktopApplication implements AutoCloseable
 	private HapticScapeRuntime runtime;
 	private HapticScapeDesktopWindow window;
 	private DiscordDeepLinkInbox deepLinkInbox;
+	private ProtectedExitAuditStore protectedExitAudit;
 
 	public void start()
 	{
@@ -53,6 +57,9 @@ public final class HapticScapeDesktopApplication implements AutoCloseable
 		Gson gson = new Gson();
 		desktopNotifications = new AwtDesktopNotificationService("HapticScape");
 		DesktopSourceMessageService sourceMessages = new DesktopSourceMessageService();
+		protectedExitAudit = new ProtectedExitAuditStore(
+			storagePaths.getProtectedExitStatePath()
+		);
 
 		runtime = new HapticScapeRuntime(new HapticScapeRuntimeDependencies(
 			httpClient,
@@ -73,14 +80,51 @@ public final class HapticScapeDesktopApplication implements AutoCloseable
 		try
 		{
 			runtime.start();
+			protectedExitAudit.beginRun(
+				runtime.getSettingsLockService().isLocked(SettingsLockCatalog.PROTECTED_EXIT)
+			);
+			runtime.getSettingsLockService().addListener(snapshot ->
+				protectedExitAudit.setProtectionActive(
+					snapshot.isLocked(SettingsLockCatalog.PROTECTED_EXIT)
+				)
+			);
+			wireProtectedExitAudit();
 			createAndShowWindow(settings, skillCatalog, settingsStore, sourceMessages);
 			wireDiscordDeepLinks();
 		}
 		catch (RuntimeException failure)
 		{
+			if (protectedExitAudit != null)
+			{
+				protectedExitAudit.markAuthorizedEnd();
+			}
 			close();
 			throw failure;
 		}
+	}
+
+	private void wireProtectedExitAudit()
+	{
+		runtime.getRemoteSessionManager().addListener(new RemoteSessionListener()
+		{
+			@Override
+			public void onRemoteSessionChanged(RemoteSessionSnapshot snapshot)
+			{
+				if (protectedExitAudit.hasPendingUnauthorizedEnd()
+					&& runtime.getRemoteSessionManager().reportUnauthorizedEnd(
+						"Unauthorized end"
+					))
+				{
+					protectedExitAudit.clearPendingUnauthorizedEnd();
+				}
+			}
+
+			@Override
+			public void onUnauthorizedEnd(String reason)
+			{
+				desktopNotifications.notify("Unauthorized end");
+			}
+		});
 	}
 
 	private void createAndShowWindow(
@@ -97,6 +141,7 @@ public final class HapticScapeDesktopApplication implements AutoCloseable
 				skillCatalog,
 				settingsStore,
 				sourceMessages,
+				protectedExitAudit,
 				this::closeAndExit
 			);
 			window.show();

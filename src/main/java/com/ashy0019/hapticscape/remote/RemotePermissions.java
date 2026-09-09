@@ -25,6 +25,7 @@ public final class RemotePermissions
 	private final boolean clicksAllowed;
 	private final boolean desktopNotificationsAllowed;
 	private final boolean localChatboxMessagesAllowed;
+	private final boolean protectedExitAllowed;
 	private final int maximumIntensityPercent;
 	private final int maximumDurationMillis;
 	private final int maximumLiveDurationMillis;
@@ -45,6 +46,7 @@ public final class RemotePermissions
 			clicksAllowed,
 			desktopNotificationsAllowed,
 			localChatboxMessagesAllowed,
+			false,
 			maximumIntensityPercent,
 			maximumDurationMillis,
 			DEFAULT_LIVE_DURATION_MILLIS
@@ -63,6 +65,32 @@ public final class RemotePermissions
 		int maximumLiveDurationMillis)
 	{
 		this(
+			settingsAllowed,
+			hapticsAllowed,
+			liveHapticsAllowed,
+			clicksAllowed,
+			desktopNotificationsAllowed,
+			localChatboxMessagesAllowed,
+			false,
+			maximumIntensityPercent,
+			maximumDurationMillis,
+			maximumLiveDurationMillis
+		);
+	}
+
+	public RemotePermissions(
+		boolean settingsAllowed,
+		boolean hapticsAllowed,
+		boolean liveHapticsAllowed,
+		boolean clicksAllowed,
+		boolean desktopNotificationsAllowed,
+		boolean localChatboxMessagesAllowed,
+		boolean protectedExitAllowed,
+		int maximumIntensityPercent,
+		int maximumDurationMillis,
+		int maximumLiveDurationMillis)
+	{
+		this(
 			SCHEMA_VERSION,
 			settingsAllowed,
 			hapticsAllowed,
@@ -70,6 +98,7 @@ public final class RemotePermissions
 			clicksAllowed,
 			desktopNotificationsAllowed,
 			localChatboxMessagesAllowed,
+			protectedExitAllowed,
 			maximumIntensityPercent,
 			maximumDurationMillis,
 			maximumLiveDurationMillis
@@ -84,6 +113,7 @@ public final class RemotePermissions
 		boolean clicksAllowed,
 		boolean desktopNotificationsAllowed,
 		boolean localChatboxMessagesAllowed,
+		boolean protectedExitAllowed,
 		int maximumIntensityPercent,
 		int maximumDurationMillis,
 		int maximumLiveDurationMillis)
@@ -95,6 +125,7 @@ public final class RemotePermissions
 		this.clicksAllowed = clicksAllowed;
 		this.desktopNotificationsAllowed = desktopNotificationsAllowed;
 		this.localChatboxMessagesAllowed = localChatboxMessagesAllowed;
+		this.protectedExitAllowed = protectedExitAllowed;
 		this.maximumIntensityPercent = maximumIntensityPercent;
 		this.maximumDurationMillis = maximumDurationMillis;
 		this.maximumLiveDurationMillis = maximumLiveDurationMillis;
@@ -104,7 +135,7 @@ public final class RemotePermissions
 	public static RemotePermissions defaults()
 	{
 		return new RemotePermissions(
-			true, true, false, true, true, false,
+			true, true, false, true, true, false, false,
 			60, 3_000, DEFAULT_LIVE_DURATION_MILLIS
 		);
 	}
@@ -112,7 +143,7 @@ public final class RemotePermissions
 	static RemotePermissions none()
 	{
 		return new RemotePermissions(
-			false, false, false, false, false, false,
+			false, false, false, false, false, false, false,
 			0, 50, 0
 		);
 	}
@@ -127,6 +158,7 @@ public final class RemotePermissions
 			config.remoteClicksAllowed(),
 			config.remoteDesktopNotificationsAllowed(),
 			config.remoteLocalChatboxMessagesAllowed(),
+			config.remoteProtectedExitAllowed(),
 			clamp(config.remoteMaximumIntensityPercent(), 0, 100),
 			clamp(
 				config.remoteMaximumDurationMillis(),
@@ -198,6 +230,11 @@ public final class RemotePermissions
 		return localChatboxMessagesAllowed;
 	}
 
+	public boolean isProtectedExitAllowed()
+	{
+		return protectedExitAllowed;
+	}
+
 	public int getMaximumIntensityPercent()
 	{
 		return maximumIntensityPercent;
@@ -228,6 +265,7 @@ public final class RemotePermissions
 			&& clicksAllowed == that.clicksAllowed
 			&& desktopNotificationsAllowed == that.desktopNotificationsAllowed
 			&& localChatboxMessagesAllowed == that.localChatboxMessagesAllowed
+			&& protectedExitAllowed == that.protectedExitAllowed
 			&& maximumIntensityPercent == that.maximumIntensityPercent
 			&& maximumDurationMillis == that.maximumDurationMillis
 			&& maximumLiveDurationMillis == that.maximumLiveDurationMillis;
@@ -244,6 +282,7 @@ public final class RemotePermissions
 			clicksAllowed,
 			desktopNotificationsAllowed,
 			localChatboxMessagesAllowed,
+			protectedExitAllowed,
 			maximumIntensityPercent,
 			maximumDurationMillis,
 			maximumLiveDurationMillis

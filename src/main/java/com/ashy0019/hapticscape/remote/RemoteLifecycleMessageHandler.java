@@ -13,5 +13,7 @@ interface RemoteLifecycleMessageHandler
 
 	void handlePeerEnd();
 
+	void handleUnauthorizedEnd(String reason);
+
 	void publishStatus(String message);
 }

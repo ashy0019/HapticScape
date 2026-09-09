@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.function.BooleanSupplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -20,6 +21,7 @@ final class RemoteLockCoordinator
 	private final RemoteMessageSender sender;
 	private final Consumer<RemoteLockSnapshot> snapshotPublisher;
 	private final Consumer<SettingsLockProposal> proposalPublisher;
+	private final BooleanSupplier protectedExitAllowed;
 
 	private volatile RemoteLockSnapshot snapshot = RemoteLockSnapshot.inactive();
 	private SettingsLockProposal controllerProposal;
@@ -36,7 +38,8 @@ final class RemoteLockCoordinator
 		SavedUnlockKeyStore savedUnlockKeyStore,
 		RemoteMessageSender sender,
 		Consumer<RemoteLockSnapshot> snapshotPublisher,
-		Consumer<SettingsLockProposal> proposalPublisher)
+		Consumer<SettingsLockProposal> proposalPublisher,
+		BooleanSupplier protectedExitAllowed)
 	{
 		this.gson = Objects.requireNonNull(gson, "gson");
 		this.settingsLockService = Objects.requireNonNull(
@@ -55,6 +58,10 @@ final class RemoteLockCoordinator
 		this.proposalPublisher = Objects.requireNonNull(
 			proposalPublisher,
 			"proposalPublisher"
+		);
+		this.protectedExitAllowed = Objects.requireNonNull(
+			protectedExitAllowed,
+			"protectedExitAllowed"
 		);
 	}
 
@@ -284,6 +291,17 @@ final class RemoteLockCoordinator
 			}
 			proposal.validate();
 			String proposalId = proposal.getProposalId();
+			if (proposal.getTargets().contains(SettingsLockCatalog.PROTECTED_EXIT)
+				&& !protectedExitAllowed.getAsBoolean())
+			{
+				participantDeclinedLockId = proposalId;
+				publish(
+					RemoteLockState.DECLINED,
+					"Protected exit permission was not granted"
+				);
+				sender.send(RemoteMessageType.LOCK_DECLINED, 0, proposalId);
+				return;
+			}
 			if (proposalId.equals(participantArmedLockId))
 			{
 				sender.send(RemoteMessageType.LOCK_ACCEPTED, 0, proposalId);

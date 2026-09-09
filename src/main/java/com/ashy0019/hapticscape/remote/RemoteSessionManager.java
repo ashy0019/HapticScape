@@ -182,20 +182,21 @@ public final class RemoteSessionManager implements AutoCloseable
 			this::send,
 			this::publishActionAcknowledgement
 		);
-		this.lockCoordinator = new RemoteLockCoordinator(
-			gson,
-			settingsLockService,
-			requiredSavedUnlockKeyStore,
-			this::send,
-			this::publishLockSnapshot,
-			this::publishLockProposal
-		);
 		this.permissionsCoordinator = new RemotePermissionsCoordinator(
 			gson,
 			requiredPermissionsStore,
 			this::send,
 			this::publishPermissions,
 			actionCoordinator::clearControllerLiveStream
+		);
+		this.lockCoordinator = new RemoteLockCoordinator(
+			gson,
+			settingsLockService,
+			requiredSavedUnlockKeyStore,
+			this::send,
+			this::publishLockSnapshot,
+			this::publishLockProposal,
+			() -> permissionsCoordinator.getLocal().isProtectedExitAllowed()
 		);
 		this.settingsCoordinator = new RemoteSettingsCoordinator(
 			gson,
@@ -307,6 +308,21 @@ public final class RemoteSessionManager implements AutoCloseable
 	public synchronized String stopRemoteOutput()
 	{
 		return actionCoordinator.stop(role, snapshot.getState());
+	}
+
+	/** Reports an end which was not authorized by the protected-exit password. */
+	public synchronized boolean reportUnauthorizedEnd(String reason)
+	{
+		if (role != RemoteRole.PARTICIPANT
+			|| snapshot.getState() == RemoteSessionState.LOCAL
+			|| snapshot.getState() == RemoteSessionState.DISCONNECTED)
+		{
+			return false;
+		}
+		String message = reason == null || reason.trim().isEmpty()
+			? "UNAUTHORIZED_END"
+			: reason.trim();
+		return send(RemoteMessageType.UNAUTHORIZED_END, 0, message);
 	}
 
 	public synchronized void beginRemoteLiveHaptic(int intensityPercent)
@@ -427,6 +443,14 @@ public final class RemoteSessionManager implements AutoCloseable
 		char[] password,
 		java.util.Collection<SettingsLockTarget> targets)
 	{
+		if (targets != null
+			&& targets.contains(SettingsLockCatalog.PROTECTED_EXIT)
+			&& !permissionsCoordinator.getPeer().isProtectedExitAllowed())
+		{
+			throw new IllegalStateException(
+				"The participant has not allowed protected exit requests"
+			);
+		}
 		lockCoordinator.propose(role, snapshot.getState(), password, targets);
 	}
 
@@ -988,6 +1012,20 @@ public final class RemoteSessionManager implements AutoCloseable
 		public void handlePeerEnd()
 		{
 			endSessionInternal(false, "Remote peer ended the session");
+		}
+
+		@Override
+		public void handleUnauthorizedEnd(String reason)
+		{
+			if (role != RemoteRole.CONTROLLER)
+			{
+				return;
+			}
+			publish(snapshot.getState(), "Unauthorized end flagged by participant client");
+			for (RemoteSessionListener listener : listeners)
+			{
+				listener.onUnauthorizedEnd(reason);
+			}
 		}
 
 		@Override

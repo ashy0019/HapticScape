@@ -37,6 +37,11 @@ public final class SettingsLockCatalog
 		"Sections",
 		"Click settings"
 	);
+	public static final SettingsLockTarget PROTECTED_EXIT = register(
+		"application.protected-exit",
+		"Application",
+		"Protected application exit"
+	);
 
 	public static final SettingsLockTarget LEVEL_UP_HAPTICS = register(
 		"feature.level-ups.haptics",
@@ -396,6 +401,15 @@ public final class SettingsLockCatalog
 	public static Set<SettingsLockTarget> allTargets()
 	{
 		return Collections.unmodifiableSet(new LinkedHashSet<>(TARGETS.values()));
+	}
+
+	/** Targets governed by the pre-targeted legacy lock format. */
+	public static Set<SettingsLockTarget> legacyTargets()
+	{
+		Set<SettingsLockTarget> targets = new LinkedHashSet<>(allTargets());
+		// Protected exit always requires its own explicit participant consent.
+		targets.remove(PROTECTED_EXIT);
+		return Collections.unmodifiableSet(targets);
 	}
 
 	private static SettingsLockTarget register(String id, String group, String displayName)

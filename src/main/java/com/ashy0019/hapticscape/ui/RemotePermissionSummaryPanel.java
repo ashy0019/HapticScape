@@ -38,7 +38,8 @@ final class RemotePermissionSummaryPanel extends JPanel
 				? "Up to " + duration(permissions.getMaximumLiveDurationMillis())
 				: "Blocked")
 			+ "\nClicks: " + allowed(permissions.isClicksAllowed())
-			+ "\nMessages: " + messageDestinations(permissions);
+			+ "\nMessages: " + messageDestinations(permissions)
+			+ "\nProtected exit: " + allowed(permissions.isProtectedExitAllowed());
 	}
 
 	private static String messageDestinations(RemotePermissions permissions)

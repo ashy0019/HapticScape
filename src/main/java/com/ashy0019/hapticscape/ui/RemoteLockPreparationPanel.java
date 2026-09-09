@@ -8,6 +8,7 @@ import java.util.Objects;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 
@@ -19,16 +20,19 @@ final class RemoteLockPreparationPanel extends JPanel
 	private final JButton openSubjectButton = new JButton("Open Subject settings");
 	private final JButton requestButton = new JButton("Generate key & request");
 	private final JButton cancelButton = new JButton("Cancel request");
+	private final JCheckBox protectedExit = new JCheckBox("Protect application exit");
 	private final JPanel actions = new JPanel(new GridLayout(0, 1, 0, 4));
 
 	RemoteLockPreparationPanel(
 		Runnable openSubjectSettings,
 		Runnable requestLock,
-		Runnable cancelLock)
+		Runnable cancelLock,
+		Runnable toggleProtectedExit)
 	{
 		Objects.requireNonNull(openSubjectSettings, "openSubjectSettings");
 		Objects.requireNonNull(requestLock, "requestLock");
 		Objects.requireNonNull(cancelLock, "cancelLock");
+		Objects.requireNonNull(toggleProtectedExit, "toggleProtectedExit");
 		setName("remoteLockPreparation");
 		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
 		setBorder(PanelUi.createSectionBorder("Post-session lock"));
@@ -39,6 +43,10 @@ final class RemoteLockPreparationPanel extends JPanel
 		openSubjectButton.setName("remoteLockOpenSubject");
 		requestButton.setName("remoteLockRequest");
 		cancelButton.setName("remoteLockCancel");
+		protectedExit.setName("remoteLockProtectedExit");
+		protectedExit.setToolTipText(
+			"The participant must explicitly allow and approve protected exit"
+		);
 		configureCompactButton(openSubjectButton);
 		configureCompactButton(requestButton);
 		configureCompactButton(cancelButton);
@@ -48,10 +56,12 @@ final class RemoteLockPreparationPanel extends JPanel
 
 		PanelUi.addPreferredHeightComponent(this, stateLabel);
 		PanelUi.addFlexibleVerticalComponent(this, detailLabel);
+		PanelUi.addPreferredHeightComponent(this, protectedExit);
 		PanelUi.addPreferredHeightComponent(this, actions);
 		openSubjectButton.addActionListener(event -> openSubjectSettings.run());
 		requestButton.addActionListener(event -> requestLock.run());
 		cancelButton.addActionListener(event -> cancelLock.run());
+		protectedExit.addActionListener(event -> toggleProtectedExit.run());
 	}
 
 	void apply(
@@ -59,6 +69,8 @@ final class RemoteLockPreparationPanel extends JPanel
 		int draftCount,
 		boolean controllerActive,
 		boolean subjectSettingsAvailable,
+		boolean protectedExitSelected,
+		boolean protectedExitAllowed,
 		boolean vaultAvailable,
 		String vaultMessage)
 	{
@@ -74,6 +86,15 @@ final class RemoteLockPreparationPanel extends JPanel
 		openSubjectButton.setToolTipText(subjectSettingsAvailable
 			? null
 			: "The participant has not allowed settings changes");
+		protectedExit.setSelected(protectedExitSelected);
+		protectedExit.setEnabled(
+			controllerActive
+				&& protectedExitAllowed
+				&& (state == RemoteLockState.INACTIVE || state == RemoteLockState.DECLINED)
+		);
+		protectedExit.setToolTipText(protectedExitAllowed
+			? "Include password-protected application exit in this lock request"
+			: "The participant has not allowed protected exit requests");
 		requestButton.setEnabled(controllerActive && effectiveCount > 0 && vaultAvailable);
 		requestButton.setToolTipText(vaultAvailable ? null : vaultMessage);
 		cancelButton.setText(view.getCancelLabel());

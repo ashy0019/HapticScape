@@ -23,6 +23,7 @@ final class RemotePermissionsPanel extends JPanel
 	private final JCheckBox clicks = new JCheckBox("Click sounds");
 	private final JCheckBox notifications = new JCheckBox("Desktop notifications");
 	private final JCheckBox chatbox = new JCheckBox("Local chatbox notices");
+	private final JCheckBox protectedExit = new JCheckBox("Protected exit requests");
 	private final JSlider maximumIntensity = new JSlider(0, 100);
 	private final JLabel maximumIntensityValue = new JLabel();
 	private final JSpinner maximumDuration = new JSpinner(new SpinnerNumberModel(
@@ -61,12 +62,16 @@ final class RemotePermissionsPanel extends JPanel
 		chatbox.setToolTipText(
 			"Show a local-only HapticScape console line; nothing is sent to game chat"
 		);
+		protectedExit.setToolTipText(
+			"Allow the controller to request a password-protected application exit lock"
+		);
 		PanelUi.addPreferredHeightComponent(this, settings);
 		PanelUi.addPreferredHeightComponent(this, haptics);
 		PanelUi.addPreferredHeightComponent(this, liveHaptics);
 		PanelUi.addPreferredHeightComponent(this, clicks);
 		PanelUi.addPreferredHeightComponent(this, notifications);
 		PanelUi.addPreferredHeightComponent(this, chatbox);
+		PanelUi.addPreferredHeightComponent(this, protectedExit);
 
 		maximumIntensity.setPaintTicks(false);
 		maximumIntensity.setPaintLabels(false);
@@ -110,6 +115,7 @@ final class RemotePermissionsPanel extends JPanel
 		clicks.addActionListener(event -> save());
 		notifications.addActionListener(event -> save());
 		chatbox.addActionListener(event -> save());
+		protectedExit.addActionListener(event -> save());
 		maximumIntensity.addChangeListener(event ->
 		{
 			maximumIntensityValue.setText(maximumIntensity.getValue() + "%");
@@ -134,6 +140,7 @@ final class RemotePermissionsPanel extends JPanel
 			clicks.setSelected(permissions.isClicksAllowed());
 			notifications.setSelected(permissions.isDesktopNotificationsAllowed());
 			chatbox.setSelected(permissions.isLocalChatboxMessagesAllowed());
+			protectedExit.setSelected(permissions.isProtectedExitAllowed());
 			maximumIntensity.setValue(permissions.getMaximumIntensityPercent());
 			maximumIntensityValue.setText(permissions.getMaximumIntensityPercent() + "%");
 			maximumDuration.setValue(permissions.getMaximumDurationMillis());
@@ -164,6 +171,7 @@ final class RemotePermissionsPanel extends JPanel
 			clicks.isSelected(),
 			notifications.isSelected(),
 			chatbox.isSelected(),
+			protectedExit.isSelected(),
 			maximumIntensity.getValue(),
 			((Number) maximumDuration.getValue()).intValue(),
 			((Number) maximumLiveDurationSeconds.getValue()).intValue() * 1_000

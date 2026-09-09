@@ -17,6 +17,8 @@ import com.ashy0019.hapticscape.remote.DiscordJoinConsentHandler;
 import com.ashy0019.hapticscape.remote.DiscordJoinRequest;
 import com.ashy0019.hapticscape.remote.DiscordPairingBridge;
 import com.ashy0019.hapticscape.remote.SettingsStore;
+import com.ashy0019.hapticscape.remote.SettingsLockCatalog;
+import com.ashy0019.hapticscape.remote.SettingsLockService;
 import com.ashy0019.hapticscape.ui.HapticScapePanel;
 import java.awt.Dimension;
 import java.awt.EventQueue;
@@ -47,6 +49,9 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 	private final HapticScapePanel panel;
 	private final DesktopSourceMessageService sourceMessages;
 	private final Runnable closeAction;
+	private final SettingsLockService settingsLockService;
+	private final ProtectedExitAuditStore protectedExitAudit;
+	private ProtectedExitDialog protectedExitDialog;
 
 	public HapticScapeDesktopWindow(
 		HapticScapeRuntime runtime,
@@ -54,11 +59,17 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 		SkillCatalog skillCatalog,
 		SettingsStore settingsStore,
 		DesktopSourceMessageService sourceMessages,
+		ProtectedExitAuditStore protectedExitAudit,
 		Runnable closeAction)
 	{
 		this.runtime = Objects.requireNonNull(runtime, "runtime");
 		this.sourceMessages = Objects.requireNonNull(sourceMessages, "sourceMessages");
 		this.closeAction = Objects.requireNonNull(closeAction, "closeAction");
+		this.settingsLockService = runtime.getSettingsLockService();
+		this.protectedExitAudit = Objects.requireNonNull(
+			protectedExitAudit,
+			"protectedExitAudit"
+		);
 		Objects.requireNonNull(settings, "settings");
 		Objects.requireNonNull(skillCatalog, "skillCatalog");
 		Objects.requireNonNull(settingsStore, "settingsStore");
@@ -109,7 +120,7 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 			@Override
 			public void windowClosing(WindowEvent event)
 			{
-				HapticScapeDesktopWindow.this.closeAction.run();
+				requestClose();
 			}
 		});
 		loadWindowIcon();
@@ -117,6 +128,51 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 		runtime.getIntifaceService().setConnectionListener(panel::updateConnection);
 		runtime.getMusicSyncService().setListener(panel::updateMusicSync);
 		sourceMessages.setListener(this::showSourceMessage);
+	}
+
+	private void requestClose()
+	{
+		if (!settingsLockService.isLocked(SettingsLockCatalog.PROTECTED_EXIT))
+		{
+			protectedExitAudit.markAuthorizedEnd();
+			closeAction.run();
+			return;
+		}
+		if (protectedExitDialog != null && protectedExitDialog.isDisplayable())
+		{
+			protectedExitDialog.toFront();
+			return;
+		}
+		protectedExitDialog = new ProtectedExitDialog(
+			frame,
+			settingsLockService,
+			this::authorizedExit,
+			this::unauthorizedExit,
+			this::emergencyOff
+		);
+		protectedExitDialog.setVisible(true);
+	}
+
+	private void authorizedExit()
+	{
+		protectedExitAudit.markAuthorizedEnd();
+		closeAction.run();
+	}
+
+	private void unauthorizedExit()
+	{
+		protectedExitAudit.markUnauthorizedEnd();
+		runtime.stopAll();
+		// Best effort now; retain the durable flag so the next running session can
+		// confirm delivery instead of trusting a process that is about to exit.
+		runtime.getRemoteSessionManager().reportUnauthorizedEnd("Unauthorized end");
+		closeAction.run();
+	}
+
+	private void emergencyOff()
+	{
+		runtime.stopAll();
+		runtime.getRemoteSessionManager().emergencyPause();
 	}
 
 	public void show()
@@ -298,6 +354,11 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 	@Override
 	public void close()
 	{
+		if (protectedExitDialog != null)
+		{
+			protectedExitDialog.dispose();
+			protectedExitDialog = null;
+		}
 		sourceMessages.setListener(null);
 		panel.close();
 		frame.dispose();

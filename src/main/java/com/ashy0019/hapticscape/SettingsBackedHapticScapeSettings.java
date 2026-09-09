@@ -286,6 +286,12 @@ public final class SettingsBackedHapticScapeSettings implements HapticScapeSetti
     }
 
     @Override
+    public boolean remoteProtectedExitAllowed()
+    {
+        return booleanValue(HapticScapeSettingKeys.REMOTE_PROTECTED_EXIT_ALLOWED, false);
+    }
+
+    @Override
     public int remoteMaximumIntensityPercent()
     {
         return intValue(HapticScapeSettingKeys.REMOTE_MAXIMUM_INTENSITY_PERCENT, 60, 0, 100);
