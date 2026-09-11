@@ -371,10 +371,7 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 	private void sendTestGenericNotificationPattern()
 	{
 		NotificationFeedbackSettings settings = panel.getNotificationFeedbackSettings();
-		if (panel.isGenericNotificationClickEnabled())
-		{
-			runtime.playClick();
-		}
+		runtime.playClick(panel.getGenericNotificationClickSequence());
 		runtime.sendPattern(
 			HapticEventType.MANUAL_PREVIEW,
 			settings.getPatternSelection(),
@@ -386,10 +383,7 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 
 	private void sendTestAlert(AlertCategory category)
 	{
-		if (panel.isAlertClickEnabled(category))
-		{
-			runtime.playClick();
-		}
+		runtime.playClick(panel.getAlertClickSequence(category));
 		panel.getAlertProfiles()
 			.resolve(category, panel.getNotificationFeedbackSettings())
 			.ifPresent(playback -> runtime.sendPattern(

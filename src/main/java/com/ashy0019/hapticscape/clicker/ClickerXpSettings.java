@@ -33,7 +33,8 @@ public final class ClickerXpSettings
 			MINIMUM_XP_GAIN,
 			MAXIMUM_XP_GAIN
 		);
-		this.xpGainSequence = Objects.requireNonNull(xpGainSequence, "xpGainSequence");
+		ClickSequence ordinary = Objects.requireNonNull(xpGainSequence, "xpGainSequence");
+		this.xpGainSequence = ordinary.isEnabled() ? ordinary : ClickSequence.ONE;
 		this.levelUpOverride = Objects.requireNonNull(levelUpOverride, "levelUpOverride");
 		this.milestoneOverride = Objects.requireNonNull(milestoneOverride, "milestoneOverride");
 	}

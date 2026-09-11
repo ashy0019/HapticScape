@@ -1,6 +1,7 @@
 package com.ashy0019.hapticscape;
 
 import com.ashy0019.hapticscape.audio.HapticScapeSound;
+import com.ashy0019.hapticscape.clicker.ClickSequence;
 import com.ashy0019.hapticscape.clicker.ClickerService;
 import com.ashy0019.hapticscape.clicker.ClickerSettings;
 import com.ashy0019.hapticscape.clicker.SoundPlayerClickPlayback;
@@ -110,6 +111,7 @@ public final class HapticScapeRuntime implements AutoCloseable
                 clickerService,
                 musicSyncService,
                 effectiveSettingsService::current,
+                () -> clickerSettingsFromSettings(dependencies.getSettings()),
                 this::startLevel99Ceremony,
                 dependencies.getDesktopNotifications(),
                 dependencies.getSourceMessages()
@@ -329,8 +331,13 @@ public final class HapticScapeRuntime implements AutoCloseable
 
     public void playClick()
     {
+        playClick(ClickSequence.ONE);
+    }
+
+    public void playClick(ClickSequence sequence)
+    {
         ensureStarted();
-        clickerService.click();
+        clickerService.click(sequence);
     }
 
     public void stopAll()

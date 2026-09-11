@@ -30,6 +30,19 @@ public class ClickerXpSettingsTest
 	}
 
 	@Test
+	public void ordinaryXpSequenceCannotBeDisabledThroughThePatternSelector()
+	{
+		ClickerXpSettings settings = new ClickerXpSettings(
+			1,
+			ClickSequence.NONE,
+			ClickSequence.NONE,
+			ClickSequence.NONE
+		);
+
+		assertEquals(ClickSequence.ONE, settings.getXpGainSequence());
+	}
+
+	@Test
 	public void milestoneOverrideDoesNotDependOnOrdinaryLevelUpOverride()
 	{
 		ClickerXpSettings settings = new ClickerXpSettings(

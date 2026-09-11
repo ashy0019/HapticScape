@@ -70,6 +70,31 @@ public class RemoteSettingsSnapshotTest
 	}
 
 	@Test
+	public void localClickOutputAuthorityIsNotRemoteControllable()
+	{
+		RemoteSettingsSnapshot snapshot = RemoteSettingsSnapshot.capture(
+			new FixedIntensityConfig(31)
+		);
+		Map<String, Object> values = snapshot.toConfigurationMap();
+
+		assertFalse(values.containsKey(HapticScapeSettingKeys.CLICKER_ENABLED));
+		assertFalse(values.containsKey(HapticScapeSettingKeys.CLICKER_VOLUME_PERCENT));
+		try
+		{
+			snapshot.withConfigurationValue(
+				new Gson(),
+				HapticScapeSettingKeys.CLICKER_VOLUME_PERCENT,
+				100
+			);
+			fail("Expected local click volume to be rejected as a remote setting");
+		}
+		catch (IllegalArgumentException expected)
+		{
+			// Expected.
+		}
+	}
+
+	@Test
 	public void persistedValuesUseValidatedRanges()
 	{
 		RemoteSettingsSnapshot updated = RemoteSettingsSnapshot.capture(

@@ -185,6 +185,8 @@ public final class ClickerPhraseRule
 		}
 
 		return (enabled ? "" : "(off) ")
+			+ sequence.getClickCount()
+			+ (sequence == ClickSequence.ONE ? " click · " : " clicks · ")
 			+ mode
 			+ ": "
 			+ preview;

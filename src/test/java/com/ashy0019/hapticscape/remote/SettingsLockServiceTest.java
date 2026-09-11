@@ -124,7 +124,8 @@ public class SettingsLockServiceTest
 			HapticScapeSettingKeys.MUSIC_MAXIMUM_INTENSITY_PERCENT
 		));
 		assertFalse(service.canEditLocally(HapticScapeSettingKeys.INTENSITY_PERCENT));
-		assertFalse(service.canEditLocally(HapticScapeSettingKeys.CLICKER_ENABLED));
+		assertTrue(service.canEditLocally(HapticScapeSettingKeys.CLICKER_ENABLED));
+		assertTrue(service.canEditLocally(HapticScapeSettingKeys.CLICKER_VOLUME_PERCENT));
 	}
 
 	@Test
@@ -282,7 +283,8 @@ public class SettingsLockServiceTest
 			assertTrue(service.getSnapshot().isLegacyFullLock());
 			assertTrue(service.isLocked(SettingsLockCatalog.LEVEL_UP_HAPTICS));
 			assertFalse(service.isLocked(SettingsLockCatalog.PROTECTED_EXIT));
-			assertFalse(service.canEditLocally(HapticScapeSettingKeys.CLICKER_ENABLED));
+			assertTrue(service.canEditLocally(HapticScapeSettingKeys.CLICKER_ENABLED));
+			assertTrue(service.canEditLocally(HapticScapeSettingKeys.CLICKER_VOLUME_PERCENT));
 			assertTrue(service.unlock(password));
 		}
 		finally

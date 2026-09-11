@@ -28,6 +28,10 @@ public class SettingsLockCatalogTest
 			SettingsLockCatalog.CLICK_SETTINGS_BLOCK,
 			SettingsLockCatalog.skillClicks("attack")
 		));
+		assertFalse(SettingsLockCatalog.covers(
+			SettingsLockCatalog.CLICK_SETTINGS_BLOCK,
+			SettingsLockCatalog.CLICKER_ENABLED
+		));
 	}
 
 	@Test

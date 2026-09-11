@@ -30,7 +30,8 @@ import java.util.Objects;
  *
  * <p>Connection and safety settings are intentionally absent. In particular,
  * the Intiface server URI, connect/disconnect state, Remote Control pairing,
- * Emergency Off, and session termination remain local-only.</p>
+ * Emergency Off, session termination, and click-output enablement/volume remain
+ * local-only.</p>
  */
 public final class RemoteSettingsSnapshot
 {
@@ -140,7 +141,6 @@ public final class RemoteSettingsSnapshot
 		XpFeedbackSettings globalXp = getGlobalXpFeedbackSettings();
 		NotificationFeedbackSettings notifications = getNotificationFeedbackSettings();
 		MusicSyncSettings music = getMusicSyncSettings();
-		ClickerSettings clicker = getClickerSettings();
 		ClickerXpSettings clickerXp = getClickerXpSettings();
 		Map<String, Object> values = new LinkedHashMap<>();
 		values.put(HapticScapeSettingKeys.MINIMUM_XP_GAIN, globalXp.getMinimumXpGain());
@@ -206,8 +206,9 @@ public final class RemoteSettingsSnapshot
 			HapticScapeSettingKeys.MUSIC_MAXIMUM_INTENSITY_PERCENT,
 			music.getMaximumIntensityPercent()
 		);
-		values.put(HapticScapeSettingKeys.CLICKER_ENABLED, clicker.isEnabled());
-		values.put(HapticScapeSettingKeys.CLICKER_VOLUME_PERCENT, clicker.getVolumePercent());
+		// Click output enablement and volume are participant-local authority.
+		// They remain in the snapshot only so the effective settings facade can
+		// describe the local machine, but a controller cannot mutate them.
 		values.put(
 			HapticScapeSettingKeys.CLICKER_MINIMUM_XP_GAIN,
 			clickerXp.getMinimumXpGain()
