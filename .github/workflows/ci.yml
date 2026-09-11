@@ -40,11 +40,22 @@ jobs:
             clean \
             test \
             verifyStandaloneArtifact \
-            collectRuntimeLicenses
+            collectRuntimeLicenses \
+            :runelite-bridge-client:test \
+            :runelite-bridge-client:verifyBridgeClientJar \
+            :runelite-bridge-client:collectRuntimeLicenses
 
       - name: Upload standalone desktop JAR
         uses: actions/upload-artifact@v4
         with:
           name: hapticscape-desktop-${{ github.sha }}
           path: build/libs/hapticscape-desktop.jar
+          retention-days: 14
+
+
+      - name: Upload fallback RuneLite bridge client JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: hapticscape-runelite-bridge-client-${{ github.sha }}
+          path: runelite-bridge-client/build/libs/hapticscape-runelite-bridge-client.jar
           retention-days: 14

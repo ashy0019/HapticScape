@@ -721,6 +721,32 @@ For an updater-compatible release, the Git tag, embedded version, ZIP filename,
 and checksum filename must use the same version. Upload both generated files to
 the GitHub Release created from that tag.
 
+
+### Build the fallback RuneLite bridge client
+
+The standalone HapticScape application remains RuneLite-independent. A separate
+`runelite-bridge-client` subproject packages RuneLite with only the Local Event
+Bridge built in for users who cannot install the bridge through the Plugin Hub.
+The vendored bridge source and exact upstream commit are recorded in
+`runelite-bridge-client/BRIDGE-SOURCE.properties`.
+
+Build and verify the fallback client JAR with:
+
+```powershell
+.\gradlew.bat :runelite-bridge-client:verifyBridgeClientArtifact
+```
+
+Build the Windows bundle with:
+
+```powershell
+.\package-bridge-client.ps1 -Version X.Y.Z
+```
+
+The package is written to `build\distribution` and includes source provenance,
+third-party notices, and a SHA-256 checksum. When the canonical bridge changes,
+run `sync-runelite-bridge.ps1` against a clean local clone of
+`runelite-local-event-bridge` before rebuilding.
+
 ## Deploy a Remote Control relay
 
 The included relay uses a Cloudflare Worker and Durable Object. Deployment
