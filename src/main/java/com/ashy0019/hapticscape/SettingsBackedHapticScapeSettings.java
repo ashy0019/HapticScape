@@ -102,6 +102,12 @@ public final class SettingsBackedHapticScapeSettings implements HapticScapeSetti
     }
 
     @Override
+    public String skillClickProfiles()
+    {
+        return stringValue(HapticScapeSettingKeys.SKILL_CLICK_PROFILES, "");
+    }
+
+    @Override
     public boolean notificationFeedbackEnabled()
     {
         return booleanValue(HapticScapeSettingKeys.NOTIFICATION_FEEDBACK_ENABLED, false);

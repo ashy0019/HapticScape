@@ -111,6 +111,7 @@ public class SettingsBackedRemoteStoresTest
 		values.put("milestonePatternPreset", "TRIPLE");
 		values.put("level99CelebrationEnabled", true);
 		values.put("skillFeedbackProfiles", "");
+		values.put("skillClickProfiles", "");
 		values.put("notificationFeedbackEnabled", false);
 		values.put("notificationIntensityPercent", 50);
 		values.put("notificationPatternPreset", "DOUBLE");

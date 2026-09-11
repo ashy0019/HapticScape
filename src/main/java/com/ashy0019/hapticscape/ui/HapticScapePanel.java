@@ -10,6 +10,7 @@ import com.ashy0019.hapticscape.HapticScapeSettingKeys;
 import com.ashy0019.hapticscape.HapticScapeSettingsSource;
 import com.ashy0019.hapticscape.NotificationFeedbackSettings;
 import com.ashy0019.hapticscape.SkillCatalog;
+import com.ashy0019.hapticscape.SkillClickProfiles;
 import com.ashy0019.hapticscape.SkillFeedbackProfiles;
 import com.ashy0019.hapticscape.SkillSelection;
 import com.ashy0019.hapticscape.XpFeedbackSettings;
@@ -318,9 +319,6 @@ public final class HapticScapePanel extends JPanel
 		milestoneCheckBox.setSelected(milestoneEnabled);
 		milestoneCheckBox.setToolTipText("Use distinct feedback for levels 10–90");
 		level99CheckBox.setSelected(level99Enabled);
-		level99CheckBox.setToolTipText(
-			"Celebrate real skill level 99 with a dedicated mastery ceremony"
-		);
 		testLevelUpButton.setToolTipText("Preview the configured ordinary level-up pattern");
 		previewLevel99Button.setToolTipText(
 			"Preview the Level 99 ceremony using the skill selected on Profiles"
@@ -381,12 +379,24 @@ public final class HapticScapePanel extends JPanel
 			this::isSubjectWorkspaceActive,
 			this::isLockSelectionEnabled
 		);
+		xpClickSettingsPanel = new XpClickSettingsPanel(
+			config,
+			this::writeFeedbackSetting,
+			this::refreshInheritedProfileIfReady,
+			remoteSessionManager,
+			settingsLockService,
+			settingsLockDraft,
+			this::isSubjectWorkspaceActive,
+			this::isLockSelectionEnabled
+		);
 		profilesPanel = new ProfilesPanel(
 			skillCatalog,
 			SkillFeedbackProfiles.fromConfigValue(config.skillFeedbackProfiles())
 				.replaceMissingCustomPatterns(customPatterns),
+			SkillClickProfiles.fromConfigValue(config.skillClickProfiles()),
 			this::writeFeedbackSetting,
 			this::getGlobalXpFeedbackSettings,
+			xpClickSettingsPanel::getSettings,
 			() -> customPatterns,
 			testSkillProfileAction,
 			remoteSessionManager,
@@ -423,15 +433,6 @@ public final class HapticScapePanel extends JPanel
 					musicSettingsAction.accept(settings);
 				}
 			}
-		);
-		xpClickSettingsPanel = new XpClickSettingsPanel(
-			config,
-			this::writeFeedbackSetting,
-			remoteSessionManager,
-			settingsLockService,
-			settingsLockDraft,
-			this::isSubjectWorkspaceActive,
-			this::isLockSelectionEnabled
 		);
 		phraseRulesPanel = new ClickerPhraseRulesPanel(
 			config,
@@ -1642,8 +1643,10 @@ public final class HapticScapePanel extends JPanel
 				settings.getHapticSkillSelection(),
 				settings.getClickSkillSelection()
 			);
+			xpClickSettingsPanel.applyDisplayedSettings(settings.getClickerXpSettings());
 			profilesPanel.applyDisplayedSettings(
 				settings.getSkillFeedbackProfiles(),
+				settings.getSkillClickProfiles(),
 				displayedPatterns
 			);
 			alertsPanel.applyDisplayedSettings(
@@ -1656,7 +1659,6 @@ public final class HapticScapePanel extends JPanel
 			);
 			customPatternsPanel.applyDisplayedLibrary(displayedPatterns);
 			musicPanel.applyDisplayedSettings(settings.getMusicSyncSettings());
-			xpClickSettingsPanel.applyDisplayedSettings(settings.getClickerXpSettings());
 			phraseRulesPanel.applyDisplayedRules(settings.getClickerPhraseRules());
 			applicationStartupPanel.apply(
 				settings.isStartWithWindows(),

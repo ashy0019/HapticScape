@@ -140,6 +140,27 @@ public class RemoteSettingsSnapshotTest
 		assertEquals(ClickSequence.THREE, updated.getClickerXpSettings().getLevelUpOverride());
 	}
 
+	@Test
+	public void skillClickProfileOverridesGlobalClickPolicy()
+	{
+		RemoteSettingsSnapshot snapshot = RemoteSettingsSnapshot.capture(
+			new SkillClickProfileConfig()
+		);
+
+		assertEquals(25, snapshot.getClickerXpSettings("ranged").getMinimumXpGain());
+		assertEquals(ClickSequence.TWO, snapshot.getClickerXpSettings("ranged").getXpGainSequence());
+		assertEquals(1, snapshot.getClickerXpSettings("cooking").getMinimumXpGain());
+	}
+
+	private static final class SkillClickProfileConfig extends TestHapticScapeSettings
+	{
+		@Override
+		public String skillClickProfiles()
+		{
+			return "v1|RANGED,25,TWO,THREE,ONE";
+		}
+	}
+
 	private static final class FixedIntensityConfig extends TestHapticScapeSettings
 	{
 		private final int intensity;

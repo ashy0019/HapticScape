@@ -77,6 +77,35 @@ public final class ClickerXpSettings
 		return milestoneOverride;
 	}
 
+	@Override
+	public boolean equals(Object other)
+	{
+		if (this == other)
+		{
+			return true;
+		}
+		if (!(other instanceof ClickerXpSettings))
+		{
+			return false;
+		}
+		ClickerXpSettings that = (ClickerXpSettings) other;
+		return minimumXpGain == that.minimumXpGain
+			&& xpGainSequence == that.xpGainSequence
+			&& levelUpOverride == that.levelUpOverride
+			&& milestoneOverride == that.milestoneOverride;
+	}
+
+	@Override
+	public int hashCode()
+	{
+		return Objects.hash(
+			minimumXpGain,
+			xpGainSequence,
+			levelUpOverride,
+			milestoneOverride
+		);
+	}
+
 	/** Compatibility view for the current checkbox UI. */
 	public boolean isLevelUpEnabled()
 	{

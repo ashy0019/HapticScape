@@ -17,10 +17,11 @@ import javax.swing.JPanel;
 import javax.swing.JSpinner;
 import javax.swing.SpinnerNumberModel;
 
-/** Global XP click policy; per-skill eligibility remains in {@link SkillsPanel}. */
+/** Global XP click policy; per-skill overrides live in the skill profile editor. */
 final class XpClickSettingsPanel extends JPanel
 {
 	private final SettingsChangeSink settingsSink;
+	private final Runnable settingsChangedAction;
 	private final SettingsLockService lockService;
 	private final BooleanSupplier editingRemoteSubject;
 	private final JSpinner minimumXpSpinner = new JSpinner(new SpinnerNumberModel(
@@ -43,6 +44,7 @@ final class XpClickSettingsPanel extends JPanel
 	XpClickSettingsPanel(
 		HapticScapeSettingsSource config,
 		SettingsChangeSink settingsSink,
+		Runnable settingsChangedAction,
 		RemoteSessionManager sessionManager,
 		SettingsLockService lockService,
 		SettingsLockDraft lockDraft,
@@ -50,6 +52,7 @@ final class XpClickSettingsPanel extends JPanel
 		BooleanSupplier lockSelectionEnabled)
 	{
 		this.settingsSink = settingsSink;
+		this.settingsChangedAction = settingsChangedAction == null ? () -> { } : settingsChangedAction;
 		this.lockService = lockService;
 		this.editingRemoteSubject = editingRemoteSubject;
 		settings = fromConfig(config);
@@ -67,17 +70,11 @@ final class XpClickSettingsPanel extends JPanel
 		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
 		setBorder(PanelUi.createSectionBorder("XP clicks"));
 		PanelUi.addPreferredHeightComponent(this, blockHeader);
-		JLabel hint = new JLabel("Skill eligibility is controlled in the Skills matrix.");
-		hint.setEnabled(false);
-		PanelUi.addPreferredHeightComponent(this, hint);
 		PanelUi.setFixedWidth(minimumXpSpinner, PanelUi.NUMERIC_CONTROL_WIDTH);
-		PanelUi.addPreferredHeightComponent(this, row("Minimum XP gain", minimumXpSpinner));
+		PanelUi.addPreferredHeightComponent(this, row("Global XP click threshold", minimumXpSpinner));
 		PanelUi.addPreferredHeightComponent(this, row("XP gain", xpSequenceComboBox));
 		PanelUi.addPreferredHeightComponent(this, row("Level-up", levelUpComboBox));
 		PanelUi.addPreferredHeightComponent(this, row("Milestone", milestoneComboBox));
-		JLabel level99Hint = new JLabel("Level 99 uses its ceremony and never clicks.");
-		level99Hint.setEnabled(false);
-		PanelUi.addPreferredHeightComponent(this, level99Hint);
 
 		applyControls(settings);
 		configureListeners();
@@ -123,7 +120,7 @@ final class XpClickSettingsPanel extends JPanel
 				HapticScapeSettingKeys.CLICKER_MINIMUM_XP_GAIN,
 				((Number) minimumXpSpinner.getValue()).intValue()
 			);
-			refreshSettings();
+			refreshSettingsAndNotify();
 		});
 		xpSequenceComboBox.addActionListener(event ->
 		{
@@ -137,7 +134,7 @@ final class XpClickSettingsPanel extends JPanel
 				HapticScapeSettingKeys.CLICKER_XP_SEQUENCE,
 				selected.toConfigValue()
 			);
-			refreshSettings();
+			refreshSettingsAndNotify();
 		});
 		levelUpComboBox.addActionListener(event ->
 		{
@@ -151,7 +148,7 @@ final class XpClickSettingsPanel extends JPanel
 				HapticScapeSettingKeys.CLICKER_LEVEL_UP_SEQUENCE,
 				selected.toConfigValue()
 			);
-			refreshSettings();
+			refreshSettingsAndNotify();
 		});
 		milestoneComboBox.addActionListener(event ->
 		{
@@ -165,7 +162,7 @@ final class XpClickSettingsPanel extends JPanel
 				HapticScapeSettingKeys.CLICKER_MILESTONE_SEQUENCE,
 				selected.toConfigValue()
 			);
-			refreshSettings();
+			refreshSettingsAndNotify();
 		});
 	}
 
@@ -191,6 +188,12 @@ final class XpClickSettingsPanel extends JPanel
 			selected(levelUpComboBox, ClickSequence.NONE),
 			selected(milestoneComboBox, ClickSequence.NONE)
 		);
+	}
+
+	private void refreshSettingsAndNotify()
+	{
+		refreshSettings();
+		settingsChangedAction.run();
 	}
 
 	private void refreshEnabledState()

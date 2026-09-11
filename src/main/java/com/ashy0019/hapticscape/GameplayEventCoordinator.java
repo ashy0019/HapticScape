@@ -105,7 +105,7 @@ final class GameplayEventCoordinator implements GameplayEventSink, AutoCloseable
 			settings.isMilestoneFeedbackEnabled(),
 			settings.isLevel99CelebrationEnabled(),
 			settings.isClickSkillEnabled(skillId),
-			settings.getClickerXpSettings()
+			settings.getClickerXpSettings(skillId)
 		);
 		if (decision.shouldClick())
 		{

@@ -248,15 +248,11 @@ final class SkillsPanel extends JPanel
 	private void refreshSkillButtonStyles()
 	{
 		Color selectedBackground = UIManager.getColor("List.selectionBackground");
-		Color selectedForeground = UIManager.getColor("List.selectionForeground");
+		Color selectedForeground = HapticScapeTheme.ACCENT;
 		Color normalForeground = UIManager.getColor("Label.foreground");
 		if (selectedBackground == null)
 		{
 			selectedBackground = getBackground().darker();
-		}
-		if (selectedForeground == null)
-		{
-			selectedForeground = normalForeground;
 		}
 		for (Map.Entry<SkillDescriptor, JToggleButton> entry : skillButtons.entrySet())
 		{

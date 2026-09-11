@@ -20,6 +20,7 @@ public interface RemoteSettingsSource
 	String milestonePatternPreset();
 	boolean level99CelebrationEnabled();
 	String skillFeedbackProfiles();
+	default String skillClickProfiles() { return ""; }
 	boolean notificationFeedbackEnabled();
 	int notificationIntensityPercent();
 	String notificationPatternPreset();

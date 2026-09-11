@@ -18,7 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 public final class ClickerService implements AutoCloseable
 {
 	static final int MAXIMUM_CONCURRENT_CLICKS = 2;
-	static final long SEQUENCE_GAP_MILLIS = 110L;
+	static final long SEQUENCE_GAP_MILLIS = 200L;
 
 	private final ClickPlayback playback;
 	private final ThreadPoolExecutor executor;

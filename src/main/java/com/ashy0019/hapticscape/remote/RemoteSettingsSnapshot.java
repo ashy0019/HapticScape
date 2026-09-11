@@ -7,6 +7,7 @@ import com.ashy0019.hapticscape.AlertTriggerSettings;
 import com.ashy0019.hapticscape.CustomPatternLibrary;
 import com.ashy0019.hapticscape.HapticPatternSelection;
 import com.ashy0019.hapticscape.NotificationFeedbackSettings;
+import com.ashy0019.hapticscape.SkillClickProfiles;
 import com.ashy0019.hapticscape.SkillFeedbackProfiles;
 import com.ashy0019.hapticscape.SkillSelection;
 import com.ashy0019.hapticscape.XpFeedbackSettings;
@@ -49,6 +50,7 @@ public final class RemoteSettingsSnapshot
 	private final String milestonePatternPreset;
 	private final boolean level99CelebrationEnabled;
 	private final String skillFeedbackProfiles;
+	private final String skillClickProfiles;
 	private final boolean notificationFeedbackEnabled;
 	private final int notificationIntensityPercent;
 	private final String notificationPatternPreset;
@@ -89,6 +91,7 @@ public final class RemoteSettingsSnapshot
 		milestonePatternPreset = config.milestonePatternPreset();
 		level99CelebrationEnabled = config.level99CelebrationEnabled();
 		skillFeedbackProfiles = config.skillFeedbackProfiles();
+		skillClickProfiles = config.skillClickProfiles();
 		notificationFeedbackEnabled = config.notificationFeedbackEnabled();
 		notificationIntensityPercent = config.notificationIntensityPercent();
 		notificationPatternPreset = config.notificationPatternPreset();
@@ -168,6 +171,10 @@ public final class RemoteSettingsSnapshot
 		values.put(
 			HapticScapeSettingKeys.SKILL_FEEDBACK_PROFILES,
 			getSkillFeedbackProfiles().toConfigValue()
+		);
+		values.put(
+			HapticScapeSettingKeys.SKILL_CLICK_PROFILES,
+			getSkillClickProfiles().toConfigValue()
 		);
 		values.put(HapticScapeSettingKeys.NOTIFICATION_FEEDBACK_ENABLED, notifications.isEnabled());
 		values.put(
@@ -269,6 +276,7 @@ public final class RemoteSettingsSnapshot
 		getGlobalXpFeedbackSettings();
 		getCustomPatterns();
 		getSkillFeedbackProfiles();
+		getSkillClickProfiles();
 		getNotificationFeedbackSettings();
 		getAlertProfiles();
 		getAlertTriggerSettings();
@@ -304,6 +312,11 @@ public final class RemoteSettingsSnapshot
 	{
 		return SkillFeedbackProfiles.fromConfigValue(skillFeedbackProfiles)
 			.replaceMissingCustomPatterns(getCustomPatterns());
+	}
+
+	public SkillClickProfiles getSkillClickProfiles()
+	{
+		return SkillClickProfiles.fromConfigValue(skillClickProfiles);
 	}
 
 	public SkillSelection getHapticSkillSelection()
@@ -447,6 +460,11 @@ public final class RemoteSettingsSnapshot
 		);
 	}
 
+	public ClickerXpSettings getClickerXpSettings(String skillId)
+	{
+		return getSkillClickProfiles().resolve(skillId, getClickerXpSettings());
+	}
+
 	public ClickerPhraseRules getClickerPhraseRules()
 	{
 		return ClickerPhraseRules.fromConfigValue(clickerPhraseRules);
@@ -487,6 +505,7 @@ public final class RemoteSettingsSnapshot
 			&& Objects.equals(levelUpPatternPreset, that.levelUpPatternPreset)
 			&& Objects.equals(milestonePatternPreset, that.milestonePatternPreset)
 			&& Objects.equals(skillFeedbackProfiles, that.skillFeedbackProfiles)
+			&& Objects.equals(skillClickProfiles, that.skillClickProfiles)
 			&& Objects.equals(notificationPatternPreset, that.notificationPatternPreset)
 			&& Objects.equals(alertProfiles, that.alertProfiles)
 			&& Objects.equals(alertTriggerSettings, that.alertTriggerSettings)
@@ -517,6 +536,7 @@ public final class RemoteSettingsSnapshot
 			milestonePatternPreset,
 			level99CelebrationEnabled,
 			skillFeedbackProfiles,
+			skillClickProfiles,
 			notificationFeedbackEnabled,
 			notificationIntensityPercent,
 			notificationPatternPreset,

@@ -24,6 +24,7 @@ public class SettingsBackedHapticScapeSettingsTest
         assertEquals(50, settings.intensityPercent());
         assertEquals(500, settings.pulseDurationMillis());
         assertEquals(HapticPatternSelection.SINGLE.toConfigValue(), settings.patternPreset());
+        assertEquals("", settings.skillClickProfiles());
         assertEquals("ATTACK,COOKING", settings.clickerDisabledSkills());
         assertEquals(HapticScapeSettingsSource.DEFAULT_REMOTE_RELAY_URL, settings.remoteRelayUrl());
         assertTrue(settings.remoteSettingsAllowed());
@@ -40,6 +41,7 @@ public class SettingsBackedHapticScapeSettingsTest
         store.set(HapticScapeSettingKeys.INTENSITY_PERCENT, 120);
         store.set(HapticScapeSettingKeys.CLICKER_ENABLED, true);
         store.set(HapticScapeSettingKeys.CLICKER_DISABLED_SKILLS, "COOKING");
+        store.set(HapticScapeSettingKeys.SKILL_CLICK_PROFILES, "v1|ATTACK,10,TWO,THREE,ONE");
         store.set(HapticScapeSettingKeys.REMOTE_RELAY_URL, "  wss://relay.example/relay  ");
         store.set(HapticScapeSettingKeys.REMOTE_MAXIMUM_DURATION_MILLIS, 25);
 
@@ -52,6 +54,7 @@ public class SettingsBackedHapticScapeSettingsTest
         assertEquals(100, settings.intensityPercent());
         assertTrue(settings.clickerEnabled());
         assertEquals("COOKING", settings.clickerDisabledSkills());
+        assertEquals("v1|ATTACK,10,TWO,THREE,ONE", settings.skillClickProfiles());
         assertEquals("wss://relay.example/relay", settings.remoteRelayUrl());
         assertEquals(50, settings.remoteMaximumDurationMillis());
     }

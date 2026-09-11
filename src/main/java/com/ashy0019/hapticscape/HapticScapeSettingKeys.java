@@ -21,6 +21,7 @@ public final class HapticScapeSettingKeys
 	public static final String MILESTONE_PATTERN_PRESET = "milestonePatternPreset";
 	public static final String LEVEL_99_CELEBRATION_ENABLED = "level99CelebrationEnabled";
 	public static final String SKILL_FEEDBACK_PROFILES = "skillFeedbackProfiles";
+	public static final String SKILL_CLICK_PROFILES = "skillClickProfiles";
 	public static final String NOTIFICATION_FEEDBACK_ENABLED = "notificationFeedbackEnabled";
 	public static final String NOTIFICATION_INTENSITY_PERCENT = "notificationIntensityPercent";
 	public static final String NOTIFICATION_PATTERN_PRESET = "notificationPatternPreset";
