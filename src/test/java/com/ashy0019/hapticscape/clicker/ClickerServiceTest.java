@@ -124,6 +124,87 @@ public class ClickerServiceTest
 	}
 
 	@Test
+	public void sequencePlaysExactBoundedClickCount() throws Exception
+	{
+		CountDownLatch played = new CountDownLatch(3);
+		AtomicInteger plays = new AtomicInteger();
+		ClickerService service = new ClickerService(
+			gainDb ->
+			{
+				plays.incrementAndGet();
+				played.countDown();
+			},
+			new ClickerSettings(true, 70)
+		);
+
+		try
+		{
+			service.click(ClickSequence.THREE);
+			assertTrue(played.await(1, TimeUnit.SECONDS));
+			assertEquals(3, plays.get());
+		}
+		finally
+		{
+			service.close();
+		}
+	}
+
+	@Test
+	public void noneSequenceIsSilent()
+	{
+		AtomicInteger plays = new AtomicInteger();
+		ClickerService service = new ClickerService(
+			gainDb -> plays.incrementAndGet(),
+			new ClickerSettings(true, 70)
+		);
+
+		try
+		{
+			service.click(ClickSequence.NONE);
+			assertEquals(0, plays.get());
+		}
+		finally
+		{
+			service.close();
+		}
+	}
+
+	@Test
+	public void pausingStopsRemainderOfActiveSequence() throws Exception
+	{
+		CountDownLatch firstPlayed = new CountDownLatch(1);
+		CountDownLatch releaseFirstPlayback = new CountDownLatch(1);
+		AtomicInteger plays = new AtomicInteger();
+		ClickerService service = new ClickerService(
+			gainDb ->
+			{
+				int playNumber = plays.incrementAndGet();
+				if (playNumber == 1)
+				{
+					firstPlayed.countDown();
+					releaseFirstPlayback.await(1, TimeUnit.SECONDS);
+				}
+			},
+			new ClickerSettings(true, 70)
+		);
+
+		try
+		{
+			service.click(ClickSequence.THREE);
+			assertTrue(firstPlayed.await(1, TimeUnit.SECONDS));
+			service.setPaused(true);
+			releaseFirstPlayback.countDown();
+			Thread.sleep(ClickerService.SEQUENCE_GAP_MILLIS * 2);
+			assertEquals(1, plays.get());
+		}
+		finally
+		{
+			releaseFirstPlayback.countDown();
+			service.close();
+		}
+	}
+
+	@Test
 	public void closeRejectsFutureClicks()
 	{
 		AtomicInteger plays = new AtomicInteger();

@@ -18,6 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 public final class ClickerService implements AutoCloseable
 {
 	static final int MAXIMUM_CONCURRENT_CLICKS = 2;
+	static final long SEQUENCE_GAP_MILLIS = 110L;
 
 	private final ClickPlayback playback;
 	private final ThreadPoolExecutor executor;
@@ -66,19 +67,56 @@ public final class ClickerService implements AutoCloseable
 
 	public void click()
 	{
+		click(ClickSequence.ONE);
+	}
+
+	public void click(ClickSequence sequence)
+	{
+		Objects.requireNonNull(sequence, "sequence");
 		ClickerSettings current = settings;
-		if (closed || paused || !current.isEnabled() || current.getVolumePercent() == 0)
+		if (!sequence.isEnabled()
+			|| closed
+			|| paused
+			|| !current.isEnabled()
+			|| current.getVolumePercent() == 0)
 		{
 			return;
 		}
 
 		try
 		{
-			executor.execute(() -> playSafely(current.getGainDb()));
+			executor.execute(() -> playSequenceSafely(sequence, current.getGainDb()));
 		}
 		catch (RejectedExecutionException ignored)
 		{
-			log.debug("Dropping click because both playback slots are busy");
+			log.debug("Dropping click sequence because both playback slots are busy");
+		}
+	}
+
+	private void playSequenceSafely(ClickSequence sequence, float gainDb)
+	{
+		for (int clickIndex = 0; clickIndex < sequence.getClickCount(); clickIndex++)
+		{
+			if (closed || paused || Thread.currentThread().isInterrupted())
+			{
+				return;
+			}
+
+			playSafely(gainDb);
+			if (clickIndex + 1 >= sequence.getClickCount())
+			{
+				return;
+			}
+
+			try
+			{
+				Thread.sleep(SEQUENCE_GAP_MILLIS);
+			}
+			catch (InterruptedException interrupted)
+			{
+				Thread.currentThread().interrupt();
+				return;
+			}
 		}
 	}
 
