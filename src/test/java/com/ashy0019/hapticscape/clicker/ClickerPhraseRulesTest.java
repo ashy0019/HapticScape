@@ -9,38 +9,42 @@ import static org.junit.Assert.assertTrue;
 public class ClickerPhraseRulesTest
 {
 	@Test
-	public void anyMatchingRuleTriggers()
+	public void strongestMatchingRuleWinsWithoutStackingCounts()
 	{
 		ClickerPhraseRules rules = ClickerPhraseRules.empty()
 			.withAdded(new ClickerPhraseRule(
 				true,
+				ClickSequence.ONE,
 				ClickerPhraseMatchMode.CONTAINS,
-				"bird nest"
+				"bird"
 			))
 			.withAdded(new ClickerPhraseRule(
 				true,
-				ClickerPhraseMatchMode.EXACT,
-				"Hello"
+				ClickSequence.THREE,
+				ClickerPhraseMatchMode.CONTAINS,
+				"bird nest"
 			));
 
-		assertTrue(rules.matches("You receive a bird nest."));
-		assertTrue(rules.matches("HELLO"));
-		assertFalse(rules.matches("Nothing happened."));
+		assertEquals(ClickSequence.THREE, rules.strongestMatch("You receive a bird nest."));
+		assertEquals(ClickSequence.ONE, rules.strongestMatch("A bird appears."));
+		assertEquals(ClickSequence.NONE, rules.strongestMatch("Nothing happened."));
 	}
 
 	@Test
-	public void configurationRoundTripPreservesRegexCharacters()
+	public void configurationRoundTripPreservesRegexCharactersAndSequence()
 	{
 		ClickerPhraseRules original = ClickerPhraseRules.empty()
 			.withAdded(new ClickerPhraseRule(
 				true,
+				ClickSequence.THREE,
 				ClickerPhraseMatchMode.REGEX,
 				"(?i)^You receive \\d+ x (rune|coin); nice,$"
 			))
 			.withAdded(new ClickerPhraseRule(
 				false,
+				ClickSequence.TWO,
 				ClickerPhraseMatchMode.CONTAINS,
-				"ã“ã‚“ã«ã¡ã¯"
+				"こんにちは"
 			));
 
 		ClickerPhraseRules restored =
@@ -49,6 +53,7 @@ public class ClickerPhraseRulesTest
 			);
 
 		assertEquals(original, restored);
+		assertTrue(original.toConfigValue().startsWith("v3;"));
 	}
 
 	@Test
@@ -77,26 +82,29 @@ public class ClickerPhraseRulesTest
 	}
 
 	@Test
-	public void legacyRulesReceiveStableIdsAndMigrateToVersionTwo()
+	public void versionOneAndTwoRulesMigrateToVersionThreeAsOneClick()
 	{
-		String legacy = "v1;1,CONTAINS,aGVsbG8;1,CONTAINS,aGVsbG8";
-		ClickerPhraseRules first = ClickerPhraseRules.fromConfigValue(legacy);
-		ClickerPhraseRules second = ClickerPhraseRules.fromConfigValue(legacy);
+		String legacy = "v1;1,CONTAINS,aGVsbG8";
+		ClickerPhraseRules v1 = ClickerPhraseRules.fromConfigValue(legacy);
+		String v2 = v1.toConfigValue()
+			.replaceFirst("^v3;", "v2;")
+			.replaceFirst(",ONE,", ",");
+		ClickerPhraseRules restoredV2 = ClickerPhraseRules.fromConfigValue(v2);
 
 		assertTrue(ClickerPhraseRules.requiresMigration(legacy));
-		assertEquals(first, second);
-		assertFalse(first.getRules().get(0).getId().equals(
-			first.getRules().get(1).getId()
-		));
-		assertTrue(first.toConfigValue().startsWith("v2;"));
-		assertEquals(first, ClickerPhraseRules.fromConfigValue(first.toConfigValue()));
+		assertTrue(ClickerPhraseRules.requiresMigration(v2));
+		assertEquals(ClickSequence.ONE, v1.getRules().get(0).getSequence());
+		assertEquals(ClickSequence.ONE, restoredV2.getRules().get(0).getSequence());
+		assertTrue(v1.toConfigValue().startsWith("v3;"));
+		assertTrue(restoredV2.toConfigValue().startsWith("v3;"));
 	}
 
 	@Test
-	public void editingRulePreservesItsIdentity()
+	public void editingRulePreservesIdentityAndExistingSequence()
 	{
 		ClickerPhraseRule original = new ClickerPhraseRule(
 			true,
+			ClickSequence.THREE,
 			ClickerPhraseMatchMode.CONTAINS,
 			"hello"
 		);
@@ -107,6 +115,7 @@ public class ClickerPhraseRulesTest
 		);
 
 		assertEquals(original.getId(), edited.getId());
+		assertEquals(ClickSequence.THREE, edited.getSequence());
 		assertFalse(original.equals(edited));
 	}
 }

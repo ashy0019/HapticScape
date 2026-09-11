@@ -2,6 +2,7 @@ package com.ashy0019.hapticscape.remote;
 
 import com.ashy0019.hapticscape.HapticScapeSettingKeys;
 import com.ashy0019.hapticscape.TestHapticScapeSettings;
+import com.ashy0019.hapticscape.clicker.ClickSequence;
 
 import com.google.gson.Gson;
 import java.util.Map;
@@ -69,6 +70,31 @@ public class RemoteSettingsSnapshotTest
 	}
 
 	@Test
+	public void localClickOutputAuthorityIsNotRemoteControllable()
+	{
+		RemoteSettingsSnapshot snapshot = RemoteSettingsSnapshot.capture(
+			new FixedIntensityConfig(31)
+		);
+		Map<String, Object> values = snapshot.toConfigurationMap();
+
+		assertFalse(values.containsKey(HapticScapeSettingKeys.CLICKER_ENABLED));
+		assertFalse(values.containsKey(HapticScapeSettingKeys.CLICKER_VOLUME_PERCENT));
+		try
+		{
+			snapshot.withConfigurationValue(
+				new Gson(),
+				HapticScapeSettingKeys.CLICKER_VOLUME_PERCENT,
+				100
+			);
+			fail("Expected local click volume to be rejected as a remote setting");
+		}
+		catch (IllegalArgumentException expected)
+		{
+			// Expected.
+		}
+	}
+
+	@Test
 	public void persistedValuesUseValidatedRanges()
 	{
 		RemoteSettingsSnapshot updated = RemoteSettingsSnapshot.capture(
@@ -83,6 +109,56 @@ public class RemoteSettingsSnapshotTest
 			100,
 			updated.toConfigurationMap().get(HapticScapeSettingKeys.INTENSITY_PERCENT)
 		);
+	}
+
+
+	@Test
+	public void clickSequencesAreRemoteSettingsButLevelNinetyNineClickIsNot()
+	{
+		RemoteSettingsSnapshot snapshot = RemoteSettingsSnapshot.capture(
+			new FixedIntensityConfig(31)
+		);
+		Map<String, Object> values = snapshot.toConfigurationMap();
+
+		assertEquals("ONE", values.get(HapticScapeSettingKeys.CLICKER_XP_SEQUENCE));
+		assertEquals("ONE", values.get(HapticScapeSettingKeys.CLICKER_LEVEL_UP_SEQUENCE));
+		assertEquals("ONE", values.get(HapticScapeSettingKeys.CLICKER_MILESTONE_SEQUENCE));
+		assertFalse(values.containsKey(HapticScapeSettingKeys.CLICKER_LEVEL_99_ENABLED));
+	}
+
+	@Test
+	public void sequenceDraftValidatesAndRoundTrips()
+	{
+		RemoteSettingsSnapshot updated = RemoteSettingsSnapshot.capture(
+			new FixedIntensityConfig(31)
+		).withConfigurationValue(
+			new Gson(),
+			HapticScapeSettingKeys.CLICKER_LEVEL_UP_SEQUENCE,
+			"THREE"
+		);
+
+		assertEquals(ClickSequence.THREE, updated.getClickerXpSettings().getLevelUpOverride());
+	}
+
+	@Test
+	public void skillClickProfileOverridesGlobalClickPolicy()
+	{
+		RemoteSettingsSnapshot snapshot = RemoteSettingsSnapshot.capture(
+			new SkillClickProfileConfig()
+		);
+
+		assertEquals(25, snapshot.getClickerXpSettings("ranged").getMinimumXpGain());
+		assertEquals(ClickSequence.TWO, snapshot.getClickerXpSettings("ranged").getXpGainSequence());
+		assertEquals(1, snapshot.getClickerXpSettings("cooking").getMinimumXpGain());
+	}
+
+	private static final class SkillClickProfileConfig extends TestHapticScapeSettings
+	{
+		@Override
+		public String skillClickProfiles()
+		{
+			return "v1|RANGED,25,TWO,THREE,ONE";
+		}
 	}
 
 	private static final class FixedIntensityConfig extends TestHapticScapeSettings

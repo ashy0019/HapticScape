@@ -69,13 +69,13 @@ public class PanelUiTest
 			JTabbedPane tabs = new JTabbedPane();
 			PanelUi.configureWorkspaceTabs(tabs);
 			PanelUi.addCompactTab(tabs, "XP + Skills", new JPanel());
-			PanelUi.addCompactTab(tabs, "Clicks + Phrases", new JPanel());
+			PanelUi.addCompactTab(tabs, "Phrases", new JPanel());
 			result.set(tabs);
 		});
 
 		JTabbedPane tabs = result.get();
 		assertEquals("XP + Skills", tabs.getTitleAt(0));
-		assertEquals("Clicks + Phrases", tabs.getTitleAt(1));
+		assertEquals("Phrases", tabs.getTitleAt(1));
 		assertNull(tabs.getTabComponentAt(0));
 		assertEquals(JTabbedPane.SCROLL_TAB_LAYOUT, tabs.getTabLayoutPolicy());
 		assertEquals("underlined", tabs.getClientProperty("JTabbedPane.tabType"));

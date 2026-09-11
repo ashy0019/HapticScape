@@ -1,5 +1,6 @@
 package com.ashy0019.hapticscape;
 
+import com.ashy0019.hapticscape.clicker.ClickSequence;
 import com.ashy0019.hapticscape.clicker.ClickerXpSettings;
 import com.ashy0019.hapticscape.event.XpEvent;
 import java.util.Objects;
@@ -11,13 +12,16 @@ public final class XpOutputDecision
 {
 	private final XpFeedbackTrigger hapticTrigger;
 	private final XpFeedbackTrigger clickTrigger;
+	private final ClickSequence clickSequence;
 
 	private XpOutputDecision(
 		XpFeedbackTrigger hapticTrigger,
-		XpFeedbackTrigger clickTrigger)
+		XpFeedbackTrigger clickTrigger,
+		ClickSequence clickSequence)
 	{
 		this.hapticTrigger = Objects.requireNonNull(hapticTrigger);
 		this.clickTrigger = Objects.requireNonNull(clickTrigger);
+		this.clickSequence = Objects.requireNonNull(clickSequence);
 	}
 
 	public static XpOutputDecision classify(
@@ -46,8 +50,11 @@ public final class XpOutputDecision
 		XpFeedbackTrigger click = clickSkillEnabled
 			? clickSettings.classify(event)
 			: XpFeedbackTrigger.NONE;
+		ClickSequence sequence = clickSkillEnabled
+			? clickSettings.sequenceFor(event)
+			: ClickSequence.NONE;
 
-		return new XpOutputDecision(haptic, click);
+		return new XpOutputDecision(haptic, click, sequence);
 	}
 
 	public XpFeedbackTrigger getHapticTrigger()
@@ -60,8 +67,13 @@ public final class XpOutputDecision
 		return clickTrigger;
 	}
 
+	public ClickSequence getClickSequence()
+	{
+		return clickSequence;
+	}
+
 	public boolean shouldClick()
 	{
-		return clickTrigger != XpFeedbackTrigger.NONE;
+		return clickSequence.isEnabled();
 	}
 }

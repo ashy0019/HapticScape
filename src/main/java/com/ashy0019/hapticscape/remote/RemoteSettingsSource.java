@@ -20,6 +20,7 @@ public interface RemoteSettingsSource
 	String milestonePatternPreset();
 	boolean level99CelebrationEnabled();
 	String skillFeedbackProfiles();
+	default String skillClickProfiles() { return ""; }
 	boolean notificationFeedbackEnabled();
 	int notificationIntensityPercent();
 	String notificationPatternPreset();
@@ -37,6 +38,14 @@ public interface RemoteSettingsSource
 	int clickerVolumePercent();
 	int clickerMinimumXpGain();
 	String clickerDisabledSkills();
+	default String clickerXpSequence() { return "ONE"; }
+	default String clickerLevelUpSequence() { return clickerLevelUpEnabled() ? "ONE" : "NONE"; }
+	default String clickerMilestoneSequence() { return clickerMilestoneEnabled() ? "ONE" : "NONE"; }
+	default String clickerGenericNotificationSequence()
+	{
+		return clickerGenericNotificationEnabled() ? "ONE" : "NONE";
+	}
+	// Legacy booleans remain available only as migration fallbacks.
 	boolean clickerLevelUpEnabled();
 	boolean clickerMilestoneEnabled();
 	boolean clickerLevel99Enabled();

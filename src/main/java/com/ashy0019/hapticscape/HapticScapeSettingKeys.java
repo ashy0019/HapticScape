@@ -21,6 +21,7 @@ public final class HapticScapeSettingKeys
 	public static final String MILESTONE_PATTERN_PRESET = "milestonePatternPreset";
 	public static final String LEVEL_99_CELEBRATION_ENABLED = "level99CelebrationEnabled";
 	public static final String SKILL_FEEDBACK_PROFILES = "skillFeedbackProfiles";
+	public static final String SKILL_CLICK_PROFILES = "skillClickProfiles";
 	public static final String NOTIFICATION_FEEDBACK_ENABLED = "notificationFeedbackEnabled";
 	public static final String NOTIFICATION_INTENSITY_PERCENT = "notificationIntensityPercent";
 	public static final String NOTIFICATION_PATTERN_PRESET = "notificationPatternPreset";
@@ -38,6 +39,11 @@ public final class HapticScapeSettingKeys
 	public static final String CLICKER_VOLUME_PERCENT = "clickerVolumePercent";
 	public static final String CLICKER_MINIMUM_XP_GAIN = "clickerMinimumXpGain";
 	public static final String CLICKER_DISABLED_SKILLS = "clickerDisabledSkills";
+	public static final String CLICKER_XP_SEQUENCE = "clickerXpSequence";
+	public static final String CLICKER_LEVEL_UP_SEQUENCE = "clickerLevelUpSequence";
+	public static final String CLICKER_MILESTONE_SEQUENCE = "clickerMilestoneSequence";
+	public static final String CLICKER_GENERIC_NOTIFICATION_SEQUENCE = "clickerGenericNotificationSequence";
+	// Legacy boolean keys remain readable for migration from pre-sequence settings.
 	public static final String CLICKER_LEVEL_UP_ENABLED = "clickerLevelUpEnabled";
 	public static final String CLICKER_MILESTONE_ENABLED = "clickerMilestoneEnabled";
 	public static final String CLICKER_LEVEL_99_ENABLED = "clickerLevel99Enabled";

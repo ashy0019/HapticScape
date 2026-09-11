@@ -72,12 +72,14 @@ public final class SettingsLockService
 
 	/**
 	 * Returns whether a local configuration write is allowed by the persistent
-	 * lock. Pattern creation and music controls deliberately remain local safety
-	 * exceptions; an active remote session still applies its own authority rules.
+	 * lock. Local click output, pattern creation, and music controls deliberately
+	 * remain local exceptions; an active remote session still applies its own
+	 * authority rules.
 	 */
 	public boolean canEditLocally(String configKey)
 	{
 		return !getSnapshot().isLegacyFullLock()
+			|| isLocalClickOutputKey(configKey)
 			|| HapticScapeSettingKeys.CUSTOM_PATTERNS.equals(configKey)
 			|| HapticScapeSettingKeys.MUSIC_SYNC_ENABLED.equals(configKey)
 			|| HapticScapeSettingKeys.MUSIC_RESPONSE.equals(configKey)
@@ -88,8 +90,18 @@ public final class SettingsLockService
 
 	public boolean canEditLocally(SettingsLockTarget target, String configKey)
 	{
+		if (isLocalClickOutputKey(configKey))
+		{
+			return true;
+		}
 		return canEditLocally(configKey)
 			&& (target == null || !isLocked(target));
+	}
+
+	private static boolean isLocalClickOutputKey(String configKey)
+	{
+		return HapticScapeSettingKeys.CLICKER_ENABLED.equals(configKey)
+			|| HapticScapeSettingKeys.CLICKER_VOLUME_PERCENT.equals(configKey);
 	}
 
 	/**

@@ -1,5 +1,7 @@
 package com.ashy0019.hapticscape;
 
+import com.ashy0019.hapticscape.clicker.ClickSequence;
+import com.ashy0019.hapticscape.clicker.ClickerAlertSettings;
 import com.ashy0019.hapticscape.clicker.ClickerPhraseRules;
 import com.ashy0019.hapticscape.event.ChatEvent;
 import java.util.Objects;
@@ -8,23 +10,29 @@ import java.util.Objects;
 final class ChatOutputDecision
 {
 	private final AlertCategory specificAlert;
-	private final boolean click;
+	private final ClickSequence clickSequence;
 
-	private ChatOutputDecision(AlertCategory specificAlert, boolean click)
+	private ChatOutputDecision(
+		AlertCategory specificAlert,
+		ClickSequence clickSequence)
 	{
 		this.specificAlert = specificAlert;
-		this.click = click;
+		this.clickSequence = Objects.requireNonNull(clickSequence, "clickSequence");
 	}
 
 	static ChatOutputDecision classify(
 		ChatEvent event,
-		ClickerPhraseRules phraseRules)
+		ClickerPhraseRules phraseRules,
+		ClickerAlertSettings alertSettings)
 	{
 		Objects.requireNonNull(event, "event");
 		Objects.requireNonNull(phraseRules, "phraseRules");
+		Objects.requireNonNull(alertSettings, "alertSettings");
 
 		String message = event.getNormalizedMessage();
-		boolean click = !message.isEmpty() && phraseRules.matches(message);
+		ClickSequence phraseSequence = message.isEmpty()
+			? ClickSequence.NONE
+			: phraseRules.strongestMatch(message);
 
 		AlertCategory specificAlert;
 		switch (event.getKind())
@@ -41,7 +49,13 @@ final class ChatOutputDecision
 				break;
 		}
 
-		return new ChatOutputDecision(specificAlert, click);
+		ClickSequence alertSequence = specificAlert == null
+			? ClickSequence.NONE
+			: alertSettings.getSequence(specificAlert);
+		return new ChatOutputDecision(
+			specificAlert,
+			ClickSequence.strongest(phraseSequence, alertSequence)
+		);
 	}
 
 	boolean hasSpecificAlert()
@@ -58,8 +72,13 @@ final class ChatOutputDecision
 		return specificAlert;
 	}
 
+	ClickSequence getClickSequence()
+	{
+		return clickSequence;
+	}
+
 	boolean shouldClick()
 	{
-		return click;
+		return clickSequence.isEnabled();
 	}
 }

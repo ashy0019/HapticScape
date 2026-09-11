@@ -1,5 +1,6 @@
 package com.ashy0019.hapticscape;
 
+import com.ashy0019.hapticscape.clicker.ClickSequence;
 import com.ashy0019.hapticscape.remote.SettingsStore;
 import java.util.ArrayList;
 import java.util.List;
@@ -98,6 +99,12 @@ public final class SettingsBackedHapticScapeSettings implements HapticScapeSetti
     public String skillFeedbackProfiles()
     {
         return stringValue(HapticScapeSettingKeys.SKILL_FEEDBACK_PROFILES, "");
+    }
+
+    @Override
+    public String skillClickProfiles()
+    {
+        return stringValue(HapticScapeSettingKeys.SKILL_CLICK_PROFILES, "");
     }
 
     @Override
@@ -203,6 +210,45 @@ public final class SettingsBackedHapticScapeSettings implements HapticScapeSetti
             .withAllEnabled(skillIds, false)
             .toConfigValue();
         return stringValue(HapticScapeSettingKeys.CLICKER_DISABLED_SKILLS, fallback);
+    }
+
+    @Override
+    public String clickerXpSequence()
+    {
+        return clickSequenceValue(
+            HapticScapeSettingKeys.CLICKER_XP_SEQUENCE,
+            ClickSequence.ONE
+        ).toConfigValue();
+    }
+
+    @Override
+    public String clickerLevelUpSequence()
+    {
+        String configured = store.get(HapticScapeSettingKeys.CLICKER_LEVEL_UP_SEQUENCE);
+        ClickSequence fallback = clickerLevelUpEnabled()
+            ? ClickSequence.ONE
+            : ClickSequence.NONE;
+        return ClickSequence.fromConfigValue(configured, fallback).toConfigValue();
+    }
+
+    @Override
+    public String clickerMilestoneSequence()
+    {
+        String configured = store.get(HapticScapeSettingKeys.CLICKER_MILESTONE_SEQUENCE);
+        ClickSequence fallback = clickerMilestoneEnabled()
+            ? ClickSequence.ONE
+            : ClickSequence.NONE;
+        return ClickSequence.fromConfigValue(configured, fallback).toConfigValue();
+    }
+
+    @Override
+    public String clickerGenericNotificationSequence()
+    {
+        String configured = store.get(HapticScapeSettingKeys.CLICKER_GENERIC_NOTIFICATION_SEQUENCE);
+        ClickSequence fallback = clickerGenericNotificationEnabled()
+            ? ClickSequence.ONE
+            : ClickSequence.NONE;
+        return ClickSequence.fromConfigValue(configured, fallback).toConfigValue();
     }
 
     @Override
@@ -325,6 +371,11 @@ public final class SettingsBackedHapticScapeSettings implements HapticScapeSetti
     {
         String value = store.get(key);
         return value == null ? fallback : value;
+    }
+
+    private ClickSequence clickSequenceValue(String key, ClickSequence fallback)
+    {
+        return ClickSequence.fromConfigValue(store.get(key), fallback);
     }
 
     private boolean booleanValue(String key, boolean fallback)

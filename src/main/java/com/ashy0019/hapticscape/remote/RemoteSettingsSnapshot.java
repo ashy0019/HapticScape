@@ -7,9 +7,11 @@ import com.ashy0019.hapticscape.AlertTriggerSettings;
 import com.ashy0019.hapticscape.CustomPatternLibrary;
 import com.ashy0019.hapticscape.HapticPatternSelection;
 import com.ashy0019.hapticscape.NotificationFeedbackSettings;
+import com.ashy0019.hapticscape.SkillClickProfiles;
 import com.ashy0019.hapticscape.SkillFeedbackProfiles;
 import com.ashy0019.hapticscape.SkillSelection;
 import com.ashy0019.hapticscape.XpFeedbackSettings;
+import com.ashy0019.hapticscape.clicker.ClickSequence;
 import com.ashy0019.hapticscape.clicker.ClickerAlertSettings;
 import com.ashy0019.hapticscape.clicker.ClickerPhraseRules;
 import com.ashy0019.hapticscape.clicker.ClickerSettings;
@@ -20,6 +22,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
@@ -28,11 +31,12 @@ import java.util.Objects;
  *
  * <p>Connection and safety settings are intentionally absent. In particular,
  * the Intiface server URI, connect/disconnect state, Remote Control pairing,
- * Emergency Off, and session termination remain local-only.</p>
+ * Emergency Off, session termination, and click-output enablement/volume remain
+ * local-only.</p>
  */
 public final class RemoteSettingsSnapshot
 {
-	public static final int SCHEMA_VERSION = 1;
+	public static final int SCHEMA_VERSION = 2;
 
 	private final int schemaVersion;
 	private final int minimumXpGain;
@@ -46,6 +50,7 @@ public final class RemoteSettingsSnapshot
 	private final String milestonePatternPreset;
 	private final boolean level99CelebrationEnabled;
 	private final String skillFeedbackProfiles;
+	private final String skillClickProfiles;
 	private final boolean notificationFeedbackEnabled;
 	private final int notificationIntensityPercent;
 	private final String notificationPatternPreset;
@@ -63,10 +68,10 @@ public final class RemoteSettingsSnapshot
 	private final int clickerVolumePercent;
 	private final int clickerMinimumXpGain;
 	private final String clickerDisabledSkills;
-	private final boolean clickerLevelUpEnabled;
-	private final boolean clickerMilestoneEnabled;
-	private final boolean clickerLevel99Enabled;
-	private final boolean clickerGenericNotificationEnabled;
+	private final String clickerXpSequence;
+	private final String clickerLevelUpSequence;
+	private final String clickerMilestoneSequence;
+	private final String clickerGenericNotificationSequence;
 	private final String clickerAlertSettings;
 	private final String clickerPhraseRules;
 	private final boolean startWithWindows;
@@ -86,6 +91,7 @@ public final class RemoteSettingsSnapshot
 		milestonePatternPreset = config.milestonePatternPreset();
 		level99CelebrationEnabled = config.level99CelebrationEnabled();
 		skillFeedbackProfiles = config.skillFeedbackProfiles();
+		skillClickProfiles = config.skillClickProfiles();
 		notificationFeedbackEnabled = config.notificationFeedbackEnabled();
 		notificationIntensityPercent = config.notificationIntensityPercent();
 		notificationPatternPreset = config.notificationPatternPreset();
@@ -103,10 +109,10 @@ public final class RemoteSettingsSnapshot
 		clickerVolumePercent = config.clickerVolumePercent();
 		clickerMinimumXpGain = config.clickerMinimumXpGain();
 		clickerDisabledSkills = config.clickerDisabledSkills();
-		clickerLevelUpEnabled = config.clickerLevelUpEnabled();
-		clickerMilestoneEnabled = config.clickerMilestoneEnabled();
-		clickerLevel99Enabled = config.clickerLevel99Enabled();
-		clickerGenericNotificationEnabled = config.clickerGenericNotificationEnabled();
+		clickerXpSequence = config.clickerXpSequence();
+		clickerLevelUpSequence = config.clickerLevelUpSequence();
+		clickerMilestoneSequence = config.clickerMilestoneSequence();
+		clickerGenericNotificationSequence = config.clickerGenericNotificationSequence();
 		clickerAlertSettings = config.clickerAlertSettings();
 		clickerPhraseRules = config.clickerPhraseRules();
 		startWithWindows = config.startWithWindows();
@@ -138,7 +144,6 @@ public final class RemoteSettingsSnapshot
 		XpFeedbackSettings globalXp = getGlobalXpFeedbackSettings();
 		NotificationFeedbackSettings notifications = getNotificationFeedbackSettings();
 		MusicSyncSettings music = getMusicSyncSettings();
-		ClickerSettings clicker = getClickerSettings();
 		ClickerXpSettings clickerXp = getClickerXpSettings();
 		Map<String, Object> values = new LinkedHashMap<>();
 		values.put(HapticScapeSettingKeys.MINIMUM_XP_GAIN, globalXp.getMinimumXpGain());
@@ -166,6 +171,10 @@ public final class RemoteSettingsSnapshot
 		values.put(
 			HapticScapeSettingKeys.SKILL_FEEDBACK_PROFILES,
 			getSkillFeedbackProfiles().toConfigValue()
+		);
+		values.put(
+			HapticScapeSettingKeys.SKILL_CLICK_PROFILES,
+			getSkillClickProfiles().toConfigValue()
 		);
 		values.put(HapticScapeSettingKeys.NOTIFICATION_FEEDBACK_ENABLED, notifications.isEnabled());
 		values.put(
@@ -204,8 +213,9 @@ public final class RemoteSettingsSnapshot
 			HapticScapeSettingKeys.MUSIC_MAXIMUM_INTENSITY_PERCENT,
 			music.getMaximumIntensityPercent()
 		);
-		values.put(HapticScapeSettingKeys.CLICKER_ENABLED, clicker.isEnabled());
-		values.put(HapticScapeSettingKeys.CLICKER_VOLUME_PERCENT, clicker.getVolumePercent());
+		// Click output enablement and volume are participant-local authority.
+		// They remain in the snapshot only so the effective settings facade can
+		// describe the local machine, but a controller cannot mutate them.
 		values.put(
 			HapticScapeSettingKeys.CLICKER_MINIMUM_XP_GAIN,
 			clickerXp.getMinimumXpGain()
@@ -214,13 +224,22 @@ public final class RemoteSettingsSnapshot
 			HapticScapeSettingKeys.CLICKER_DISABLED_SKILLS,
 			getClickSkillSelection().toConfigValue()
 		);
-		values.put(HapticScapeSettingKeys.CLICKER_LEVEL_UP_ENABLED, clickerXp.isLevelUpEnabled());
 		values.put(
-			HapticScapeSettingKeys.CLICKER_MILESTONE_ENABLED,
-			clickerXp.isMilestoneEnabled()
+			HapticScapeSettingKeys.CLICKER_XP_SEQUENCE,
+			clickerXp.getXpGainSequence().toConfigValue()
 		);
-		values.put(HapticScapeSettingKeys.CLICKER_LEVEL_99_ENABLED, clickerXp.isLevel99Enabled());
-		values.put(HapticScapeSettingKeys.CLICKER_GENERIC_NOTIFICATION_ENABLED, clickerGenericNotificationEnabled);
+		values.put(
+			HapticScapeSettingKeys.CLICKER_LEVEL_UP_SEQUENCE,
+			clickerXp.getLevelUpOverride().toConfigValue()
+		);
+		values.put(
+			HapticScapeSettingKeys.CLICKER_MILESTONE_SEQUENCE,
+			clickerXp.getMilestoneOverride().toConfigValue()
+		);
+		values.put(
+			HapticScapeSettingKeys.CLICKER_GENERIC_NOTIFICATION_SEQUENCE,
+			getGenericNotificationClickSequence().toConfigValue()
+		);
 		values.put(
 			HapticScapeSettingKeys.CLICKER_ALERT_SETTINGS,
 			getClickerAlertSettings().toConfigValue()
@@ -257,12 +276,14 @@ public final class RemoteSettingsSnapshot
 		getGlobalXpFeedbackSettings();
 		getCustomPatterns();
 		getSkillFeedbackProfiles();
+		getSkillClickProfiles();
 		getNotificationFeedbackSettings();
 		getAlertProfiles();
 		getAlertTriggerSettings();
 		getMusicSyncSettings();
 		getClickerSettings();
 		getClickerXpSettings();
+		getGenericNotificationClickSequence();
 		getClickerPhraseRules();
 		ClickerAlertSettings.fromConfigValue(clickerAlertSettings);
 	}
@@ -291,6 +312,11 @@ public final class RemoteSettingsSnapshot
 	{
 		return SkillFeedbackProfiles.fromConfigValue(skillFeedbackProfiles)
 			.replaceMissingCustomPatterns(getCustomPatterns());
+	}
+
+	public SkillClickProfiles getSkillClickProfiles()
+	{
+		return SkillClickProfiles.fromConfigValue(skillClickProfiles);
 	}
 
 	public SkillSelection getHapticSkillSelection()
@@ -372,9 +398,14 @@ public final class RemoteSettingsSnapshot
 		return AlertTriggerSettings.fromConfigValues(alertTriggerSettings, alertProfiles);
 	}
 
+	public ClickSequence getGenericNotificationClickSequence()
+	{
+		return requiredClickSequence(clickerGenericNotificationSequence);
+	}
+
 	public boolean isGenericNotificationClickEnabled()
 	{
-		return clickerGenericNotificationEnabled;
+		return getGenericNotificationClickSequence().isEnabled();
 	}
 
 	public ClickerAlertSettings getClickerAlertSettings()
@@ -382,9 +413,14 @@ public final class RemoteSettingsSnapshot
 		return ClickerAlertSettings.fromConfigValue(clickerAlertSettings);
 	}
 
+	public ClickSequence getAlertClickSequence(AlertCategory category)
+	{
+		return getClickerAlertSettings().getSequence(category);
+	}
+
 	public boolean isAlertClickEnabled(AlertCategory category)
 	{
-		return getClickerAlertSettings().isEnabled(category);
+		return getAlertClickSequence(category).isEnabled();
 	}
 
 	public MusicSyncSettings getMusicSyncSettings()
@@ -418,10 +454,15 @@ public final class RemoteSettingsSnapshot
 	{
 		return new ClickerXpSettings(
 			clickerMinimumXpGain,
-			clickerLevelUpEnabled,
-			clickerMilestoneEnabled,
-			clickerLevel99Enabled
+			requiredClickSequence(clickerXpSequence),
+			requiredClickSequence(clickerLevelUpSequence),
+			requiredClickSequence(clickerMilestoneSequence)
 		);
+	}
+
+	public ClickerXpSettings getClickerXpSettings(String skillId)
+	{
+		return getSkillClickProfiles().resolve(skillId, getClickerXpSettings());
 	}
 
 	public ClickerPhraseRules getClickerPhraseRules()
@@ -459,21 +500,22 @@ public final class RemoteSettingsSnapshot
 			&& clickerEnabled == that.clickerEnabled
 			&& clickerVolumePercent == that.clickerVolumePercent
 			&& clickerMinimumXpGain == that.clickerMinimumXpGain
-			&& clickerLevelUpEnabled == that.clickerLevelUpEnabled
-			&& clickerMilestoneEnabled == that.clickerMilestoneEnabled
-			&& clickerLevel99Enabled == that.clickerLevel99Enabled
-			&& clickerGenericNotificationEnabled == that.clickerGenericNotificationEnabled
 			&& Objects.equals(patternPreset, that.patternPreset)
 			&& Objects.equals(disabledSkills, that.disabledSkills)
 			&& Objects.equals(levelUpPatternPreset, that.levelUpPatternPreset)
 			&& Objects.equals(milestonePatternPreset, that.milestonePatternPreset)
 			&& Objects.equals(skillFeedbackProfiles, that.skillFeedbackProfiles)
+			&& Objects.equals(skillClickProfiles, that.skillClickProfiles)
 			&& Objects.equals(notificationPatternPreset, that.notificationPatternPreset)
 			&& Objects.equals(alertProfiles, that.alertProfiles)
 			&& Objects.equals(alertTriggerSettings, that.alertTriggerSettings)
 			&& Objects.equals(customPatterns, that.customPatterns)
 			&& Objects.equals(musicResponse, that.musicResponse)
 			&& Objects.equals(clickerDisabledSkills, that.clickerDisabledSkills)
+			&& Objects.equals(clickerXpSequence, that.clickerXpSequence)
+			&& Objects.equals(clickerLevelUpSequence, that.clickerLevelUpSequence)
+			&& Objects.equals(clickerMilestoneSequence, that.clickerMilestoneSequence)
+			&& Objects.equals(clickerGenericNotificationSequence, that.clickerGenericNotificationSequence)
 			&& Objects.equals(clickerAlertSettings, that.clickerAlertSettings)
 			&& Objects.equals(clickerPhraseRules, that.clickerPhraseRules);
 	}
@@ -494,6 +536,7 @@ public final class RemoteSettingsSnapshot
 			milestonePatternPreset,
 			level99CelebrationEnabled,
 			skillFeedbackProfiles,
+			skillClickProfiles,
 			notificationFeedbackEnabled,
 			notificationIntensityPercent,
 			notificationPatternPreset,
@@ -511,13 +554,29 @@ public final class RemoteSettingsSnapshot
 			clickerVolumePercent,
 			clickerMinimumXpGain,
 			clickerDisabledSkills,
-			clickerLevelUpEnabled,
-			clickerMilestoneEnabled,
-			clickerLevel99Enabled,
-			clickerGenericNotificationEnabled,
+			clickerXpSequence,
+			clickerLevelUpSequence,
+			clickerMilestoneSequence,
+			clickerGenericNotificationSequence,
 			clickerAlertSettings,
 			clickerPhraseRules
 		);
+	}
+
+	private static ClickSequence requiredClickSequence(String value)
+	{
+		if (value == null)
+		{
+			throw new IllegalArgumentException("Missing click sequence");
+		}
+		try
+		{
+			return ClickSequence.valueOf(value.trim().toUpperCase(Locale.ROOT));
+		}
+		catch (IllegalArgumentException failure)
+		{
+			throw new IllegalArgumentException("Invalid click sequence: " + value, failure);
+		}
 	}
 
 	private static int clamp(int value, int minimum, int maximum)

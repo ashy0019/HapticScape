@@ -35,7 +35,7 @@ public final class SettingsLockCatalog
 	public static final SettingsLockTarget CLICK_SETTINGS_BLOCK = register(
 		"block.clicker.settings",
 		"Sections",
-		"Click settings"
+		"XP click settings"
 	);
 	public static final SettingsLockTarget PROTECTED_EXIT = register(
 		"application.protected-exit",
@@ -136,7 +136,6 @@ public final class SettingsLockCatalog
 		registerParent(GENERIC_NOTIFICATION_HAPTICS, GENERIC_ALERTS_BLOCK);
 		registerParent(GENERIC_NOTIFICATION_CLICKS, GENERIC_ALERTS_BLOCK);
 		registerParent(NOTIFICATION_RESPECT_FOCUS, GENERIC_ALERTS_BLOCK);
-		registerParent(CLICKER_ENABLED, CLICK_SETTINGS_BLOCK);
 		registerParent(CLICKER_LEVEL_UP, CLICK_SETTINGS_BLOCK);
 		registerParent(CLICKER_MILESTONE, CLICK_SETTINGS_BLOCK);
 		registerParent(CLICKER_LEVEL_99, CLICK_SETTINGS_BLOCK);
@@ -412,9 +411,12 @@ public final class SettingsLockCatalog
 	public static Set<SettingsLockTarget> legacyTargets()
 	{
 		Set<SettingsLockTarget> targets = new LinkedHashSet<>(allTargets());
-		// Protected exit always requires its own explicit participant consent.
+		// Protected exit and local click-output authority never belong to a
+		// legacy broad settings lock. Level-99 clicks are a retired setting.
 		targets.remove(PROTECTED_EXIT);
 		targets.remove(STARTUP_BEHAVIOR);
+		targets.remove(CLICKER_ENABLED);
+		targets.remove(CLICKER_LEVEL_99);
 		return Collections.unmodifiableSet(targets);
 	}
 

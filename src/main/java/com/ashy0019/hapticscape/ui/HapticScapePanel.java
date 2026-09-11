@@ -10,9 +10,11 @@ import com.ashy0019.hapticscape.HapticScapeSettingKeys;
 import com.ashy0019.hapticscape.HapticScapeSettingsSource;
 import com.ashy0019.hapticscape.NotificationFeedbackSettings;
 import com.ashy0019.hapticscape.SkillCatalog;
+import com.ashy0019.hapticscape.SkillClickProfiles;
 import com.ashy0019.hapticscape.SkillFeedbackProfiles;
 import com.ashy0019.hapticscape.SkillSelection;
 import com.ashy0019.hapticscape.XpFeedbackSettings;
+import com.ashy0019.hapticscape.clicker.ClickSequence;
 import com.ashy0019.hapticscape.clicker.ClickerSettings;
 import com.ashy0019.hapticscape.clicker.ClickerXpSettings;
 import com.ashy0019.hapticscape.clicker.ClickerPhraseRules;
@@ -151,7 +153,9 @@ public final class HapticScapePanel extends JPanel
 	private final AlertsPanel alertsPanel;
 	private final CustomPatternsPanel customPatternsPanel;
 	private final MusicPanel musicPanel;
-	private final ClickerPanel clickerPanel;
+	private final ClickOutputPanel clickOutputPanel;
+	private final XpClickSettingsPanel xpClickSettingsPanel;
+	private final ClickerPhraseRulesPanel phraseRulesPanel;
 	private final UpdatesPanel updatesPanel;
 	private final ApplicationStartupPanel applicationStartupPanel;
 	private final RemoteSessionManager remoteSessionManager;
@@ -315,9 +319,6 @@ public final class HapticScapePanel extends JPanel
 		milestoneCheckBox.setSelected(milestoneEnabled);
 		milestoneCheckBox.setToolTipText("Use distinct feedback for levels 10–90");
 		level99CheckBox.setSelected(level99Enabled);
-		level99CheckBox.setToolTipText(
-			"Celebrate real skill level 99 with a dedicated mastery ceremony"
-		);
 		testLevelUpButton.setToolTipText("Preview the configured ordinary level-up pattern");
 		previewLevel99Button.setToolTipText(
 			"Preview the Level 99 ceremony using the skill selected on Profiles"
@@ -378,12 +379,24 @@ public final class HapticScapePanel extends JPanel
 			this::isSubjectWorkspaceActive,
 			this::isLockSelectionEnabled
 		);
+		xpClickSettingsPanel = new XpClickSettingsPanel(
+			config,
+			this::writeFeedbackSetting,
+			this::refreshInheritedProfileIfReady,
+			remoteSessionManager,
+			settingsLockService,
+			settingsLockDraft,
+			this::isSubjectWorkspaceActive,
+			this::isLockSelectionEnabled
+		);
 		profilesPanel = new ProfilesPanel(
 			skillCatalog,
 			SkillFeedbackProfiles.fromConfigValue(config.skillFeedbackProfiles())
 				.replaceMissingCustomPatterns(customPatterns),
+			SkillClickProfiles.fromConfigValue(config.skillClickProfiles()),
 			this::writeFeedbackSetting,
 			this::getGlobalXpFeedbackSettings,
+			xpClickSettingsPanel::getSettings,
 			() -> customPatterns,
 			testSkillProfileAction,
 			remoteSessionManager,
@@ -421,22 +434,20 @@ public final class HapticScapePanel extends JPanel
 				}
 			}
 		);
-		clickerPanel = new ClickerPanel(
+		phraseRulesPanel = new ClickerPhraseRulesPanel(
 			config,
 			this::writeFeedbackSetting,
-			settings ->
-			{
-				if (!isSubjectWorkspaceActive())
-				{
-					clickerSettingsAction.accept(settings);
-				}
-			},
-			testClickAction,
 			remoteSessionManager,
 			settingsLockService,
 			settingsLockDraft,
 			this::isSubjectWorkspaceActive,
 			this::isLockSelectionEnabled
+		);
+		clickOutputPanel = new ClickOutputPanel(
+			config,
+			settingsStore,
+			clickerSettingsAction,
+			testClickAction
 		);
 		updatesPanel = new UpdatesPanel(updatePreferencesStore, updateCheckService);
 		applicationStartupPanel = new ApplicationStartupPanel(
@@ -477,14 +488,18 @@ public final class HapticScapePanel extends JPanel
 		tabs = new JTabbedPane(JTabbedPane.TOP, JTabbedPane.SCROLL_TAB_LAYOUT);
 		tabs.setName("gameplayWorkspaceTabs");
 		PanelUi.configureWorkspaceTabs(tabs);
+		JPanel xpDefaults = new JPanel();
+		xpDefaults.setLayout(new BoxLayout(xpDefaults, BoxLayout.Y_AXIS));
+		PanelUi.addPreferredHeightComponent(xpDefaults, settingsPanel);
+		PanelUi.addPreferredHeightComponent(xpDefaults, xpClickSettingsPanel);
 		JPanel xpAndSkills = new XpSkillsWorkspacePanel(
-			settingsPanel,
+			xpDefaults,
 			skillsPanel,
 			profilesPanel
 		);
 		PanelUi.addCompactTab(tabs, "XP + Skills", xpAndSkills);
 		PanelUi.addCompactTab(tabs, "Alerts", alertsPanel);
-		PanelUi.addCompactTab(tabs, "Clicks + Phrases", clickerPanel);
+		PanelUi.addCompactTab(tabs, "Phrases", phraseRulesPanel);
 		JPanel topPanel = new JPanel();
 		topPanel.setLayout(new BoxLayout(topPanel, BoxLayout.Y_AXIS));
 
@@ -578,6 +593,7 @@ public final class HapticScapePanel extends JPanel
 
 		JPanel applicationSettings = new JPanel();
 		applicationSettings.setLayout(new BoxLayout(applicationSettings, BoxLayout.Y_AXIS));
+		PanelUi.addPreferredHeightComponent(applicationSettings, clickOutputPanel);
 		PanelUi.addPreferredHeightComponent(applicationSettings, applicationStartupPanel);
 		PanelUi.addPreferredHeightComponent(applicationSettings, updatesPanel);
 		JPanel settingsWorkspace = new ResponsiveColumnsPanel(
@@ -812,9 +828,19 @@ public final class HapticScapePanel extends JPanel
 		return alertsPanel.isGenericClickEnabled();
 	}
 
+	public ClickSequence getGenericNotificationClickSequence()
+	{
+		return alertsPanel.getGenericClickSequence();
+	}
+
 	public boolean isAlertClickEnabled(AlertCategory category)
 	{
 		return alertsPanel.isClickEnabled(category);
+	}
+
+	public ClickSequence getAlertClickSequence(AlertCategory category)
+	{
+		return alertsPanel.getClickSequence(category);
 	}
 
 	public AlertTriggerSettings getAlertTriggerSettings()
@@ -829,18 +855,17 @@ public final class HapticScapePanel extends JPanel
 
 	public ClickerSettings getClickerSettings()
 	{
-		return clickerPanel.getSettings();
+		return clickOutputPanel.getSettings();
 	}
 
 	public ClickerXpSettings getClickerXpSettings()
 	{
-		return clickerPanel.getXpSettings();
+		return xpClickSettingsPanel.getSettings();
 	}
-
 
 	public ClickerPhraseRules getClickerPhraseRules()
 	{
-		return clickerPanel.getPhraseRules();
+		return phraseRulesPanel.getRules();
 	}
 
 	public void updateMusicSync(MusicSyncSnapshot snapshot)
@@ -1064,7 +1089,7 @@ public final class HapticScapePanel extends JPanel
 	{
 		JPanel settings = new JPanel();
 		settings.setLayout(new BoxLayout(settings, BoxLayout.Y_AXIS));
-		settings.setBorder(PanelUi.createSectionBorder("Feedback"));
+		settings.setBorder(PanelUi.createSectionBorder("XP haptics"));
 		PanelUi.addPreferredHeightComponent(settings, feedbackBlockHeader);
 
 		JPanel thresholdRow = new JPanel(new BorderLayout(8, 0));
@@ -1618,13 +1643,15 @@ public final class HapticScapePanel extends JPanel
 				settings.getHapticSkillSelection(),
 				settings.getClickSkillSelection()
 			);
+			xpClickSettingsPanel.applyDisplayedSettings(settings.getClickerXpSettings());
 			profilesPanel.applyDisplayedSettings(
 				settings.getSkillFeedbackProfiles(),
+				settings.getSkillClickProfiles(),
 				displayedPatterns
 			);
 			alertsPanel.applyDisplayedSettings(
 				settings.getNotificationFeedbackSettings(),
-				settings.isGenericNotificationClickEnabled(),
+				settings.getGenericNotificationClickSequence(),
 				settings.getAlertProfiles(),
 				settings.getAlertTriggerSettings(),
 				settings.getClickerAlertSettings(),
@@ -1632,11 +1659,7 @@ public final class HapticScapePanel extends JPanel
 			);
 			customPatternsPanel.applyDisplayedLibrary(displayedPatterns);
 			musicPanel.applyDisplayedSettings(settings.getMusicSyncSettings());
-			clickerPanel.applyDisplayedSettings(
-				settings.getClickerSettings(),
-				settings.getClickerXpSettings(),
-				settings.getClickerPhraseRules()
-			);
+			phraseRulesPanel.applyDisplayedRules(settings.getClickerPhraseRules());
 			applicationStartupPanel.apply(
 				settings.isStartWithWindows(),
 				settings.isStartMinimized()
@@ -1672,9 +1695,10 @@ public final class HapticScapePanel extends JPanel
 		skillsPanel.setRemoteReadOnly(feedbackReadOnly);
 		profilesPanel.setRemoteReadOnly(feedbackReadOnly);
 		alertsPanel.setRemoteReadOnly(feedbackReadOnly);
+		xpClickSettingsPanel.setRemoteReadOnly(feedbackReadOnly);
+		phraseRulesPanel.setRemoteReadOnly(feedbackReadOnly);
 		customPatternsPanel.setRemoteReadOnly(forgeAndMusicReadOnly);
 		musicPanel.setRemoteReadOnly(forgeAndMusicReadOnly);
-		clickerPanel.setRemoteReadOnly(feedbackReadOnly);
 		// Tabs, navigation selectors, Casino/Rogue, Updates, Intiface connection,
 		// Remote Control controls, and Emergency Off intentionally remain usable.
 	}
@@ -1883,7 +1907,7 @@ public final class HapticScapePanel extends JPanel
 		profilesPanel.setPreviewAllowed(!previewBlocked);
 		alertsPanel.setPreviewAllowed(!previewBlocked);
 		customPatternsPanel.setPreviewAllowed(!previewBlocked);
-		clickerPanel.setPreviewAllowed(!previewBlocked);
+		clickOutputPanel.setPreviewAllowed(!previewBlocked);
 		boolean emergencyPaused = snapshot.getState() == RemoteSessionState.EMERGENCY_PAUSED;
 		stopButton.setEnabled(participantControlled ? !emergencyPaused : connected);
 		testButton.setEnabled(!previewBlocked && connected);

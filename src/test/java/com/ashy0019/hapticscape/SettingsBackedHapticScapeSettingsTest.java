@@ -24,6 +24,7 @@ public class SettingsBackedHapticScapeSettingsTest
         assertEquals(50, settings.intensityPercent());
         assertEquals(500, settings.pulseDurationMillis());
         assertEquals(HapticPatternSelection.SINGLE.toConfigValue(), settings.patternPreset());
+        assertEquals("", settings.skillClickProfiles());
         assertEquals("ATTACK,COOKING", settings.clickerDisabledSkills());
         assertEquals(HapticScapeSettingsSource.DEFAULT_REMOTE_RELAY_URL, settings.remoteRelayUrl());
         assertTrue(settings.remoteSettingsAllowed());
@@ -40,6 +41,7 @@ public class SettingsBackedHapticScapeSettingsTest
         store.set(HapticScapeSettingKeys.INTENSITY_PERCENT, 120);
         store.set(HapticScapeSettingKeys.CLICKER_ENABLED, true);
         store.set(HapticScapeSettingKeys.CLICKER_DISABLED_SKILLS, "COOKING");
+        store.set(HapticScapeSettingKeys.SKILL_CLICK_PROFILES, "v1|ATTACK,10,TWO,THREE,ONE");
         store.set(HapticScapeSettingKeys.REMOTE_RELAY_URL, "  wss://relay.example/relay  ");
         store.set(HapticScapeSettingKeys.REMOTE_MAXIMUM_DURATION_MILLIS, 25);
 
@@ -52,6 +54,7 @@ public class SettingsBackedHapticScapeSettingsTest
         assertEquals(100, settings.intensityPercent());
         assertTrue(settings.clickerEnabled());
         assertEquals("COOKING", settings.clickerDisabledSkills());
+        assertEquals("v1|ATTACK,10,TWO,THREE,ONE", settings.skillClickProfiles());
         assertEquals("wss://relay.example/relay", settings.remoteRelayUrl());
         assertEquals(50, settings.remoteMaximumDurationMillis());
     }
@@ -70,6 +73,41 @@ public class SettingsBackedHapticScapeSettingsTest
 
         assertEquals(100, settings.musicSensitivityPercent());
         assertTrue(settings.remoteSettingsAllowed());
+    }
+
+
+    @Test
+    public void legacyClickBooleansBecomeOneClickSequenceFallbacks()
+    {
+        MapSettingsStore store = new MapSettingsStore();
+        store.set(HapticScapeSettingKeys.CLICKER_LEVEL_UP_ENABLED, false);
+        store.set(HapticScapeSettingKeys.CLICKER_MILESTONE_ENABLED, true);
+        store.set(HapticScapeSettingKeys.CLICKER_GENERIC_NOTIFICATION_ENABLED, true);
+
+        SettingsBackedHapticScapeSettings settings = new SettingsBackedHapticScapeSettings(
+            store,
+            catalog()
+        );
+
+        assertEquals("ONE", settings.clickerXpSequence());
+        assertEquals("NONE", settings.clickerLevelUpSequence());
+        assertEquals("ONE", settings.clickerMilestoneSequence());
+        assertEquals("ONE", settings.clickerGenericNotificationSequence());
+    }
+
+    @Test
+    public void sequenceSettingsOverrideLegacyBooleanFallbacks()
+    {
+        MapSettingsStore store = new MapSettingsStore();
+        store.set(HapticScapeSettingKeys.CLICKER_LEVEL_UP_ENABLED, false);
+        store.set(HapticScapeSettingKeys.CLICKER_LEVEL_UP_SEQUENCE, "THREE");
+
+        SettingsBackedHapticScapeSettings settings = new SettingsBackedHapticScapeSettings(
+            store,
+            catalog()
+        );
+
+        assertEquals("THREE", settings.clickerLevelUpSequence());
     }
 
     private static SkillCatalog catalog()

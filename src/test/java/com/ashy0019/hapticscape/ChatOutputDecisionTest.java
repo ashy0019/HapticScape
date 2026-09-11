@@ -1,5 +1,7 @@
 package com.ashy0019.hapticscape;
 
+import com.ashy0019.hapticscape.clicker.ClickSequence;
+import com.ashy0019.hapticscape.clicker.ClickerAlertSettings;
 import com.ashy0019.hapticscape.clicker.ClickerPhraseMatchMode;
 import com.ashy0019.hapticscape.clicker.ClickerPhraseRule;
 import com.ashy0019.hapticscape.clicker.ClickerPhraseRules;
@@ -13,7 +15,7 @@ import static org.junit.Assert.assertTrue;
 public class ChatOutputDecisionTest
 {
 	@Test
-	public void ordinaryChatCanTriggerPhraseClick()
+	public void ordinaryChatCanTriggerPhraseSequence()
 	{
 		ChatOutputDecision decision = ChatOutputDecision.classify(
 			new ChatEvent(
@@ -22,16 +24,20 @@ public class ChatOutputDecisionTest
 				"<col=ffffff>Hello world</col>",
 				"Hello world"
 			),
-			phraseRules("hello")
+			phraseRules("hello", ClickSequence.TWO),
+			ClickerAlertSettings.noneEnabled()
 		);
 
+		assertEquals(ClickSequence.TWO, decision.getClickSequence());
 		assertTrue(decision.shouldClick());
 		assertFalse(decision.hasSpecificAlert());
 	}
 
 	@Test
-	public void directMessageWithPhraseProducesOneClickDecisionAndAlert()
+	public void directMessageAndPhraseResolveToStrongestSingleSequence()
 	{
+		ClickerAlertSettings alerts = ClickerAlertSettings.noneEnabled()
+			.withSequence(AlertCategory.DIRECT_MESSAGE, ClickSequence.TWO);
 		ChatOutputDecision decision = ChatOutputDecision.classify(
 			new ChatEvent(
 				"test-source",
@@ -39,17 +45,20 @@ public class ChatOutputDecisionTest
 				"Hello there",
 				"Hello there"
 			),
-			phraseRules("hello")
+			phraseRules("hello", ClickSequence.THREE),
+			alerts
 		);
 
-		assertTrue(decision.shouldClick());
+		assertEquals(ClickSequence.THREE, decision.getClickSequence());
 		assertTrue(decision.hasSpecificAlert());
 		assertEquals(AlertCategory.DIRECT_MESSAGE, decision.getSpecificAlert());
 	}
 
 	@Test
-	public void tradeRequestWithoutPhraseProducesOnlySpecificAlert()
+	public void tradeRequestWithoutPhraseUsesAlertSequence()
 	{
+		ClickerAlertSettings alerts = ClickerAlertSettings.noneEnabled()
+			.withSequence(AlertCategory.TRADE_REQUEST, ClickSequence.TWO);
 		ChatOutputDecision decision = ChatOutputDecision.classify(
 			new ChatEvent(
 				"test-source",
@@ -57,19 +66,22 @@ public class ChatOutputDecisionTest
 				"Someone wishes to trade with you.",
 				"Someone wishes to trade with you."
 			),
-			phraseRules("unrelated")
+			phraseRules("unrelated", ClickSequence.THREE),
+			alerts
 		);
 
-		assertFalse(decision.shouldClick());
+		assertEquals(ClickSequence.TWO, decision.getClickSequence());
+		assertTrue(decision.shouldClick());
 		assertTrue(decision.hasSpecificAlert());
 		assertEquals(AlertCategory.TRADE_REQUEST, decision.getSpecificAlert());
 	}
 
-	private static ClickerPhraseRules phraseRules(String phrase)
+	private static ClickerPhraseRules phraseRules(String phrase, ClickSequence sequence)
 	{
 		return ClickerPhraseRules.empty().withAdded(
 			new ClickerPhraseRule(
 				true,
+				sequence,
 				ClickerPhraseMatchMode.CONTAINS,
 				phrase
 			)

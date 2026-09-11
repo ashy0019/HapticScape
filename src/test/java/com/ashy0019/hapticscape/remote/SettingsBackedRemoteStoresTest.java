@@ -29,6 +29,8 @@ public class SettingsBackedRemoteStoresTest
 
 		Map<String, Object> requestedValues = new HashMap<>(values);
 		requestedValues.put("intensityPercent", 77);
+		requestedValues.put("clickerEnabled", true);
+		requestedValues.put("clickerVolumePercent", 100);
 		RemoteSettingsSnapshot requested = RemoteSettingsSnapshot.capture(
 			source(RemoteSettingsSource.class, requestedValues)
 		);
@@ -36,8 +38,12 @@ public class SettingsBackedRemoteStoresTest
 		RemoteSettingsSnapshot saved = store.save(requested);
 
 		assertEquals(77, saved.getGlobalXpFeedbackSettings().getIntensityPercent());
+		assertEquals(false, saved.getClickerSettings().isEnabled());
+		assertEquals(70, saved.getClickerSettings().getVolumePercent());
 		assertEquals(requested.toConfigurationMap().size(), writes.size());
 		assertTrue(writes.contains("intensityPercent"));
+		assertTrue(!writes.contains("clickerEnabled"));
+		assertTrue(!writes.contains("clickerVolumePercent"));
 	}
 
 	@Test
@@ -105,6 +111,7 @@ public class SettingsBackedRemoteStoresTest
 		values.put("milestonePatternPreset", "TRIPLE");
 		values.put("level99CelebrationEnabled", true);
 		values.put("skillFeedbackProfiles", "");
+		values.put("skillClickProfiles", "");
 		values.put("notificationFeedbackEnabled", false);
 		values.put("notificationIntensityPercent", 50);
 		values.put("notificationPatternPreset", "DOUBLE");
@@ -122,6 +129,10 @@ public class SettingsBackedRemoteStoresTest
 		values.put("clickerVolumePercent", 70);
 		values.put("clickerMinimumXpGain", 1);
 		values.put("clickerDisabledSkills", "");
+		values.put("clickerXpSequence", "ONE");
+		values.put("clickerLevelUpSequence", "ONE");
+		values.put("clickerMilestoneSequence", "ONE");
+		values.put("clickerGenericNotificationSequence", "NONE");
 		values.put("clickerLevelUpEnabled", true);
 		values.put("clickerMilestoneEnabled", true);
 		values.put("clickerLevel99Enabled", true);
