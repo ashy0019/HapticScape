@@ -58,6 +58,7 @@ public class TestHapticScapeSettings implements HapticScapeSettingsSource
 	@Override public boolean remoteDesktopNotificationsAllowed() { return true; }
 	@Override public boolean remoteLocalChatboxMessagesAllowed() { return false; }
 	@Override public boolean remoteProtectedExitAllowed() { return false; }
+	@Override public boolean remoteActivitySharingAllowed() { return false; }
 	@Override public int remoteMaximumIntensityPercent() { return 60; }
 	@Override public int remoteMaximumDurationMillis() { return 3_000; }
 	@Override public int remoteMaximumLiveDurationMillis() { return 30_000; }

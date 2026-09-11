@@ -39,6 +39,7 @@ final class RemotePermissionSummaryPanel extends JPanel
 				: "Blocked")
 			+ "\nClicks: " + allowed(permissions.isClicksAllowed())
 			+ "\nMessages: " + messageDestinations(permissions)
+			+ "\nLive activity: " + allowed(permissions.isActivitySharingAllowed())
 			+ "\nProtected startup/exit: " + allowed(permissions.isProtectedExitAllowed());
 	}
 

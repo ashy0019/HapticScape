@@ -17,6 +17,7 @@ import com.ashy0019.hapticscape.protocol.TransportWireCodec;
 import com.ashy0019.hapticscape.remote.DiscordCredentialStore;
 import com.ashy0019.hapticscape.remote.DiscordPairingBridge;
 import com.ashy0019.hapticscape.remote.EffectiveSettingsService;
+import com.ashy0019.hapticscape.remote.RemoteActivityPublisher;
 import com.ashy0019.hapticscape.remote.RemotePairingService;
 import com.ashy0019.hapticscape.remote.RemoteSessionListener;
 import com.ashy0019.hapticscape.remote.RemoteSessionManager;
@@ -161,10 +162,13 @@ public final class HapticScapeRuntime implements AutoCloseable
                 feedbackCoordinator
             );
             gameplayEvents.start();
+            RemoteActivityPublisher remoteActivityPublisher = new RemoteActivityPublisher(
+                remoteSessionManager::publishGameplayActivity
+            );
             gameplayTransportServer = new LocalhostGameplayEventServer(
                 new TransportWireCodec(dependencies.getGson()),
                 new ResetAwareGameplayEventSink(
-                    gameplayEvents,
+                    new CompositeGameplayEventSink(gameplayEvents, remoteActivityPublisher),
                     level99CelebrationController::reset
                 ),
                 dependencies.getGameplayPort()

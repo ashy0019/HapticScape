@@ -61,6 +61,7 @@ public final class HapticScapeSettingKeys
 	public static final String REMOTE_DESKTOP_NOTIFICATIONS_ALLOWED = "remoteDesktopNotificationsAllowed";
 	public static final String REMOTE_LOCAL_CHATBOX_MESSAGES_ALLOWED = "remoteLocalChatboxMessagesAllowed";
 	public static final String REMOTE_PROTECTED_EXIT_ALLOWED = "remoteProtectedExitAllowed";
+	public static final String REMOTE_ACTIVITY_SHARING_ALLOWED = "remoteActivitySharingAllowed";
 	public static final String START_WITH_WINDOWS = "startWithWindows";
 	public static final String START_MINIMIZED = "startMinimized";
 	public static final String REMOTE_MAXIMUM_INTENSITY_PERCENT = "remoteMaximumIntensityPercent";

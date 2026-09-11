@@ -9,6 +9,7 @@ final class RemoteMessageRouter
 	private final RemotePermissionsCoordinator permissions;
 	private final RemoteLockCoordinator locks;
 	private final RemoteActionCoordinator actions;
+	private final RemoteActivityCoordinator activity;
 	private final RemoteLifecycleMessageHandler lifecycle;
 
 	RemoteMessageRouter(
@@ -16,12 +17,14 @@ final class RemoteMessageRouter
 		RemotePermissionsCoordinator permissions,
 		RemoteLockCoordinator locks,
 		RemoteActionCoordinator actions,
+		RemoteActivityCoordinator activity,
 		RemoteLifecycleMessageHandler lifecycle)
 	{
 		this.settings = Objects.requireNonNull(settings, "settings");
 		this.permissions = Objects.requireNonNull(permissions, "permissions");
 		this.locks = Objects.requireNonNull(locks, "locks");
 		this.actions = Objects.requireNonNull(actions, "actions");
+		this.activity = Objects.requireNonNull(activity, "activity");
 		this.lifecycle = Objects.requireNonNull(lifecycle, "lifecycle");
 	}
 
@@ -70,6 +73,9 @@ final class RemoteMessageRouter
 				break;
 			case REMOTE_LIVE_HAPTIC:
 				actions.handleLive(role, state, permissions.getLocal(), message);
+				break;
+			case ACTIVITY:
+				activity.handle(role, state, message);
 				break;
 			case LOCK_PROPOSAL:
 			case LOCK_ACCEPTED:
