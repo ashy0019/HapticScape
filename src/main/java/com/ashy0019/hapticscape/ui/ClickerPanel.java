@@ -2,6 +2,7 @@ package com.ashy0019.hapticscape.ui;
 
 import com.ashy0019.hapticscape.HapticScapeSettingKeys;
 import com.ashy0019.hapticscape.HapticScapeSettingsSource;
+import com.ashy0019.hapticscape.clicker.ClickSequence;
 import com.ashy0019.hapticscape.clicker.ClickerSettings;
 import com.ashy0019.hapticscape.clicker.ClickerXpSettings;
 import com.ashy0019.hapticscape.clicker.ClickerPhraseRules;
@@ -51,7 +52,6 @@ final class ClickerPanel extends JPanel
 	));
 	private final JCheckBox levelUpCheckBox = new JCheckBox("Always click level-ups");
 	private final JCheckBox milestoneCheckBox = new JCheckBox("Always click milestones");
-	private final JCheckBox level99CheckBox = new JCheckBox("Always click level 99");
 	private final JButton testButton = new JButton("Test click");
 	private volatile ClickerSettings settings;
 	private volatile ClickerXpSettings xpSettings;
@@ -59,7 +59,6 @@ final class ClickerPanel extends JPanel
 	private final LockableCheckBoxBinding enabledLockBinding;
 	private final LockableCheckBoxBinding levelUpLockBinding;
 	private final LockableCheckBoxBinding milestoneLockBinding;
-	private final LockableCheckBoxBinding level99LockBinding;
 	private final LockableSectionHeader clickSettingsBlockHeader;
 	private boolean updating;
 	private boolean remoteReadOnly;
@@ -98,9 +97,9 @@ final class ClickerPanel extends JPanel
 		);
 		xpSettings = new ClickerXpSettings(
 			config.clickerMinimumXpGain(),
-			config.clickerLevelUpEnabled(),
-			config.clickerMilestoneEnabled(),
-			config.clickerLevel99Enabled()
+			ClickSequence.fromConfigValue(config.clickerXpSequence(), ClickSequence.ONE),
+			ClickSequence.fromConfigValue(config.clickerLevelUpSequence(), ClickSequence.ONE),
+			ClickSequence.fromConfigValue(config.clickerMilestoneSequence(), ClickSequence.ONE)
 		);
 		enabledCheckBox.setSelected(settings.isEnabled());
 		volumeSlider.setValue(clamp(
@@ -116,10 +115,8 @@ final class ClickerPanel extends JPanel
 		PanelUi.setFixedWidth(minimumXpSpinner, PanelUi.NUMERIC_CONTROL_WIDTH);
 		levelUpCheckBox.setSelected(xpSettings.isLevelUpEnabled());
 		milestoneCheckBox.setSelected(xpSettings.isMilestoneEnabled());
-		level99CheckBox.setSelected(xpSettings.isLevel99Enabled());
 		levelUpCheckBox.setToolTipText("Click even when a level-up XP gain is below the threshold");
 		milestoneCheckBox.setToolTipText("Give decade milestones priority over ordinary level-ups");
-		level99CheckBox.setToolTipText("Click once when a skill reaches level 99");
 		enabledLockBinding = binding(
 			enabledCheckBox,
 			SettingsLockCatalog.CLICKER_ENABLED,
@@ -149,16 +146,6 @@ final class ClickerPanel extends JPanel
 			editingRemoteSubject,
 			lockSelectionEnabled,
 			() -> xpSettings.isMilestoneEnabled()
-		);
-		level99LockBinding = binding(
-			level99CheckBox,
-			SettingsLockCatalog.CLICKER_LEVEL_99,
-			lockDraft,
-			lockService,
-			sessionManager,
-			editingRemoteSubject,
-			lockSelectionEnabled,
-			() -> xpSettings.isLevel99Enabled()
 		);
 		clickSettingsBlockHeader = new LockableSectionHeader(
 			"",
@@ -196,7 +183,6 @@ final class ClickerPanel extends JPanel
 		);
 		PanelUi.addPreferredHeightComponent(xpSettingsPanel, levelUpCheckBox);
 		PanelUi.addPreferredHeightComponent(xpSettingsPanel, milestoneCheckBox);
-		PanelUi.addPreferredHeightComponent(xpSettingsPanel, level99CheckBox);
 
 		JPanel outputHost = host(clickOutputPanel, 300);
 		JPanel xpHost = host(xpSettingsPanel, 330);
@@ -240,7 +226,6 @@ final class ClickerPanel extends JPanel
 			));
 			levelUpCheckBox.setSelected(displayedXpSettings.isLevelUpEnabled());
 			milestoneCheckBox.setSelected(displayedXpSettings.isMilestoneEnabled());
-			level99CheckBox.setSelected(displayedXpSettings.isLevel99Enabled());
 			phraseRulesPanel.applyDisplayedRules(displayedPhraseRules);
 			refreshLabel();
 		}
@@ -342,8 +327,9 @@ final class ClickerPanel extends JPanel
 			}
 			persist(
 				SettingsLockCatalog.CLICKER_LEVEL_UP,
-				HapticScapeSettingKeys.CLICKER_LEVEL_UP_ENABLED,
-				levelUpCheckBox.isSelected()
+				HapticScapeSettingKeys.CLICKER_LEVEL_UP_SEQUENCE,
+				(levelUpCheckBox.isSelected() ? ClickSequence.ONE : ClickSequence.NONE)
+					.toConfigValue()
 			);
 			refreshXpSettings();
 		});
@@ -359,25 +345,9 @@ final class ClickerPanel extends JPanel
 			}
 			persist(
 				SettingsLockCatalog.CLICKER_MILESTONE,
-				HapticScapeSettingKeys.CLICKER_MILESTONE_ENABLED,
-				milestoneCheckBox.isSelected()
-			);
-			refreshXpSettings();
-		});
-		level99CheckBox.addActionListener(event ->
-		{
-			if (updating || level99LockBinding.handleAction(event))
-			{
-				return;
-			}
-			if (isClickSettingsReadOnly() || level99LockBinding.isEditLocked())
-			{
-				return;
-			}
-			persist(
-				SettingsLockCatalog.CLICKER_LEVEL_99,
-				HapticScapeSettingKeys.CLICKER_LEVEL_99_ENABLED,
-				level99CheckBox.isSelected()
+				HapticScapeSettingKeys.CLICKER_MILESTONE_SEQUENCE,
+				(milestoneCheckBox.isSelected() ? ClickSequence.ONE : ClickSequence.NONE)
+					.toConfigValue()
 			);
 			refreshXpSettings();
 		});
@@ -398,7 +368,6 @@ final class ClickerPanel extends JPanel
 		enabledLockBinding.refresh();
 		levelUpLockBinding.refresh();
 		milestoneLockBinding.refresh();
-		level99LockBinding.refresh();
 		enabledCheckBox.setEnabled(blockEditable && !enabledLockBinding.isEditLocked());
 		volumeSlider.setEnabled(blockEditable && enabled);
 		minimumXpSpinner.setEnabled(blockEditable && enabled);
@@ -406,7 +375,6 @@ final class ClickerPanel extends JPanel
 		milestoneCheckBox.setEnabled(
 			blockEditable && enabled && !milestoneLockBinding.isEditLocked()
 		);
-		level99CheckBox.setEnabled(blockEditable && enabled && !level99LockBinding.isEditLocked());
 		phraseRulesPanel.setClickerEnabled(enabled);
 		phraseRulesPanel.setRemoteReadOnly(remoteReadOnly);
 		testButton.setEnabled(
@@ -433,9 +401,9 @@ final class ClickerPanel extends JPanel
 	{
 		xpSettings = new ClickerXpSettings(
 			((Number) minimumXpSpinner.getValue()).intValue(),
-			levelUpCheckBox.isSelected(),
-			milestoneCheckBox.isSelected(),
-			level99CheckBox.isSelected()
+			xpSettings.getXpGainSequence(),
+			levelUpCheckBox.isSelected() ? ClickSequence.ONE : ClickSequence.NONE,
+			milestoneCheckBox.isSelected() ? ClickSequence.ONE : ClickSequence.NONE
 		);
 	}
 

@@ -11,6 +11,7 @@ import com.ashy0019.hapticscape.HapticPatternSelection;
 import com.ashy0019.hapticscape.HapticScapeSettingKeys;
 import com.ashy0019.hapticscape.HapticScapeSettingsSource;
 import com.ashy0019.hapticscape.NotificationFeedbackSettings;
+import com.ashy0019.hapticscape.clicker.ClickSequence;
 import com.ashy0019.hapticscape.clicker.ClickerAlertSettings;
 import com.ashy0019.hapticscape.remote.RemoteLockSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteLockState;
@@ -139,7 +140,12 @@ final class AlertsPanel extends JPanel
 		this.editingRemoteSubject = editingRemoteSubject;
 		this.lockSelectionEnabled = lockSelectionEnabled;
 		genericEnabled = config.notificationFeedbackEnabled();
-		genericClickEnabled = config.clickerGenericNotificationEnabled();
+		genericClickEnabled = ClickSequence.fromConfigValue(
+			config.clickerGenericNotificationSequence(),
+			config.clickerGenericNotificationEnabled()
+				? ClickSequence.ONE
+				: ClickSequence.NONE
+		).isEnabled();
 		respectFocus = config.notificationRespectFocus();
 		genericIntensityPercent = clamp(
 			config.notificationIntensityPercent(),
@@ -274,7 +280,11 @@ final class AlertsPanel extends JPanel
 		configureListeners(testGenericAction, testSpecificAction);
 		lockDraft.addListener(this::refreshAlertLockState);
 
-		persistMigratedSettings(configuredProfiles, config.alertTriggerSettings());
+		persistMigratedSettings(
+			configuredProfiles,
+			config.alertTriggerSettings(),
+			config.clickerAlertSettings()
+		);
 		loadSelectedCategory();
 		setConnected(false);
 	}
@@ -566,8 +576,9 @@ final class AlertsPanel extends JPanel
 			genericClickEnabled = genericClickEnabledCheckBox.isSelected();
 			settingsSink.set(
 				SettingsLockCatalog.GENERIC_NOTIFICATION_CLICKS,
-				HapticScapeSettingKeys.CLICKER_GENERIC_NOTIFICATION_ENABLED,
-				genericClickEnabled
+				HapticScapeSettingKeys.CLICKER_GENERIC_NOTIFICATION_SEQUENCE,
+				(genericClickEnabled ? ClickSequence.ONE : ClickSequence.NONE)
+					.toConfigValue()
 			);
 			updateGenericControlState();
 		});
@@ -856,7 +867,8 @@ final class AlertsPanel extends JPanel
 
 	private void persistMigratedSettings(
 		String configuredProfiles,
-		String configuredTriggers)
+		String configuredTriggers,
+		String configuredClickSettings)
 	{
 		if (!alertProfiles.toConfigValue().equals(configuredProfiles))
 		{
@@ -865,6 +877,13 @@ final class AlertsPanel extends JPanel
 		if (!triggerSettings.toConfigValue().equals(configuredTriggers))
 		{
 			persistTriggerSettings();
+		}
+		if (ClickerAlertSettings.requiresMigration(configuredClickSettings))
+		{
+			settingsSink.set(
+				HapticScapeSettingKeys.CLICKER_ALERT_SETTINGS,
+				clickerAlertSettings.toConfigValue()
+			);
 		}
 	}
 

@@ -1,5 +1,6 @@
 package com.ashy0019.hapticscape;
 
+import com.ashy0019.hapticscape.clicker.ClickSequence;
 import com.ashy0019.hapticscape.clicker.ClickerService;
 import com.ashy0019.hapticscape.event.XpEvent;
 import com.ashy0019.hapticscape.host.DesktopNotificationService;
@@ -134,10 +135,11 @@ final class FeedbackCoordinator implements GameplayEventCoordinator.FeedbackSink
 	public void dispatchSpecificAlert(AlertCategory category, boolean allowClick)
 	{
 		RemoteSettingsSnapshot effective = settingsSupplier.get();
-		if (allowClick && effective.isAlertClickEnabled(category))
+		ClickSequence clickSequence = effective.getAlertClickSequence(category);
+		if (allowClick && clickSequence.isEnabled())
 		{
-			log.debug("{} click requested", category);
-			clicks.click();
+			log.debug("{} click sequence requested: {}", category, clickSequence);
+			clicks.click(clickSequence);
 		}
 		effective.getAlertProfiles()
 			.resolve(category, effective.getNotificationFeedbackSettings())
@@ -159,10 +161,11 @@ final class FeedbackCoordinator implements GameplayEventCoordinator.FeedbackSink
 	{
 		RemoteSettingsSnapshot effective = settingsSupplier.get();
 		NotificationFeedbackSettings settings = effective.getNotificationFeedbackSettings();
-		if (effective.isGenericNotificationClickEnabled())
+		ClickSequence clickSequence = effective.getGenericNotificationClickSequence();
+		if (clickSequence.isEnabled())
 		{
-			log.debug("Generic notification click requested");
-			clicks.click();
+			log.debug("Generic notification click sequence requested: {}", clickSequence);
+			clicks.click(clickSequence);
 		}
 		if (!settings.isEnabled())
 		{
@@ -179,9 +182,9 @@ final class FeedbackCoordinator implements GameplayEventCoordinator.FeedbackSink
 	}
 
 	@Override
-	public void playClick()
+	public void playClick(ClickSequence sequence)
 	{
-		clicks.click();
+		clicks.click(sequence);
 	}
 
 	void sendConfiguredPattern(

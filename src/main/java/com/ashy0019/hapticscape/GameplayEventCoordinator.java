@@ -1,5 +1,6 @@
 package com.ashy0019.hapticscape;
 
+import com.ashy0019.hapticscape.clicker.ClickSequence;
 import com.ashy0019.hapticscape.event.ChatEvent;
 import com.ashy0019.hapticscape.event.InventoryChangedEvent;
 import com.ashy0019.hapticscape.event.LootReceivedEvent;
@@ -31,7 +32,7 @@ final class GameplayEventCoordinator implements GameplayEventSink, AutoCloseable
 
 		void dispatchGenericAlert();
 
-		void playClick();
+		void playClick(ClickSequence sequence);
 	}
 
 	private final Supplier<RemoteSettingsSnapshot> settingsSupplier;
@@ -108,7 +109,7 @@ final class GameplayEventCoordinator implements GameplayEventSink, AutoCloseable
 		);
 		if (decision.shouldClick())
 		{
-			feedback.playClick();
+			feedback.playClick(decision.getClickSequence());
 		}
 		feedback.handleXp(event, decision, settings, skillSettings);
 	}
@@ -117,20 +118,21 @@ final class GameplayEventCoordinator implements GameplayEventSink, AutoCloseable
 	public void onChatEvent(ChatEvent event)
 	{
 		Objects.requireNonNull(event, "event");
+		RemoteSettingsSnapshot settings = settingsSupplier.get();
 		ChatOutputDecision decision = ChatOutputDecision.classify(
 			event,
-			settingsSupplier.get().getClickerPhraseRules()
+			settings.getClickerPhraseRules(),
+			settings.getClickerAlertSettings()
 		);
 		if (decision.hasSpecificAlert())
 		{
-			feedback.dispatchSpecificAlert(
-				decision.getSpecificAlert(),
-				!decision.shouldClick()
-			);
+			// Chat owns the combined phrase + semantic-alert click decision so
+			// one observation cannot stack two independent click sequences.
+			feedback.dispatchSpecificAlert(decision.getSpecificAlert(), false);
 		}
 		if (decision.shouldClick())
 		{
-			feedback.playClick();
+			feedback.playClick(decision.getClickSequence());
 		}
 	}
 

@@ -122,6 +122,10 @@ public class SettingsBackedRemoteStoresTest
 		values.put("clickerVolumePercent", 70);
 		values.put("clickerMinimumXpGain", 1);
 		values.put("clickerDisabledSkills", "");
+		values.put("clickerXpSequence", "ONE");
+		values.put("clickerLevelUpSequence", "ONE");
+		values.put("clickerMilestoneSequence", "ONE");
+		values.put("clickerGenericNotificationSequence", "NONE");
 		values.put("clickerLevelUpEnabled", true);
 		values.put("clickerMilestoneEnabled", true);
 		values.put("clickerLevel99Enabled", true);

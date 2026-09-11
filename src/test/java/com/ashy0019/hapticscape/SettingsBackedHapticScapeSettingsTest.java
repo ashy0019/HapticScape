@@ -72,6 +72,41 @@ public class SettingsBackedHapticScapeSettingsTest
         assertTrue(settings.remoteSettingsAllowed());
     }
 
+
+    @Test
+    public void legacyClickBooleansBecomeOneClickSequenceFallbacks()
+    {
+        MapSettingsStore store = new MapSettingsStore();
+        store.set(HapticScapeSettingKeys.CLICKER_LEVEL_UP_ENABLED, false);
+        store.set(HapticScapeSettingKeys.CLICKER_MILESTONE_ENABLED, true);
+        store.set(HapticScapeSettingKeys.CLICKER_GENERIC_NOTIFICATION_ENABLED, true);
+
+        SettingsBackedHapticScapeSettings settings = new SettingsBackedHapticScapeSettings(
+            store,
+            catalog()
+        );
+
+        assertEquals("ONE", settings.clickerXpSequence());
+        assertEquals("NONE", settings.clickerLevelUpSequence());
+        assertEquals("ONE", settings.clickerMilestoneSequence());
+        assertEquals("ONE", settings.clickerGenericNotificationSequence());
+    }
+
+    @Test
+    public void sequenceSettingsOverrideLegacyBooleanFallbacks()
+    {
+        MapSettingsStore store = new MapSettingsStore();
+        store.set(HapticScapeSettingKeys.CLICKER_LEVEL_UP_ENABLED, false);
+        store.set(HapticScapeSettingKeys.CLICKER_LEVEL_UP_SEQUENCE, "THREE");
+
+        SettingsBackedHapticScapeSettings settings = new SettingsBackedHapticScapeSettings(
+            store,
+            catalog()
+        );
+
+        assertEquals("THREE", settings.clickerLevelUpSequence());
+    }
+
     private static SkillCatalog catalog()
     {
         return new SkillCatalog(Arrays.asList(

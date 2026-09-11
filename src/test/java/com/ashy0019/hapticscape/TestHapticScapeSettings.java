@@ -40,6 +40,10 @@ public class TestHapticScapeSettings implements HapticScapeSettingsSource
 			.withAllEnabled(OldSchoolRuneScapeSkillCatalog.get().getSkillIds(), false)
 			.toConfigValue();
 	}
+	@Override public String clickerXpSequence() { return "ONE"; }
+	@Override public String clickerLevelUpSequence() { return "ONE"; }
+	@Override public String clickerMilestoneSequence() { return "ONE"; }
+	@Override public String clickerGenericNotificationSequence() { return "NONE"; }
 	@Override public boolean clickerLevelUpEnabled() { return true; }
 	@Override public boolean clickerMilestoneEnabled() { return true; }
 	@Override public boolean clickerLevel99Enabled() { return true; }

@@ -1,5 +1,6 @@
 package com.ashy0019.hapticscape.clicker;
 
+import java.util.Locale;
 import java.util.Objects;
 
 /**
@@ -33,6 +34,11 @@ public enum ClickSequence
 		return this != NONE;
 	}
 
+	public String toConfigValue()
+	{
+		return name();
+	}
+
 	public static ClickSequence fromClickCount(int clickCount)
 	{
 		switch (clickCount)
@@ -47,6 +53,23 @@ public enum ClickSequence
 				return THREE;
 			default:
 				throw new IllegalArgumentException("Click count must be between 0 and 3");
+		}
+	}
+
+	public static ClickSequence fromConfigValue(String configuredValue, ClickSequence fallback)
+	{
+		Objects.requireNonNull(fallback, "fallback");
+		if (configuredValue == null || configuredValue.trim().isEmpty())
+		{
+			return fallback;
+		}
+		try
+		{
+			return valueOf(configuredValue.trim().toUpperCase(Locale.ROOT));
+		}
+		catch (IllegalArgumentException ignored)
+		{
+			return fallback;
 		}
 	}
 

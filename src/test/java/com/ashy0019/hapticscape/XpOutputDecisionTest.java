@@ -1,5 +1,6 @@
 package com.ashy0019.hapticscape;
 
+import com.ashy0019.hapticscape.clicker.ClickSequence;
 import com.ashy0019.hapticscape.clicker.ClickerXpSettings;
 import com.ashy0019.hapticscape.event.XpEvent;
 import org.junit.Test;
@@ -11,81 +12,90 @@ import static org.junit.Assert.assertTrue;
 public class XpOutputDecisionTest
 {
 	@Test
-	public void clickOnlySkillStillClicks()
+	public void clickOnlySkillStillClicksWithConfiguredSequence()
 	{
-		XpOutputDecision decision = classify(eventBetweenXp(1_000, 1_050), false, true, 25, 25);
+		XpOutputDecision decision = classify(
+			eventBetweenXp(1_000, 1_050),
+			false,
+			true,
+			25,
+			25,
+			ClickSequence.TWO
+		);
 
 		assertEquals(XpFeedbackTrigger.NONE, decision.getHapticTrigger());
 		assertEquals(XpFeedbackTrigger.XP_GAIN, decision.getClickTrigger());
+		assertEquals(ClickSequence.TWO, decision.getClickSequence());
 		assertTrue(decision.shouldClick());
 	}
 
 	@Test
 	public void hapticOnlySkillRetainsHapticFeedback()
 	{
-		XpOutputDecision decision = classify(eventBetweenXp(1_000, 1_050), true, false, 25, 25);
+		XpOutputDecision decision = classify(
+			eventBetweenXp(1_000, 1_050),
+			true,
+			false,
+			25,
+			25,
+			ClickSequence.THREE
+		);
 
 		assertEquals(XpFeedbackTrigger.XP_GAIN, decision.getHapticTrigger());
 		assertEquals(XpFeedbackTrigger.NONE, decision.getClickTrigger());
+		assertEquals(ClickSequence.NONE, decision.getClickSequence());
 		assertFalse(decision.shouldClick());
-	}
-
-	@Test
-	public void bothEnabledProduceIndependentDecisions()
-	{
-		XpOutputDecision decision = classify(eventBetweenXp(1_000, 1_050), true, true, 25, 25);
-
-		assertEquals(XpFeedbackTrigger.XP_GAIN, decision.getHapticTrigger());
-		assertEquals(XpFeedbackTrigger.XP_GAIN, decision.getClickTrigger());
-		assertTrue(decision.shouldClick());
 	}
 
 	@Test
 	public void thresholdsAreIndependent()
 	{
-		XpOutputDecision decision = classify(eventBetweenXp(1_000, 1_050), true, true, 100, 25);
+		XpOutputDecision decision = classify(
+			eventBetweenXp(1_000, 1_050),
+			true,
+			true,
+			100,
+			25,
+			ClickSequence.THREE
+		);
 
 		assertEquals(XpFeedbackTrigger.NONE, decision.getHapticTrigger());
 		assertEquals(XpFeedbackTrigger.XP_GAIN, decision.getClickTrigger());
+		assertEquals(ClickSequence.THREE, decision.getClickSequence());
 	}
 
 	@Test
-	public void levelUpProducesOneSemanticClickDecision()
+	public void levelUpAndMilestoneUseTheirOwnOverrides()
 	{
-		XpOutputDecision decision = classify(eventBetweenLevels(5, 6), true, true, 200_000_000, 200_000_000);
+		ClickerXpSettings clickSettings = new ClickerXpSettings(
+			200_000_000,
+			ClickSequence.ONE,
+			ClickSequence.TWO,
+			ClickSequence.THREE
+		);
+		XpOutputDecision level = classify(eventBetweenLevels(5, 6), clickSettings);
+		XpOutputDecision milestone = classify(eventBetweenLevels(9, 10), clickSettings);
 
-		assertEquals(XpFeedbackTrigger.LEVEL_UP, decision.getHapticTrigger());
-		assertEquals(XpFeedbackTrigger.LEVEL_UP, decision.getClickTrigger());
-		assertTrue(decision.shouldClick());
+		assertEquals(XpFeedbackTrigger.LEVEL_UP, level.getClickTrigger());
+		assertEquals(ClickSequence.TWO, level.getClickSequence());
+		assertEquals(XpFeedbackTrigger.MILESTONE, milestone.getClickTrigger());
+		assertEquals(ClickSequence.THREE, milestone.getClickSequence());
 	}
 
 	@Test
-	public void milestoneProducesOneSemanticClickDecision()
+	public void levelNinetyNineNeverClicksBesideExistingCeremonyDecision()
 	{
-		XpOutputDecision decision = classify(eventBetweenLevels(9, 10), true, true, 1, 1);
-
-		assertEquals(XpFeedbackTrigger.MILESTONE, decision.getHapticTrigger());
-		assertEquals(XpFeedbackTrigger.MILESTONE, decision.getClickTrigger());
-		assertTrue(decision.shouldClick());
-	}
-
-	@Test
-	public void levelNinetyNineProducesOneClickBesideExistingCeremonyDecision()
-	{
-		XpOutputDecision decision = classify(eventBetweenLevels(98, 99), true, true, 1, 1);
+		ClickerXpSettings clickSettings = new ClickerXpSettings(
+			1,
+			ClickSequence.THREE,
+			ClickSequence.THREE,
+			ClickSequence.THREE
+		);
+		XpOutputDecision decision = classify(eventBetweenLevels(98, 99), clickSettings);
 
 		assertEquals(XpFeedbackTrigger.LEVEL_99, decision.getHapticTrigger());
-		assertEquals(XpFeedbackTrigger.LEVEL_99, decision.getClickTrigger());
-		assertTrue(decision.shouldClick());
-	}
-
-	@Test
-	public void XPBelowClickThresholdDoesNotClick()
-	{
-		XpOutputDecision decision = classify(eventBetweenXp(1_000, 1_010), true, true, 1, 25);
-
-		assertEquals(XpFeedbackTrigger.XP_GAIN, decision.getHapticTrigger());
 		assertEquals(XpFeedbackTrigger.NONE, decision.getClickTrigger());
+		assertEquals(ClickSequence.NONE, decision.getClickSequence());
 		assertFalse(decision.shouldClick());
 	}
 
@@ -94,7 +104,8 @@ public class XpOutputDecisionTest
 		boolean hapticSkillEnabled,
 		boolean clickSkillEnabled,
 		int hapticThreshold,
-		int clickThreshold)
+		int clickThreshold,
+		ClickSequence xpSequence)
 	{
 		return XpOutputDecision.classify(
 			event,
@@ -109,7 +120,31 @@ public class XpOutputDecisionTest
 			true,
 			true,
 			clickSkillEnabled,
-			new ClickerXpSettings(clickThreshold, true, true, true)
+			new ClickerXpSettings(
+				clickThreshold,
+				xpSequence,
+				ClickSequence.ONE,
+				ClickSequence.ONE
+			)
+		);
+	}
+
+	private static XpOutputDecision classify(XpEvent event, ClickerXpSettings clickSettings)
+	{
+		return XpOutputDecision.classify(
+			event,
+			true,
+			new XpFeedbackSettings(
+				1,
+				50,
+				500,
+				HapticPatternSelection.SINGLE
+			),
+			true,
+			true,
+			true,
+			true,
+			clickSettings
 		);
 	}
 
