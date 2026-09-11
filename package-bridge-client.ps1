@@ -74,14 +74,14 @@ try
         throw "Gradle failed with exit code $LASTEXITCODE."
     }
 
-    $jarPath = Join-Path $moduleRoot 'build\libs\hapticscape-runelite-bridge-client.jar'
+    $jarPath = Join-Path $moduleRoot 'build\libs\lumbridge.jar'
     if (-not (Test-Path $jarPath -PathType Leaf))
     {
-        throw "The expected bridge client JAR was not created: $jarPath"
+        throw "The expected LumBridge JAR was not created: $jarPath"
     }
 
     $packageRoot = Join-Path $projectRoot 'build\bridge-windows-package'
-    $appDirectory = Join-Path $packageRoot 'HapticScape Bridge RuneLite'
+    $appDirectory = Join-Path $packageRoot 'LumBridge'
     $appFilesDirectory = Join-Path $appDirectory 'app'
     $licensesDirectory = Join-Path $appDirectory 'licenses'
     $distributionDirectory = Join-Path $projectRoot 'build\distribution'
@@ -101,7 +101,7 @@ try
     New-Item -ItemType Directory -Force $licensesDirectory | Out-Null
     New-Item -ItemType Directory -Force $distributionDirectory | Out-Null
 
-    Copy-Item $jarPath (Join-Path $appFilesDirectory 'hapticscape-runelite-bridge-client.jar')
+    Copy-Item $jarPath (Join-Path $appFilesDirectory 'lumbridge.jar')
     Copy-Item $provenancePath (Join-Path $appFilesDirectory 'BRIDGE-SOURCE.properties')
     Copy-Item (Join-Path $moduleRoot 'README-FIRST.md') (Join-Path $appDirectory 'README-FIRST.md')
     Copy-Item (Join-Path $projectRoot 'LICENSE') (Join-Path $licensesDirectory 'HapticScape.txt')
@@ -113,7 +113,7 @@ try
         version = $Version
         architecture = $architecture
         repository = 'ashy0019/HapticScape'
-        artifact = 'runelite-bridge-client'
+        artifact = 'lumbridge'
         runeLiteVersion = $RuneLiteVersion
         bridgeSourceRepository = 'ashy0019/runelite-local-event-bridge'
         bridgeSourceCommit = $bridgeCommit
@@ -125,8 +125,8 @@ try
         $utf8NoBom
     )
 
-    $launcherSource = Join-Path $projectRoot 'bridge-launcher\HapticScapeBridgeRuneLiteLauncher.cs'
-    $launcherPath = Join-Path $appDirectory 'HapticScape Bridge RuneLite.exe'
+    $launcherSource = Join-Path $projectRoot 'bridge-launcher\LumBridgeLauncher.cs'
+    $launcherPath = Join-Path $appDirectory 'LumBridge.exe'
     $cscArguments = @(
         '/nologo',
         '/target:winexe',
@@ -144,14 +144,14 @@ try
         $cscArguments += "/win32icon:$iconPath"
     }
 
-    Write-Host 'Creating HapticScape Bridge RuneLite.exe...'
+    Write-Host 'Creating LumBridge.exe...'
     & $cscPath @cscArguments
     if ($LASTEXITCODE -ne 0)
     {
         throw "The Windows launcher compiler failed with exit code $LASTEXITCODE."
     }
 
-    $zipPath = Join-Path $distributionDirectory "HapticScape-Bridge-RuneLite-Windows-$architecture-$Version.zip"
+    $zipPath = Join-Path $distributionDirectory "LumBridge-Windows-$architecture-$Version.zip"
     $checksumPath = "$zipPath.sha256"
     if (Test-Path $zipPath)
     {
@@ -162,7 +162,7 @@ try
         Remove-Item -Force $checksumPath
     }
 
-    Write-Host 'Compressing the bridge client bundle...'
+    Write-Host 'Compressing the LumBridge bundle...'
     Compress-Archive -Path $appDirectory -DestinationPath $zipPath -CompressionLevel Optimal
     $hash = (Get-FileHash -Algorithm SHA256 $zipPath).Hash.ToLowerInvariant()
     [System.IO.File]::WriteAllText(
@@ -172,11 +172,11 @@ try
     )
 
     Write-Host ''
-    Write-Host 'Bridge client package created successfully:' -ForegroundColor Green
+    Write-Host 'LumBridge package created successfully:' -ForegroundColor Green
     Write-Host $zipPath
     Write-Host $checksumPath
     Write-Host ''
-    Write-Host 'Test build\bridge-windows-package\HapticScape Bridge RuneLite\HapticScape Bridge RuneLite.exe before sharing the ZIP.'
+    Write-Host 'Test build\bridge-windows-package\LumBridge\LumBridge.exe before sharing the ZIP.'
 }
 finally
 {

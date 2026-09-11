@@ -5,7 +5,7 @@ using System.IO;
 using System.Text;
 using System.Windows.Forms;
 
-internal static class HapticScapeBridgeRuneLiteLauncher
+internal static class LumBridgeLauncher
 {
     [STAThread]
     private static void Main(string[] args)
@@ -13,10 +13,10 @@ internal static class HapticScapeBridgeRuneLiteLauncher
         try
         {
             string applicationDirectory = AppDomain.CurrentDomain.BaseDirectory;
-            string clientJar = Path.Combine(applicationDirectory, "app", "hapticscape-runelite-bridge-client.jar");
+            string clientJar = Path.Combine(applicationDirectory, "app", "lumbridge.jar");
             if (!File.Exists(clientJar))
             {
-                throw new FileNotFoundException("The packaged RuneLite bridge client JAR was not found.", clientJar);
+                throw new FileNotFoundException("The packaged LumBridge JAR was not found.", clientJar);
             }
 
             string javaExecutable = FindJavaExecutable(applicationDirectory);
@@ -24,7 +24,7 @@ internal static class HapticScapeBridgeRuneLiteLauncher
             {
                 MessageBox.Show(
                     "Java was not found. Install the official RuneLite launcher or Java 11+, then try again.",
-                    "HapticScape Bridge RuneLite",
+                    "LumBridge",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error
                 );
@@ -57,7 +57,7 @@ internal static class HapticScapeBridgeRuneLiteLauncher
         {
             MessageBox.Show(
                 ex.Message,
-                "HapticScape Bridge RuneLite",
+                "LumBridge",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error
             );

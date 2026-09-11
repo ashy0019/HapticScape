@@ -53,9 +53,9 @@ jobs:
           retention-days: 14
 
 
-      - name: Upload fallback RuneLite bridge client JAR
+      - name: Upload LumBridge JAR
         uses: actions/upload-artifact@v4
         with:
-          name: hapticscape-runelite-bridge-client-${{ github.sha }}
-          path: runelite-bridge-client/build/libs/hapticscape-runelite-bridge-client.jar
+          name: lumbridge-${{ github.sha }}
+          path: runelite-bridge-client/build/libs/lumbridge.jar
           retention-days: 14

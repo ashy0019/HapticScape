@@ -1,6 +1,6 @@
-# HapticScape RuneLite Bridge Client
+# LumBridge
 
-This subproject is the fallback delivery path for HapticScape's tiny RuneLite
+LumBridge is the fallback delivery path for HapticScape's tiny RuneLite
 Local Event Bridge. It packages normal RuneLite plus the bridge as a built-in
 plugin. The standalone HapticScape application remains in the root project and
 has no RuneLite dependency.
@@ -31,10 +31,10 @@ packaged launcher starts RuneLite normally.
 .\gradlew.bat :runelite-bridge-client:verifyBridgeClientArtifact
 ```
 
-The resulting fat JAR is:
+The resulting LumBridge JAR is:
 
 ```text
-runelite-bridge-client\build\libs\hapticscape-runelite-bridge-client.jar
+runelite-bridge-client\build\libs\lumbridge.jar
 ```
 
 The build verifies that the launcher, bridge plugin, and provenance metadata

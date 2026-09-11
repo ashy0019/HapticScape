@@ -116,7 +116,7 @@ tasks.register('bridgeClientJar', Jar) {
         attributes(
             'Main-Class': bridgeMainClass,
             'Multi-Release': true,
-            'Implementation-Title': 'HapticScape RuneLite Bridge Client',
+            'Implementation-Title': 'LumBridge',
             'Implementation-Version': rootProject.version,
             'HapticScape-Bridge-Source-Commit': bridgeSourceCommit,
             'HapticScape-RuneLite-Version': runeLiteVersion.get()
@@ -139,7 +139,7 @@ tasks.register('bridgeClientJar', Jar) {
 
     group = BasePlugin.BUILD_GROUP
     archiveClassifier.set('bridge-client')
-    archiveFileName.set('hapticscape-runelite-bridge-client.jar')
+    archiveFileName.set('lumbridge.jar')
 }
 
 tasks.register('verifyBridgeClientJar') {
