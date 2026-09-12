@@ -17,6 +17,8 @@ internal static class UpdateCoreTests
 			TestLaunchOptions();
 			TestPolicy();
 			TestReleaseParsing();
+			TestLumBridgeReleaseParsing();
+			TestLumBridgeInstalledRecognition(root);
 			TestPreferences(root);
 			TestPreferenceMigration(root);
 			TestChecksum(root);
@@ -127,6 +129,79 @@ internal static class UpdateCoreTests
 		UpdateRelease release = GitHubReleaseClient.ParseLatest(json, "x64");
 		Assert(release.Version == "1.6.0", "release version should be normalized");
 		Assert(release.ZipName == "HapticScape-Windows-x64-1.6.0.zip", "asset name should match exactly");
+	}
+
+	private static void TestLumBridgeReleaseParsing()
+	{
+		Assert(!LumBridgeSupport.IsRequired("2.4.0"),
+			"HapticScape 2 should not require LumBridge");
+		Assert(LumBridgeSupport.IsRequired("3.0.0"),
+			"HapticScape 3 should require LumBridge");
+		Assert(LumBridgeSupport.AssetName("3.0.0", "x64")
+			== "LumBridge-Windows-x64-3.0.0.zip",
+			"LumBridge asset naming should match package-all output");
+
+		string json = "{"
+			+ "\"tag_name\":\"v3.0.0\",\"draft\":false,\"prerelease\":false,"
+			+ "\"assets\":["
+			+ "{\"name\":\"HapticScape-Windows-x64-3.0.0.zip\","
+			+ "\"browser_download_url\":\"https://github.com/ashy0019/HapticScape/releases/download/v3.0.0/HapticScape-Windows-x64-3.0.0.zip\"},"
+			+ "{\"name\":\"HapticScape-Windows-x64-3.0.0.zip.sha256\","
+			+ "\"browser_download_url\":\"https://github.com/ashy0019/HapticScape/releases/download/v3.0.0/HapticScape-Windows-x64-3.0.0.zip.sha256\"},"
+			+ "{\"name\":\"LumBridge-Windows-x64-3.0.0.zip\","
+			+ "\"browser_download_url\":\"https://github.com/ashy0019/HapticScape/releases/download/v3.0.0/LumBridge-Windows-x64-3.0.0.zip\"},"
+			+ "{\"name\":\"LumBridge-Windows-x64-3.0.0.zip.sha256\","
+			+ "\"browser_download_url\":\"https://github.com/ashy0019/HapticScape/releases/download/v3.0.0/LumBridge-Windows-x64-3.0.0.zip.sha256\"}]}";
+		UpdateRelease release = GitHubReleaseClient.ParseLatest(json, "x64");
+		Assert(release.HasLumBridge,
+			"HapticScape 3 releases should carry the LumBridge companion asset");
+		Assert(release.LumBridgeZipName == "LumBridge-Windows-x64-3.0.0.zip",
+			"the matching LumBridge asset should be selected");
+
+		string missingLumBridge = "{"
+			+ "\"tag_name\":\"v3.0.0\",\"draft\":false,\"prerelease\":false,"
+			+ "\"assets\":["
+			+ "{\"name\":\"HapticScape-Windows-x64-3.0.0.zip\","
+			+ "\"browser_download_url\":\"https://github.com/ashy0019/HapticScape/releases/download/v3.0.0/HapticScape-Windows-x64-3.0.0.zip\"},"
+			+ "{\"name\":\"HapticScape-Windows-x64-3.0.0.zip.sha256\","
+			+ "\"browser_download_url\":\"https://github.com/ashy0019/HapticScape/releases/download/v3.0.0/HapticScape-Windows-x64-3.0.0.zip.sha256\"}]}";
+		UpdateRelease hapticScapeOnly = GitHubReleaseClient.ParseLatest(
+			missingLumBridge,
+			"x64");
+		Assert(!hapticScapeOnly.HasLumBridge,
+			"a missing companion must not block the HapticScape update itself");
+	}
+
+	private static void TestLumBridgeInstalledRecognition(string root)
+	{
+		string application = Path.Combine(root, "lumbridge-install-check");
+		Directory.CreateDirectory(application);
+		string installedManifestPath = Path.Combine(root, "hapticscape-release.json");
+		File.WriteAllText(
+			installedManifestPath,
+			"{\"version\":\"3.0.0\",\"architecture\":\"x64\","
+				+ "\"repository\":\"ashy0019/HapticScape\"}");
+		ReleaseManifest manifest = ReleaseManifest.Load(installedManifestPath);
+		Assert(!LumBridgeSupport.IsInstalled(manifest, application),
+			"missing LumBridge should require companion setup");
+
+		string lumBridgeApp = Path.Combine(application, "LumBridge", "app");
+		Directory.CreateDirectory(lumBridgeApp);
+		File.WriteAllText(Path.Combine(application, "LumBridge", "LumBridge.exe"), "stub");
+		File.WriteAllText(Path.Combine(lumBridgeApp, "lumbridge.jar"), "stub");
+		File.WriteAllText(
+			Path.Combine(lumBridgeApp, "release.json"),
+			"{\"version\":\"3.0.0\",\"architecture\":\"x64\","
+				+ "\"repository\":\"ashy0019/HapticScape\"}");
+		Assert(LumBridgeSupport.IsInstalled(manifest, application),
+			"matching LumBridge should satisfy companion setup");
+
+		File.WriteAllText(
+			Path.Combine(lumBridgeApp, "release.json"),
+			"{\"version\":\"2.9.9\",\"architecture\":\"x64\","
+				+ "\"repository\":\"ashy0019/HapticScape\"}");
+		Assert(!LumBridgeSupport.IsInstalled(manifest, application),
+			"a mismatched LumBridge should be refreshed");
 	}
 
 	private static void TestPreferences(string root)
