@@ -138,6 +138,7 @@ try
 	$updateCoreSource = Join-Path $projectRoot 'launcher\UpdateCore.cs'
 	$deepLinkCoreSource = Join-Path $projectRoot 'launcher\DeepLinkCore.cs'
 	$launchOptionsCoreSource = Join-Path $projectRoot 'launcher\LaunchOptionsCore.cs'
+	$applicationLayoutValidationSource = Join-Path $projectRoot 'launcher\ApplicationLayoutValidation.cs'
 	$nativeTestSource = Join-Path $projectRoot 'launcher-tests\UpdateCoreTests.cs'
 	$nativeTestPath = Join-Path $nativeTestDirectory 'HapticScapeUpdateCoreTests.exe'
 	$nativeReferences = @(
@@ -156,6 +157,7 @@ try
 		$updateCoreSource,
 		$deepLinkCoreSource,
 		$launchOptionsCoreSource,
+		$applicationLayoutValidationSource,
 		$nativeTestSource
 	)
 
@@ -181,7 +183,8 @@ try
 		'/reference:System.dll',
 		'/reference:System.Windows.Forms.dll',
 		"/out:$updaterPath",
-		$updaterSource
+		$updaterSource,
+		$applicationLayoutValidationSource
 	)
 
 	$iconPath = Join-Path $projectRoot 'hapticscape.ico'

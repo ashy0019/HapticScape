@@ -152,19 +152,8 @@ internal static class HapticScapeUpdater
 		{
 			throw new DirectoryNotFoundException("The installed or staged HapticScape directory is missing.");
 		}
-		ValidateApplication(installDirectory);
-		ValidateApplication(stagedDirectory);
-	}
-
-	private static void ValidateApplication(string directory)
-	{
-		if (!File.Exists(Path.Combine(directory, "HapticScape.exe"))
-			|| !File.Exists(Path.Combine(directory, "app", "hapticscape-desktop.jar"))
-			|| !File.Exists(Path.Combine(directory, "app", "release.json"))
-			|| !File.Exists(Path.Combine(directory, "runtime", "bin", "javaw.exe")))
-		{
-			throw new InvalidDataException("A HapticScape application directory failed validation.");
-		}
+		ApplicationLayoutValidation.ValidateInstalledApplication(installDirectory);
+		ApplicationLayoutValidation.ValidateStagedApplication(stagedDirectory);
 	}
 
 	private static void WaitForParent(int parentPid)
