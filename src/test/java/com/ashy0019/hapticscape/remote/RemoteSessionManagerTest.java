@@ -202,6 +202,7 @@ public class RemoteSessionManagerTest
 			);
 			participant.joinParticipant(reconnect.encode());
 			assertTrue(participantLock.isLocked());
+			assertEquals(RemoteSessionState.ACTIVE, participant.getSnapshot().getState());
 			participant.endSession();
 
 			assertFalse(participantLock.unlock("wrong password".toCharArray()));
@@ -256,9 +257,15 @@ public class RemoteSessionManagerTest
 				participant.getLockSnapshot().getTargets()
 			);
 			participant.acceptPendingSettingsLock();
+			assertEquals(RemoteLockState.AWAITING_FINALIZE, controller.getLockSnapshot().getState());
+			assertFalse(participantLock.isLocked(
+				SettingsLockCatalog.skillClicks("fishing")
+			));
+			controller.finalizePendingSettingsLock("Fishing clicks");
 			assertTrue(participantLock.isLocked(
 				SettingsLockCatalog.skillClicks("fishing")
 			));
+			assertEquals("Fishing clicks", controller.getLockSnapshot().getProfileName());
 			assertFalse(participantLock.isLocked(
 				SettingsLockCatalog.skillHaptics("fishing")
 			));
@@ -372,6 +379,127 @@ public class RemoteSessionManagerTest
 		{
 			java.util.Arrays.fill(declinedKey, '\0');
 			java.util.Arrays.fill(acceptedKey, '\0');
+		}
+	}
+
+	@Test
+	public void acceptedProfileUpdateDoesNotReplaceOldProfileUntilNamed()
+	{
+		Gson gson = new Gson();
+		TestRelay relay = new TestRelay();
+		MutableConfig controllerConfig = new MutableConfig(20);
+		MutableConfig participantConfig = new MutableConfig(60);
+		SettingsLockService participantLock = lockService("profile-pending-participant.json");
+		char[] firstKey = "ABCD-EFGH-JKLM-NPQR-STUV".toCharArray();
+		char[] secondKey = "WXYZ-2345-6789-BCDF-GHJK".toCharArray();
+		try (RemoteSessionManager controller = new RemoteSessionManager(
+			gson,
+			new MemoryStore(controllerConfig),
+			new EffectiveSettingsService(controllerConfig),
+			lockService("profile-pending-controller.json"),
+			relay);
+			RemoteSessionManager participant = new RemoteSessionManager(
+				gson,
+				new MemoryStore(participantConfig),
+				new EffectiveSettingsService(participantConfig),
+				participantLock,
+				relay))
+		{
+			RemoteInvitation invitation = controller.startController("wss://relay.example/relay");
+			participant.joinParticipant(invitation.encode());
+			controller.proposeSettingsLock(
+				firstKey,
+				Collections.singleton(SettingsLockCatalog.LEVEL_UP_HAPTICS)
+			);
+			participant.acceptPendingSettingsLock();
+			controller.finalizePendingSettingsLock("Bossing");
+			assertTrue(participantLock.isLocked(SettingsLockCatalog.LEVEL_UP_HAPTICS));
+
+			participant.endSession();
+			RemoteInvitation reconnect = controller.startController("wss://relay.example/relay");
+			participant.joinParticipant(reconnect.encode());
+			controller.proposeSettingsLock(
+				secondKey,
+				Collections.singleton(SettingsLockCatalog.MILESTONE_HAPTICS)
+			);
+			participant.acceptPendingSettingsLock();
+			assertEquals(RemoteLockState.AWAITING_FINALIZE, controller.getLockSnapshot().getState());
+
+			participant.endSession();
+			assertTrue(participantLock.isLocked(SettingsLockCatalog.LEVEL_UP_HAPTICS));
+			assertFalse(participantLock.isLocked(SettingsLockCatalog.MILESTONE_HAPTICS));
+			assertFalse(participantLock.unlock(secondKey));
+			assertTrue(participantLock.unlock(firstKey));
+		}
+		finally
+		{
+			java.util.Arrays.fill(firstKey, '\0');
+			java.util.Arrays.fill(secondKey, '\0');
+		}
+	}
+
+	@Test
+	public void reconnectingControllerCanAtomicallyReplaceItsNamedProfile()
+	{
+		Gson gson = new Gson();
+		TestRelay relay = new TestRelay();
+		MutableConfig controllerConfig = new MutableConfig(20);
+		MutableConfig participantConfig = new MutableConfig(60);
+		SettingsLockService participantLock = lockService("profile-replace-participant.json");
+		char[] firstKey = "ABCD-EFGH-JKLM-NPQR-STUV".toCharArray();
+		char[] secondKey = "WXYZ-2345-6789-BCDF-GHJK".toCharArray();
+		try (RemoteSessionManager controller = new RemoteSessionManager(
+			gson,
+			new MemoryStore(controllerConfig),
+			new EffectiveSettingsService(controllerConfig),
+			lockService("profile-replace-controller.json"),
+			relay);
+			RemoteSessionManager participant = new RemoteSessionManager(
+				gson,
+				new MemoryStore(participantConfig),
+				new EffectiveSettingsService(participantConfig),
+				participantLock,
+				relay))
+		{
+			RemoteInvitation invitation = controller.startController("wss://relay.example/relay");
+			participant.joinParticipant(invitation.encode());
+			controller.proposeSettingsLock(
+				firstKey,
+				Collections.singleton(SettingsLockCatalog.LEVEL_UP_HAPTICS)
+			);
+			participant.acceptPendingSettingsLock();
+			controller.finalizePendingSettingsLock("Bossing");
+			assertTrue(participantLock.isLocked(SettingsLockCatalog.LEVEL_UP_HAPTICS));
+			assertEquals("Bossing", controller.getLockSnapshot().getProfileName());
+
+			participant.endSession();
+			RemoteInvitation reconnect = controller.startController("wss://relay.example/relay");
+			participant.joinParticipant(reconnect.encode());
+			assertEquals("Bossing", controller.getLockSnapshot().getProfileName());
+			assertTrue(controller.getLockSnapshot().getTargets().contains(
+				SettingsLockCatalog.LEVEL_UP_HAPTICS
+			));
+
+			controller.proposeSettingsLock(
+				secondKey,
+				Collections.singleton(SettingsLockCatalog.MILESTONE_HAPTICS)
+			);
+			participant.acceptPendingSettingsLock();
+			assertTrue("Old profile stays active until finalize",
+				participantLock.isLocked(SettingsLockCatalog.LEVEL_UP_HAPTICS));
+			assertFalse(participantLock.isLocked(SettingsLockCatalog.MILESTONE_HAPTICS));
+
+			controller.finalizePendingSettingsLock("Skilling");
+			assertFalse(participantLock.isLocked(SettingsLockCatalog.LEVEL_UP_HAPTICS));
+			assertTrue(participantLock.isLocked(SettingsLockCatalog.MILESTONE_HAPTICS));
+			assertEquals("Skilling", controller.getLockSnapshot().getProfileName());
+			assertFalse(participantLock.unlock(firstKey));
+			assertTrue(participantLock.unlock(secondKey));
+		}
+		finally
+		{
+			java.util.Arrays.fill(firstKey, '\0');
+			java.util.Arrays.fill(secondKey, '\0');
 		}
 	}
 

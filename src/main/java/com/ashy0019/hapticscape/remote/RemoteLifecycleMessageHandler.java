@@ -3,7 +3,7 @@ package com.ashy0019.hapticscape.remote;
 /** Handles protocol messages that directly change the enclosing session lifecycle. */
 interface RemoteLifecycleMessageHandler
 {
-	void handleHello();
+	void handleHello(String payload);
 
 	void handleSettingsSeedRequest();
 

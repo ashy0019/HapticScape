@@ -73,6 +73,8 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 	private final Runnable settingsLockDraftListener;
 	private int nextLayoutRow;
 	private boolean wasLocal = true;
+	private String loadedLockProfileId;
+	private boolean namingDialogOpen;
 
 	RemoteControlPanel(
 		HapticScapeSettingsSource config,
@@ -245,6 +247,12 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		SwingUtilities.invokeLater(() -> confirmSettingsLockProposal(proposal));
 	}
 
+	@Override
+	public void onRemoteLockNamingRequired(String currentProfileName)
+	{
+		SwingUtilities.invokeLater(() -> promptForLockProfileName(currentProfileName));
+	}
+
 	private void armSettingsLock()
 	{
 		Collection<SettingsLockTarget> targets = settingsLockDraft.snapshot();
@@ -361,11 +369,69 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		}
 	}
 
+	private void promptForLockProfileName(String currentProfileName)
+	{
+		if (namingDialogOpen)
+		{
+			return;
+		}
+		namingDialogOpen = true;
+		try
+		{
+			JTextField nameField = new JTextField(
+				currentProfileName == null ? "" : currentProfileName,
+				28
+			);
+			WrappedTextLabel explanation = new WrappedTextLabel(
+				"The participant accepted this lock update. Give the persistent profile a name "
+					+ "to finish. Their previous lock stays active until the named profile is saved."
+			);
+			JPanel content = new JPanel();
+			content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+			PanelUi.addPreferredHeightComponent(content, explanation);
+			PanelUi.addPreferredHeightComponent(content, new JLabel("Profile name"));
+			PanelUi.addPreferredHeightComponent(content, nameField);
+			while (true)
+			{
+				Object[] options = {"Save profile", "Not now"};
+				int choice = JOptionPane.showOptionDialog(
+					this,
+					content,
+					"Name persistent lock profile",
+					JOptionPane.YES_NO_OPTION,
+					JOptionPane.PLAIN_MESSAGE,
+					null,
+					options,
+					options[0]
+				);
+				if (choice != JOptionPane.YES_OPTION)
+				{
+					return;
+				}
+				try
+				{
+					sessionManager.finalizePendingSettingsLock(nameField.getText());
+					return;
+				}
+				catch (RuntimeException e)
+				{
+					showError(e.getMessage());
+					nameField.requestFocusInWindow();
+				}
+			}
+		}
+		finally
+		{
+			namingDialogOpen = false;
+		}
+	}
+
 	private void applySnapshot(RemoteSessionSnapshot snapshot)
 	{
 		RemoteSessionViewState view = RemoteSessionViewState.from(snapshot);
 		if (view.isLocal() && !wasLocal)
 		{
+			loadedLockProfileId = null;
 			settingsLockDraft.clear();
 		}
 		wasLocal = view.isLocal();
@@ -415,10 +481,30 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 
 	private void applyLockSnapshot(RemoteLockSnapshot snapshot)
 	{
-		if (snapshot.getState() == RemoteLockState.ARMED
-			&& settingsLockDraft.size() > 0)
+		if (snapshot.getState() == RemoteLockState.INACTIVE)
 		{
-			settingsLockDraft.clear();
+			if (snapshot.hasProfile()
+				&& !snapshot.getProfileId().equals(loadedLockProfileId))
+			{
+				loadedLockProfileId = snapshot.getProfileId();
+				settingsLockDraft.replaceAll(snapshot.getTargets());
+			}
+			else if (!snapshot.hasProfile() && loadedLockProfileId != null)
+			{
+				loadedLockProfileId = null;
+				settingsLockDraft.clear();
+			}
+		}
+		else if (snapshot.getState() == RemoteLockState.ARMED)
+		{
+			if (snapshot.hasProfile())
+			{
+				loadedLockProfileId = snapshot.getProfileId();
+			}
+			if (settingsLockDraft.size() > 0)
+			{
+				settingsLockDraft.clear();
+			}
 		}
 		savedUnlockKeysPanel.refresh();
 		refreshLockPreparation(snapshot);

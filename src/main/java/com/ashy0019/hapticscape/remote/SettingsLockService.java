@@ -12,6 +12,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -160,6 +161,95 @@ public final class SettingsLockService
 		finally
 		{
 			Arrays.fill(copy, '\0');
+		}
+	}
+
+	public synchronized Optional<SettingsLockProposal> getProfileForOwner(String ownerId)
+	{
+		String requiredOwner = Objects.requireNonNull(ownerId, "ownerId");
+		for (SettingsLockProposal lock : locks)
+		{
+			if (lock.isNamedProfile() && requiredOwner.equals(lock.getOwnerId()))
+			{
+				return Optional.of(lock);
+			}
+		}
+		return Optional.empty();
+	}
+
+	/**
+	 * Atomically replaces the persistent profile owned by one controller.
+	 * Unowned legacy bundles are preserved unless they overlap the accepted
+	 * profile, in which case the explicit replacement migrates them away.
+	 */
+	public synchronized SettingsLockProposal replaceProfile(
+		String ownerId,
+		SettingsLockProposal proposal,
+		String profileName)
+	{
+		SettingsLockProposal validated = Objects.requireNonNull(proposal, "proposal");
+		validated.validate();
+		if (validated.isLegacyFullLock())
+		{
+			throw new IllegalArgumentException("Named profiles require explicit lock targets");
+		}
+		validateCanReplace(ownerId, validated);
+		SettingsLockProposal finalized = validated.withProfileMetadata(ownerId, profileName);
+		finalized.validate();
+
+		List<SettingsLockProposal> updated = new ArrayList<>();
+		for (SettingsLockProposal current : locks)
+		{
+			if (current.isNamedProfile())
+			{
+				if (ownerId.equals(current.getOwnerId()))
+				{
+					continue;
+				}
+				updated.add(current);
+				continue;
+			}
+			if (current.isLegacyFullLock()
+				|| firstConflict(finalized.getTargets(), current.getTargets()) != null)
+			{
+				// Explicitly accepted replacement migrates an overlapping legacy bundle.
+				continue;
+			}
+			updated.add(current);
+		}
+		updated.add(finalized);
+		store.save(updated);
+		locks = Collections.unmodifiableList(updated);
+		publish();
+		return finalized;
+	}
+
+	void validateCanReplace(String ownerId, SettingsLockProposal proposal)
+	{
+		String requiredOwner = Objects.requireNonNull(ownerId, "ownerId");
+		SettingsLockProposal validated = Objects.requireNonNull(proposal, "proposal");
+		validated.validate();
+		if (validated.isLegacyFullLock())
+		{
+			validateCanArm(validated);
+			return;
+		}
+		for (SettingsLockProposal current : locks)
+		{
+			if (!current.isNamedProfile() || requiredOwner.equals(current.getOwnerId()))
+			{
+				continue;
+			}
+			SettingsLockTarget overlap = firstConflict(
+				validated.getTargets(),
+				current.getTargets()
+			);
+			if (overlap != null)
+			{
+				throw new IllegalStateException(
+					overlap.getDisplayName() + " is already locked by another controller profile"
+				);
+			}
 		}
 	}
 

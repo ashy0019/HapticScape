@@ -549,7 +549,9 @@ final class ClickerPhraseRulesPanel extends JPanel
 			{
 				return LockState.ARMED;
 			}
-			if (remote.getTargets().contains(target) || lockDraft.contains(target))
+			if ((remote.getState() != RemoteLockState.INACTIVE
+				&& remote.getTargets().contains(target))
+				|| lockDraft.contains(target))
 			{
 				return LockState.PROPOSED;
 			}

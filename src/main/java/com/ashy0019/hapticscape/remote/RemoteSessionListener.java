@@ -16,6 +16,11 @@ public interface RemoteSessionListener
 	{
 	}
 
+
+	default void onRemoteLockNamingRequired(String currentProfileName)
+	{
+	}
+
 	default void onRemotePermissionsChanged(RemotePermissions permissions)
 	{
 	}

@@ -1003,7 +1003,9 @@ final class AlertsPanel extends JPanel
 			{
 				return AlertLockState.ARMED;
 			}
-			if (remote.getTargets().contains(target) || lockDraft.contains(target))
+			if ((remote.getState() != RemoteLockState.INACTIVE
+				&& remote.getTargets().contains(target))
+				|| lockDraft.contains(target))
 			{
 				return AlertLockState.PROPOSED;
 			}

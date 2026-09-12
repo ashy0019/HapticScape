@@ -146,7 +146,9 @@ final class LockableSectionHeader extends JPanel
 			{
 				return State.ARMED;
 			}
-			if (remote.getTargets().contains(target) || draft.contains(target))
+			if ((remote.getState() != RemoteLockState.INACTIVE
+				&& remote.getTargets().contains(target))
+				|| draft.contains(target))
 			{
 				return State.PROPOSED;
 			}

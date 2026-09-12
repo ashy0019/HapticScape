@@ -6,6 +6,7 @@ import java.time.Clock;
 import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -42,6 +43,7 @@ public final class RemoteSessionManager implements AutoCloseable
 	private final RemoteMessageRouter messageRouter;
 	private final Clock clock;
 	private final RemoteTransportFactory transportFactory;
+	private final String localClientId;
 	private final SettingsLockListener settingsLockListener = this::handleLocalSettingsLockChanged;
 	private final SecureRandom random = new SecureRandom();
 	private final ScheduledExecutorService scheduler;
@@ -53,6 +55,7 @@ public final class RemoteSessionManager implements AutoCloseable
 	private volatile RemoteRole role = RemoteRole.NONE;
 	private volatile RemoteCrypto crypto;
 	private volatile RemoteInvitation invitation;
+	private volatile String peerClientId;
 	private volatile long lastHelloNanos;
 	private ScheduledFuture<?> pendingSettingsSync;
 	private volatile boolean closed;
@@ -100,6 +103,34 @@ public final class RemoteSessionManager implements AutoCloseable
 				Objects.requireNonNull(httpClient, "httpClient"),
 				listener
 			)
+		);
+	}
+
+	public RemoteSessionManager(
+		OkHttpClient httpClient,
+		Gson gson,
+		RemoteSettingsStore settingsStore,
+		EffectiveSettingsService effectiveSettings,
+		SettingsLockService settingsLockService,
+		SavedUnlockKeyStore savedUnlockKeyStore,
+		RemotePermissionsStore permissionsStore,
+		RemoteActionExecutor remoteActionExecutor,
+		String localClientId)
+	{
+		this(
+			gson,
+			settingsStore,
+			effectiveSettings,
+			settingsLockService,
+			Objects.requireNonNull(savedUnlockKeyStore, "savedUnlockKeyStore"),
+			permissionsStore,
+			remoteActionExecutor,
+			Clock.systemUTC(),
+			listener -> new RemoteRelayClient(
+				Objects.requireNonNull(httpClient, "httpClient"),
+				listener
+			),
+			localClientId
 		);
 	}
 
@@ -155,6 +186,32 @@ public final class RemoteSessionManager implements AutoCloseable
 		Clock clock,
 		RemoteTransportFactory transportFactory)
 	{
+		this(
+			gson,
+			settingsStore,
+			effectiveSettings,
+			settingsLockService,
+			savedUnlockKeyStore,
+			permissionsStore,
+			remoteActionExecutor,
+			clock,
+			transportFactory,
+			UUID.randomUUID().toString()
+		);
+	}
+
+	RemoteSessionManager(
+		Gson gson,
+		RemoteSettingsStore settingsStore,
+		EffectiveSettingsService effectiveSettings,
+		SettingsLockService settingsLockService,
+		SavedUnlockKeyStore savedUnlockKeyStore,
+		RemotePermissionsStore permissionsStore,
+		RemoteActionExecutor remoteActionExecutor,
+		Clock clock,
+		RemoteTransportFactory transportFactory,
+		String localClientId)
+	{
 		this.gson = Objects.requireNonNull(gson, "gson");
 		RemoteSettingsStore requiredSettingsStore = Objects.requireNonNull(
 			settingsStore,
@@ -176,6 +233,7 @@ public final class RemoteSessionManager implements AutoCloseable
 			"remoteActionExecutor"
 		);
 		this.transportFactory = Objects.requireNonNull(transportFactory, "transportFactory");
+		this.localClientId = normalizeClientId(localClientId);
 		this.actionCoordinator = new RemoteActionCoordinator(
 			gson,
 			actionExecutor,
@@ -202,6 +260,7 @@ public final class RemoteSessionManager implements AutoCloseable
 			this::send,
 			this::publishLockSnapshot,
 			this::publishLockProposal,
+			this::publishLockNamingRequired,
 			() -> permissionsCoordinator.getLocal().isProtectedExitAllowed()
 		);
 		this.settingsCoordinator = new RemoteSettingsCoordinator(
@@ -488,6 +547,11 @@ public final class RemoteSessionManager implements AutoCloseable
 		lockCoordinator.decline(role);
 	}
 
+	public synchronized void finalizePendingSettingsLock(String profileName)
+	{
+		lockCoordinator.finalizeProfile(role, profileName, peerClientId);
+	}
+
 	public synchronized RemoteInvitation startController(String relayUrl)
 	{
 		requireOpen();
@@ -672,7 +736,7 @@ public final class RemoteSessionManager implements AutoCloseable
 
 	private void retryHandshake()
 	{
-		send(RemoteMessageType.HELLO, 0, role.name());
+		send(RemoteMessageType.HELLO, 0, gson.toJson(new RemoteHello(role, localClientId)));
 		if (role == RemoteRole.CONTROLLER
 			&& snapshot.getState() == RemoteSessionState.WAITING_FOR_SETTINGS)
 		{
@@ -869,6 +933,14 @@ public final class RemoteSessionManager implements AutoCloseable
 		}
 	}
 
+	private void publishLockNamingRequired(String currentName)
+	{
+		for (RemoteSessionListener listener : listeners)
+		{
+			listener.onRemoteLockNamingRequired(currentName);
+		}
+	}
+
 	private void publishSettings(RemoteSettingsSnapshot settings)
 	{
 		for (RemoteSessionListener listener : listeners)
@@ -938,6 +1010,7 @@ public final class RemoteSessionManager implements AutoCloseable
 		actionCoordinator.reset();
 		crypto = null;
 		invitation = null;
+		peerClientId = null;
 		settingsCoordinator.reset();
 		permissionsCoordinator.endSession();
 		lastHelloNanos = 0;
@@ -965,13 +1038,51 @@ public final class RemoteSessionManager implements AutoCloseable
 		}
 	}
 
+	private static String normalizeClientId(String value)
+	{
+		String normalized = Objects.requireNonNull(value, "localClientId").trim();
+		UUID.fromString(normalized);
+		return normalized;
+	}
+
+	private String parsePeerClientId(String payload)
+	{
+		try
+		{
+			RemoteHello hello = gson.fromJson(payload, RemoteHello.class);
+			if (hello == null || hello.getRole() == role)
+			{
+				return null;
+			}
+			return hello.getClientId();
+		}
+		catch (RuntimeException e)
+		{
+			// Older peers sent only the role name. They can still connect, but
+			// controller-owned persistent profile replacement is unavailable.
+			return null;
+		}
+	}
+
 	private final class LifecycleMessages implements RemoteLifecycleMessageHandler
 	{
 		@Override
-		public void handleHello()
+		public void handleHello(String payload)
 		{
+			String nextPeerClientId = parsePeerClientId(payload);
+			boolean firstIdentity = nextPeerClientId != null
+				&& !nextPeerClientId.equals(peerClientId);
+			if (firstIdentity)
+			{
+				peerClientId = nextPeerClientId;
+				lockCoordinator.peerIdentityChanged(role, nextPeerClientId);
+			}
 			if (role == RemoteRole.CONTROLLER)
 			{
+				if (firstIdentity)
+				{
+					send(RemoteMessageType.HELLO, 0, gson.toJson(new RemoteHello(role, localClientId)));
+				}
 				if (!settingsCoordinator.hasControllerSettings())
 				{
 					publish(
@@ -983,7 +1094,10 @@ public final class RemoteSessionManager implements AutoCloseable
 			}
 			else if (role == RemoteRole.PARTICIPANT)
 			{
-				send(RemoteMessageType.HELLO, 0, role.name());
+				if (firstIdentity)
+				{
+					send(RemoteMessageType.HELLO, 0, gson.toJson(new RemoteHello(role, localClientId)));
+				}
 				sendPermissions();
 				sendSettingsSeed();
 			}

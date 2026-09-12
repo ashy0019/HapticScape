@@ -29,7 +29,8 @@ import java.util.logging.Logger;
 public final class SavedUnlockKeyStore
 {
 	private static final Logger LOG = Logger.getLogger(SavedUnlockKeyStore.class.getName());
-	private static final int SCHEMA_VERSION = 1;
+	private static final int LEGACY_SCHEMA_VERSION = 1;
+	private static final int SCHEMA_VERSION = 2;
 	private static final int MAXIMUM_ENTRIES = 1_000;
 	private static final long MAXIMUM_VAULT_BYTES = 5L * 1024L * 1024L;
 	private static final DateTimeFormatter DEFAULT_LABEL_FORMAT = DateTimeFormatter.ofPattern(
@@ -135,6 +136,7 @@ public final class SavedUnlockKeyStore
 				UUID.randomUUID().toString(),
 				label,
 				lockId,
+				null,
 				now.toEpochMilli(),
 				0,
 				"",
@@ -142,6 +144,56 @@ public final class SavedUnlockKeyStore
 			);
 			entry.validate();
 			List<SavedUnlockKey> updated = new ArrayList<>(entries);
+			updated.add(0, entry);
+			persist(updated);
+			entries = Collections.unmodifiableList(updated);
+			return entry;
+		}
+		finally
+		{
+			Arrays.fill(plaintext, (byte) 0);
+			if (protectedBytes != null)
+			{
+				Arrays.fill(protectedBytes, (byte) 0);
+			}
+		}
+	}
+
+	public synchronized SavedUnlockKey saveAcceptedProfileKey(
+		String lockId,
+		String subjectId,
+		String profileName,
+		char[] unlockKey)
+	{
+		ensureAvailable();
+		Objects.requireNonNull(lockId, "lockId");
+		String requiredSubjectId = Objects.requireNonNull(subjectId, "subjectId").trim();
+		UUID.fromString(requiredSubjectId);
+		String label = SettingsLockProposal.normalizeProfileName(profileName);
+		Objects.requireNonNull(unlockKey, "unlockKey");
+
+		byte[] plaintext = toAscii(unlockKey);
+		byte[] protectedBytes = null;
+		try
+		{
+			protectedBytes = protector.protect(plaintext);
+			Instant now = clock.instant();
+			SavedUnlockKey entry = new SavedUnlockKey(
+				UUID.randomUUID().toString(),
+				label,
+				lockId,
+				requiredSubjectId,
+				now.toEpochMilli(),
+				0,
+				"",
+				Base64.getEncoder().encodeToString(protectedBytes)
+			);
+			entry.validate();
+			List<SavedUnlockKey> updated = new ArrayList<>(entries);
+			updated.removeIf(existing ->
+				requiredSubjectId.equals(existing.getSubjectId())
+					|| lockId.equals(existing.getLockId())
+			);
 			updated.add(0, entry);
 			persist(updated);
 			entries = Collections.unmodifiableList(updated);
@@ -263,7 +315,9 @@ public final class SavedUnlockKeyStore
 			}
 			String json = new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
 			VaultFile vault = gson.fromJson(json, VaultFile.class);
-			if (vault == null || vault.schemaVersion != SCHEMA_VERSION)
+			if (vault == null
+				|| (vault.schemaVersion != LEGACY_SCHEMA_VERSION
+					&& vault.schemaVersion != SCHEMA_VERSION))
 			{
 				throw new IllegalArgumentException("Unsupported saved-key vault format");
 			}
@@ -276,12 +330,17 @@ public final class SavedUnlockKeyStore
 			}
 			Set<String> entryIds = new HashSet<>();
 			Set<String> lockIds = new HashSet<>();
+			Set<String> subjectIds = new HashSet<>();
 			for (SavedUnlockKey entry : loaded)
 			{
 				entry.validate();
 				if (!entryIds.add(entry.getId()) || !lockIds.add(entry.getLockId()))
 				{
 					throw new IllegalArgumentException("Saved-key vault contains duplicates");
+				}
+				if (entry.getSubjectId() != null && !subjectIds.add(entry.getSubjectId()))
+				{
+					throw new IllegalArgumentException("Saved-key vault contains duplicate subject profiles");
 				}
 			}
 			entries = Collections.unmodifiableList(loaded);

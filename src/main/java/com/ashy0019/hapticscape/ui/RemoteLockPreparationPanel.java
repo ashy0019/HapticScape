@@ -15,6 +15,7 @@ import javax.swing.JPanel;
 /** Compact controller workflow for an approval-gated post-session lock. */
 final class RemoteLockPreparationPanel extends JPanel
 {
+	private final JLabel profileLabel = new JLabel();
 	private final JLabel stateLabel = new JLabel();
 	private final WrappedTextLabel detailLabel = new WrappedTextLabel("");
 	private final JButton openSubjectButton = new JButton("Open Subject settings");
@@ -40,6 +41,10 @@ final class RemoteLockPreparationPanel extends JPanel
 		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
 		setBorder(PanelUi.createSectionBorder("Post-session lock"));
 
+		profileLabel.setName("remoteLockProfileName");
+		profileLabel.setFont(profileLabel.getFont().deriveFont(Font.BOLD, 14f));
+		profileLabel.setForeground(HapticScapeTheme.ACCENT);
+		profileLabel.setVisible(false);
 		stateLabel.setName("remoteLockState");
 		stateLabel.setFont(stateLabel.getFont().deriveFont(Font.BOLD));
 		detailLabel.setName("remoteLockDetail");
@@ -59,6 +64,7 @@ final class RemoteLockPreparationPanel extends JPanel
 		actions.add(requestButton);
 		actions.add(cancelButton);
 
+		PanelUi.addPreferredHeightComponent(this, profileLabel);
 		PanelUi.addPreferredHeightComponent(this, stateLabel);
 		PanelUi.addFlexibleVerticalComponent(this, detailLabel);
 		PanelUi.addPreferredHeightComponent(this, protectedExit);
@@ -88,6 +94,9 @@ final class RemoteLockPreparationPanel extends JPanel
 			? draftCount
 			: snapshot.getTargets().size();
 		LockView view = viewFor(state, effectiveCount);
+		String profileName = snapshot.getProfileName();
+		profileLabel.setText(profileName);
+		profileLabel.setVisible(!profileName.isEmpty());
 		stateLabel.setText(view.getTitle());
 		detailLabel.setPlainText(detailFor(snapshot, effectiveCount));
 		openSubjectButton.setEnabled(controllerActive && subjectSettingsAvailable);
@@ -189,6 +198,7 @@ final class RemoteLockPreparationPanel extends JPanel
 					: " Open Subject settings to make a new selection.");
 			case AWAITING_APPROVAL:
 			case APPROVAL_REQUIRED:
+			case AWAITING_FINALIZE:
 			case ARMED:
 			default:
 				return count > 0
@@ -216,6 +226,14 @@ final class RemoteLockPreparationPanel extends JPanel
 					false,
 					true,
 					"Cancel request"
+				);
+			case AWAITING_FINALIZE:
+				return new LockView(
+					"Accepted, waiting for profile name",
+					false,
+					false,
+					true,
+					"Cancel update"
 				);
 			case ARMED:
 				return new LockView(

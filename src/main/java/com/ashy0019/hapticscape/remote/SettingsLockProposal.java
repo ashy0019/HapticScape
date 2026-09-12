@@ -22,6 +22,8 @@ public final class SettingsLockProposal
 {
 	static final int LEGACY_SCHEMA_VERSION = 1;
 	static final int SCHEMA_VERSION = 2;
+	static final int PROFILE_SCHEMA_VERSION = 3;
+	public static final int MAXIMUM_PROFILE_NAME_LENGTH = 48;
 	static final String ALGORITHM = "PBKDF2WithHmacSHA256";
 	static final int ITERATIONS = 310_000;
 	static final int KEY_LENGTH_BITS = 256;
@@ -35,6 +37,8 @@ public final class SettingsLockProposal
 	private final String salt;
 	private final String verifier;
 	private final List<String> targets;
+	private final String ownerId;
+	private final String profileName;
 
 	private SettingsLockProposal(
 		int schemaVersion,
@@ -43,7 +47,9 @@ public final class SettingsLockProposal
 		int iterations,
 		String salt,
 		String verifier,
-		List<String> targets)
+		List<String> targets,
+		String ownerId,
+		String profileName)
 	{
 		this.schemaVersion = schemaVersion;
 		this.proposalId = proposalId;
@@ -52,6 +58,8 @@ public final class SettingsLockProposal
 		this.salt = salt;
 		this.verifier = verifier;
 		this.targets = targets;
+		this.ownerId = ownerId;
+		this.profileName = profileName;
 	}
 
 	/** Creates a legacy whole-settings proposal for API compatibility. */
@@ -100,7 +108,9 @@ public final class SettingsLockProposal
 				ITERATIONS,
 				encoder.encodeToString(saltBytes),
 				encoder.encodeToString(derived),
-				targets
+				targets,
+				null,
+				null
 			);
 		}
 		finally
@@ -113,6 +123,58 @@ public final class SettingsLockProposal
 	public String getProposalId()
 	{
 		return proposalId;
+	}
+
+
+	public String getOwnerId()
+	{
+		return ownerId;
+	}
+
+	public String getProfileName()
+	{
+		return profileName;
+	}
+
+	public boolean isNamedProfile()
+	{
+		return schemaVersion == PROFILE_SCHEMA_VERSION;
+	}
+
+	SettingsLockProposal withProfileMetadata(String controllerId, String name)
+	{
+		String normalizedOwner = Objects.requireNonNull(controllerId, "controllerId").trim();
+		try
+		{
+			UUID.fromString(normalizedOwner);
+		}
+		catch (IllegalArgumentException e)
+		{
+			throw new IllegalArgumentException("Invalid controller identity", e);
+		}
+		return new SettingsLockProposal(
+			PROFILE_SCHEMA_VERSION,
+			proposalId,
+			algorithm,
+			iterations,
+			salt,
+			verifier,
+			targets == null ? Collections.emptyList() : targets,
+			normalizedOwner,
+			normalizeProfileName(name)
+		);
+	}
+
+	public static String normalizeProfileName(String value)
+	{
+		String normalized = Objects.requireNonNull(value, "profileName").trim();
+		if (normalized.isEmpty() || normalized.length() > MAXIMUM_PROFILE_NAME_LENGTH)
+		{
+			throw new IllegalArgumentException(
+				"Profile name must contain 1 to " + MAXIMUM_PROFILE_NAME_LENGTH + " characters"
+			);
+		}
+		return normalized;
 	}
 
 	public boolean isLegacyFullLock()
@@ -129,7 +191,9 @@ public final class SettingsLockProposal
 
 	public void validate()
 	{
-		if (schemaVersion != LEGACY_SCHEMA_VERSION && schemaVersion != SCHEMA_VERSION)
+		if (schemaVersion != LEGACY_SCHEMA_VERSION
+			&& schemaVersion != SCHEMA_VERSION
+			&& schemaVersion != PROFILE_SCHEMA_VERSION)
 		{
 			throw new IllegalArgumentException("Unsupported settings-lock format");
 		}
@@ -150,6 +214,26 @@ public final class SettingsLockProposal
 				SettingsLockCatalog.resolve(targets)
 			);
 		}
+		if (schemaVersion == PROFILE_SCHEMA_VERSION)
+		{
+			try
+			{
+				UUID.fromString(Objects.requireNonNull(ownerId, "ownerId"));
+			}
+			catch (IllegalArgumentException | NullPointerException e)
+			{
+				throw new IllegalArgumentException("Invalid settings-lock owner ID", e);
+			}
+			if (!Objects.equals(profileName, normalizeProfileName(profileName)))
+			{
+				throw new IllegalArgumentException("Invalid settings-lock profile name");
+			}
+		}
+		else if (ownerId != null || profileName != null)
+		{
+			throw new IllegalArgumentException("Legacy settings lock cannot contain profile metadata");
+		}
+
 		if (!ALGORITHM.equals(algorithm))
 		{
 			throw new IllegalArgumentException("Unsupported settings-lock algorithm");

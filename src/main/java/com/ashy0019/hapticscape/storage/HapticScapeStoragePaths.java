@@ -39,6 +39,11 @@ public final class HapticScapeStoragePaths
 		return dataDirectory.resolve("settings-lock.json");
 	}
 
+	public Path getRemoteClientIdentityPath()
+	{
+		return dataDirectory.resolve("remote-client-id.txt");
+	}
+
 	public Path getDiscordCredentialPath()
 	{
 		return dataDirectory.resolve("discord-device.json");

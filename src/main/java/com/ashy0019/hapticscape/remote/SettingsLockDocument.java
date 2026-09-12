@@ -9,7 +9,8 @@ import java.util.Set;
 /** Versioned on-disk collection of independent, non-overlapping lock bundles. */
 final class SettingsLockDocument
 {
-	static final int SCHEMA_VERSION = 2;
+	static final int LEGACY_DOCUMENT_SCHEMA_VERSION = 2;
+	static final int SCHEMA_VERSION = 3;
 
 	private final int schemaVersion;
 	private final List<SettingsLockProposal> locks;
@@ -22,7 +23,7 @@ final class SettingsLockDocument
 
 	List<SettingsLockProposal> validateAndGetLocks()
 	{
-		if (schemaVersion != SCHEMA_VERSION || locks == null)
+		if ((schemaVersion != LEGACY_DOCUMENT_SCHEMA_VERSION && schemaVersion != SCHEMA_VERSION) || locks == null)
 		{
 			throw new IllegalArgumentException("Unsupported settings-lock document");
 		}
@@ -31,6 +32,7 @@ final class SettingsLockDocument
 			throw new IllegalArgumentException("Too many settings locks");
 		}
 		Set<String> lockIds = new HashSet<>();
+		Set<String> ownerIds = new HashSet<>();
 		Set<SettingsLockTarget> targets = new HashSet<>();
 		boolean legacyFullLock = false;
 		for (SettingsLockProposal lock : locks)
@@ -43,6 +45,10 @@ final class SettingsLockDocument
 			if (!lockIds.add(lock.getProposalId()))
 			{
 				throw new IllegalArgumentException("Duplicate settings-lock ID");
+			}
+			if (lock.isNamedProfile() && !ownerIds.add(lock.getOwnerId()))
+			{
+				throw new IllegalArgumentException("Duplicate controller-owned settings-lock profile");
 			}
 			if (legacyFullLock || lock.isLegacyFullLock())
 			{
