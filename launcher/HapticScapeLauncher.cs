@@ -54,6 +54,10 @@ internal static class HapticScapeLauncher
 				{
 					return 0;
 				}
+				if (deepLink == null && launchOptions.IsDefault)
+				{
+					TryEnsureLumBridge(applicationDirectory, manifest);
+				}
 				return LaunchClient(applicationDirectory, launchOptions);
 			}
 		}
@@ -159,6 +163,66 @@ internal static class HapticScapeLauncher
 					+ exception.Message,
 				"HapticScape update failed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
 			return false;
+		}
+	}
+
+	private static void TryEnsureLumBridge(
+		string applicationDirectory,
+		ReleaseManifest manifest)
+	{
+		if (!LumBridgeSupport.IsRequired(manifest.Version)
+			|| LumBridgeSupport.IsInstalled(manifest, applicationDirectory))
+		{
+			return;
+		}
+
+		try
+		{
+			bool installed = LumBridgeInstallDialog.Ensure(
+				manifest,
+				applicationDirectory);
+			if (installed)
+			{
+				MessageBox.Show(
+					"HapticScape 3 uses LumBridge for RuneLite gameplay events. "
+						+ "LumBridge was installed alongside HapticScape and will open now.",
+					"LumBridge installed",
+					MessageBoxButtons.OK,
+					MessageBoxIcon.Information);
+				TryLaunchLumBridge(applicationDirectory);
+			}
+		}
+		catch (Exception exception)
+		{
+			MessageBox.Show(
+				"HapticScape was updated successfully, but LumBridge could not be installed automatically. "
+					+ "HapticScape will still start normally.\n\n"
+					+ exception.Message,
+				"LumBridge setup failed",
+				MessageBoxButtons.OK,
+				MessageBoxIcon.Warning);
+		}
+	}
+
+	private static void TryLaunchLumBridge(string applicationDirectory)
+	{
+		try
+		{
+			string lumBridgeDirectory = Path.Combine(applicationDirectory, "LumBridge");
+			string executable = Path.Combine(lumBridgeDirectory, "LumBridge.exe");
+			if (!File.Exists(executable))
+			{
+				return;
+			}
+			ProcessStartInfo startInfo = new ProcessStartInfo();
+			startInfo.FileName = executable;
+			startInfo.WorkingDirectory = lumBridgeDirectory;
+			startInfo.UseShellExecute = false;
+			Process.Start(startInfo);
+		}
+		catch (Exception)
+		{
+			// LumBridge is installed; failure to launch it must not block HapticScape.
 		}
 	}
 
@@ -448,6 +512,91 @@ internal sealed class UpdateSettingsDialog : Form
 		cancel.SetBounds(305, 126, 75, 27);
 		Controls.Add(cancel);
 		CancelButton = cancel;
+	}
+}
+
+internal sealed class LumBridgeInstallDialog : Form
+{
+	private readonly Label status = new Label();
+	private readonly ReleaseManifest manifest;
+	private readonly string applicationDirectory;
+	private bool installed;
+	private Exception failure;
+
+	private LumBridgeInstallDialog(
+		ReleaseManifest manifest,
+		string applicationDirectory)
+	{
+		this.manifest = manifest;
+		this.applicationDirectory = applicationDirectory;
+		Text = "Installing LumBridge";
+		FormBorderStyle = FormBorderStyle.FixedDialog;
+		StartPosition = FormStartPosition.CenterScreen;
+		ControlBox = false;
+		ClientSize = new Size(390, 95);
+
+		status.AutoSize = false;
+		status.TextAlign = ContentAlignment.MiddleCenter;
+		status.Text = "Preparing LumBridge...";
+		status.SetBounds(15, 12, 360, 25);
+		Controls.Add(status);
+
+		ProgressBar progress = new ProgressBar();
+		progress.Style = ProgressBarStyle.Marquee;
+		progress.MarqueeAnimationSpeed = 25;
+		progress.SetBounds(20, 50, 350, 20);
+		Controls.Add(progress);
+
+		Shown += delegate
+		{
+			Thread worker = new Thread(InstallOnWorker);
+			worker.IsBackground = true;
+			worker.Name = "LumBridge setup download";
+			worker.Start();
+		};
+	}
+
+	internal static bool Ensure(
+		ReleaseManifest manifest,
+		string applicationDirectory)
+	{
+		using (LumBridgeInstallDialog dialog = new LumBridgeInstallDialog(
+			manifest,
+			applicationDirectory))
+		{
+			dialog.ShowDialog();
+			if (dialog.failure != null)
+			{
+				throw new InvalidOperationException(
+					dialog.failure.Message,
+					dialog.failure);
+			}
+			return dialog.installed;
+		}
+	}
+
+	private void InstallOnWorker()
+	{
+		try
+		{
+			installed = LumBridgeSupport.EnsureInstalled(
+				manifest,
+				applicationDirectory,
+				SetStatus);
+		}
+		catch (Exception exception)
+		{
+			failure = exception;
+		}
+		BeginInvoke((MethodInvoker) Close);
+	}
+
+	private void SetStatus(string message)
+	{
+		if (!IsDisposed)
+		{
+			BeginInvoke((MethodInvoker) delegate { status.Text = message; });
+		}
 	}
 }
 
