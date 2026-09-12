@@ -59,6 +59,7 @@ public final class RuneLiteEventBridge
 		new RuneLiteActorDeathAdapter();
 	private final RuneLiteStatusAdapter statusAdapter = new RuneLiteStatusAdapter();
 	private final RuneLiteResourceAdapter resourceAdapter = new RuneLiteResourceAdapter();
+	private boolean awaitingLoginSeed;
 
 	public RuneLiteEventBridge(Client client, ItemManager itemManager, LocalEventSink sink)
 	{
@@ -72,8 +73,12 @@ public final class RuneLiteEventBridge
 	public void start()
 	{
 		experienceTracker.reset();
+		awaitingLoginSeed = false;
 		if (client.getGameState() == GameState.LOGGED_IN)
 		{
+			// A plugin enabled mid-session sees an already-stable client state, so
+			// it is safe to snapshot immediately. Fresh logins are handled below
+			// after the first game tick, once RuneLite has populated its state.
 			seedCurrentState();
 		}
 	}
@@ -83,20 +88,36 @@ public final class RuneLiteEventBridge
 		Objects.requireNonNull(gameState, "gameState");
 		if (gameState == GameState.LOGGED_IN)
 		{
-			seedCurrentState();
+			// LOGGED_IN can arrive before skill XP, resources, varps, and
+			// containers are fully populated. Seeding here can capture zero/partial
+			// values and turn the subsequent initialization burst into fake XP
+			// gains, level-ups, and resource changes. Prime on the first game tick
+			// instead and ignore stateful observations until that baseline exists.
+			experienceTracker.reset();
+			awaitingLoginSeed = true;
 		}
 		else if (gameState == GameState.LOGIN_SCREEN
 			|| gameState == GameState.HOPPING
 			|| gameState == GameState.CONNECTION_LOST)
 		{
+			awaitingLoginSeed = false;
 			experienceTracker.reset();
 			sink.resetSourceState();
 		}
 	}
 
+	public void onGameTick()
+	{
+		if (awaitingLoginSeed && isLoggedIn())
+		{
+			seedCurrentState();
+			awaitingLoginSeed = false;
+		}
+	}
+
 	public void onStatChanged(StatChanged event)
 	{
-		if (!isLoggedIn())
+		if (!isLoggedIn() || awaitingLoginSeed)
 		{
 			return;
 		}
@@ -114,7 +135,7 @@ public final class RuneLiteEventBridge
 
 	public void onItemContainerChanged(ItemContainerChanged event)
 	{
-		if (!isLoggedIn())
+		if (!isLoggedIn() || awaitingLoginSeed)
 		{
 			return;
 		}
@@ -123,7 +144,7 @@ public final class RuneLiteEventBridge
 
 	public void onVarbitChanged(VarbitChanged event)
 	{
-		if (!isLoggedIn())
+		if (!isLoggedIn() || awaitingLoginSeed)
 		{
 			return;
 		}

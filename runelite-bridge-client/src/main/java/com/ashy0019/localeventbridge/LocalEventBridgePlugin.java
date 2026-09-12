@@ -9,6 +9,7 @@ import net.runelite.api.Client;
 import net.runelite.api.events.ActorDeath;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.GameTick;
 import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.events.StatChanged;
 import net.runelite.api.events.VarbitChanged;
@@ -102,6 +103,16 @@ public class LocalEventBridgePlugin extends Plugin
         if (bridge != null)
         {
             bridge.onGameStateChanged(event.getGameState());
+        }
+    }
+
+    @Subscribe
+    public void onGameTick(GameTick event)
+    {
+        RuneLiteEventBridge bridge = gameplayBridge;
+        if (bridge != null)
+        {
+            bridge.onGameTick();
         }
     }
 
