@@ -19,6 +19,7 @@ internal static class UpdateCoreTests
 			TestReleaseParsing();
 			TestLumBridgeReleaseParsing();
 			TestLumBridgeInstalledRecognition(root);
+			TestUpdaterApplicationLayouts(root);
 			TestPreferences(root);
 			TestPreferenceMigration(root);
 			TestChecksum(root);
@@ -202,6 +203,38 @@ internal static class UpdateCoreTests
 				+ "\"repository\":\"ashy0019/HapticScape\"}");
 		Assert(!LumBridgeSupport.IsInstalled(manifest, application),
 			"a mismatched LumBridge should be refreshed");
+	}
+
+	private static void TestUpdaterApplicationLayouts(string root)
+	{
+		string legacy = Path.Combine(root, "legacy-2x-layout");
+		Directory.CreateDirectory(Path.Combine(legacy, "app"));
+		File.WriteAllText(Path.Combine(legacy, "HapticScape.exe"), "stub");
+		File.WriteAllText(Path.Combine(legacy, "app", "hapticscape-client.jar"), "stub");
+		File.WriteAllText(Path.Combine(legacy, "app", "release.json"), "{}");
+		Assert(ApplicationLayoutValidation.IsValidInstalledApplication(legacy),
+			"2.x installs should be accepted as an update source");
+		Assert(!ApplicationLayoutValidation.IsValidStagedApplication(legacy),
+			"2.x layouts must not be accepted as a new staged application");
+
+		string standalone = Path.Combine(root, "standalone-3x-layout");
+		Directory.CreateDirectory(Path.Combine(standalone, "app"));
+		Directory.CreateDirectory(Path.Combine(standalone, "runtime", "bin"));
+		File.WriteAllText(Path.Combine(standalone, "HapticScape.exe"), "stub");
+		File.WriteAllText(Path.Combine(standalone, "app", "hapticscape-desktop.jar"), "stub");
+		File.WriteAllText(Path.Combine(standalone, "app", "hapticscape-client.jar"), "stub");
+		File.WriteAllText(Path.Combine(standalone, "app", "release.json"), "{}");
+		File.WriteAllText(Path.Combine(standalone, "runtime", "bin", "javaw.exe"), "stub");
+		Assert(ApplicationLayoutValidation.IsValidInstalledApplication(standalone),
+			"3.x installs should be accepted as an update source");
+		Assert(ApplicationLayoutValidation.IsValidStagedApplication(standalone),
+			"complete 3.x layouts should be accepted for installation");
+
+		File.Delete(Path.Combine(standalone, "runtime", "bin", "javaw.exe"));
+		Assert(!ApplicationLayoutValidation.IsValidInstalledApplication(standalone),
+			"a damaged 3.x install must not fall back to its legacy compatibility JAR");
+		Assert(!ApplicationLayoutValidation.IsValidStagedApplication(standalone),
+			"staged 3.x applications require their bundled runtime");
 	}
 
 	private static void TestPreferences(string root)
