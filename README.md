@@ -9,6 +9,8 @@ Prebuilt releases target Windows 10 and newer.
 > [!IMPORTANT]
 > HapticScape, LumBridge, and the Local Event Bridge are unofficial software. They are not endorsed by Jagex, RuneLite, Intiface, or any device manufacturer.
 
+ <img width="1920" height="1032" alt="image" src="https://github.com/user-attachments/assets/580678a7-47d7-4c2c-8fd1-048a0f7a1a6c" />
+
 ## HapticScape 3 components
 
 | Component | Purpose |
