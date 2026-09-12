@@ -14,9 +14,13 @@ internal static class UpdateCoreTests
 		{
 			TestVersions();
 			TestDeepLinks();
+			TestLaunchOptions();
 			TestPolicy();
 			TestReleaseParsing();
+			TestLumBridgeReleaseParsing();
+			TestLumBridgeInstalledRecognition(root);
 			TestPreferences(root);
+			TestPreferenceMigration(root);
 			TestChecksum(root);
 			TestSafeExtraction(root);
 			TestTraversalRejection(root);
@@ -32,6 +36,41 @@ internal static class UpdateCoreTests
 		{
 			UpdatePackagePreparer.TryDeleteDirectory(root);
 		}
+	}
+
+	private static void TestLaunchOptions()
+	{
+		HapticScapeLaunchOptions defaults = HapticScapeLaunchOptions.Parse(new string[0]);
+		Assert(defaults.Profile == null, "ordinary launches use default storage");
+		Assert(defaults.GameplayPort == 41713, "ordinary launches preserve the bridge port");
+		Assert(defaults.MutexName == @"Local\HapticScape.Client",
+			"ordinary launches preserve the existing instance mutex");
+
+		HapticScapeLaunchOptions controller = HapticScapeLaunchOptions.Parse(new[]
+		{
+			"--profile", "Controller", "--gameplay-port=41714"
+		});
+		Assert(controller.Profile == "controller", "profile names are normalized");
+		Assert(controller.GameplayPort == 41714, "named clients can select another port");
+		Assert(controller.MutexName == @"Local\HapticScape.Client.controller",
+			"named clients receive independent process mutexes");
+		Assert(controller.JavaArguments() == " --profile controller --gameplay-port 41714",
+			"validated options are forwarded to Java");
+
+		HapticScapeLaunchOptions minimized = HapticScapeLaunchOptions.Parse(
+			new[] { "--minimized" });
+		Assert(minimized.Minimized, "minimized startup should be parsed");
+		Assert(minimized.JavaArguments() == " --minimized",
+			"minimized startup should be forwarded to Java");
+
+		AssertThrows<InvalidOperationException>(delegate
+		{
+			HapticScapeLaunchOptions.Parse(new[] { "--profile", "../escape" });
+		}, "profile path traversal should be rejected");
+		AssertThrows<InvalidOperationException>(delegate
+		{
+			HapticScapeLaunchOptions.Parse(new[] { "--gameplay-port", "70000" });
+		}, "invalid gameplay ports should be rejected");
 	}
 
 	private static void TestDeepLinks()
@@ -92,6 +131,79 @@ internal static class UpdateCoreTests
 		Assert(release.ZipName == "HapticScape-Windows-x64-1.6.0.zip", "asset name should match exactly");
 	}
 
+	private static void TestLumBridgeReleaseParsing()
+	{
+		Assert(!LumBridgeSupport.IsRequired("2.4.0"),
+			"HapticScape 2 should not require LumBridge");
+		Assert(LumBridgeSupport.IsRequired("3.0.0"),
+			"HapticScape 3 should require LumBridge");
+		Assert(LumBridgeSupport.AssetName("3.0.0", "x64")
+			== "LumBridge-Windows-x64-3.0.0.zip",
+			"LumBridge asset naming should match package-all output");
+
+		string json = "{"
+			+ "\"tag_name\":\"v3.0.0\",\"draft\":false,\"prerelease\":false,"
+			+ "\"assets\":["
+			+ "{\"name\":\"HapticScape-Windows-x64-3.0.0.zip\","
+			+ "\"browser_download_url\":\"https://github.com/ashy0019/HapticScape/releases/download/v3.0.0/HapticScape-Windows-x64-3.0.0.zip\"},"
+			+ "{\"name\":\"HapticScape-Windows-x64-3.0.0.zip.sha256\","
+			+ "\"browser_download_url\":\"https://github.com/ashy0019/HapticScape/releases/download/v3.0.0/HapticScape-Windows-x64-3.0.0.zip.sha256\"},"
+			+ "{\"name\":\"LumBridge-Windows-x64-3.0.0.zip\","
+			+ "\"browser_download_url\":\"https://github.com/ashy0019/HapticScape/releases/download/v3.0.0/LumBridge-Windows-x64-3.0.0.zip\"},"
+			+ "{\"name\":\"LumBridge-Windows-x64-3.0.0.zip.sha256\","
+			+ "\"browser_download_url\":\"https://github.com/ashy0019/HapticScape/releases/download/v3.0.0/LumBridge-Windows-x64-3.0.0.zip.sha256\"}]}";
+		UpdateRelease release = GitHubReleaseClient.ParseLatest(json, "x64");
+		Assert(release.HasLumBridge,
+			"HapticScape 3 releases should carry the LumBridge companion asset");
+		Assert(release.LumBridgeZipName == "LumBridge-Windows-x64-3.0.0.zip",
+			"the matching LumBridge asset should be selected");
+
+		string missingLumBridge = "{"
+			+ "\"tag_name\":\"v3.0.0\",\"draft\":false,\"prerelease\":false,"
+			+ "\"assets\":["
+			+ "{\"name\":\"HapticScape-Windows-x64-3.0.0.zip\","
+			+ "\"browser_download_url\":\"https://github.com/ashy0019/HapticScape/releases/download/v3.0.0/HapticScape-Windows-x64-3.0.0.zip\"},"
+			+ "{\"name\":\"HapticScape-Windows-x64-3.0.0.zip.sha256\","
+			+ "\"browser_download_url\":\"https://github.com/ashy0019/HapticScape/releases/download/v3.0.0/HapticScape-Windows-x64-3.0.0.zip.sha256\"}]}";
+		UpdateRelease hapticScapeOnly = GitHubReleaseClient.ParseLatest(
+			missingLumBridge,
+			"x64");
+		Assert(!hapticScapeOnly.HasLumBridge,
+			"a missing companion must not block the HapticScape update itself");
+	}
+
+	private static void TestLumBridgeInstalledRecognition(string root)
+	{
+		string application = Path.Combine(root, "lumbridge-install-check");
+		Directory.CreateDirectory(application);
+		string installedManifestPath = Path.Combine(root, "hapticscape-release.json");
+		File.WriteAllText(
+			installedManifestPath,
+			"{\"version\":\"3.0.0\",\"architecture\":\"x64\","
+				+ "\"repository\":\"ashy0019/HapticScape\"}");
+		ReleaseManifest manifest = ReleaseManifest.Load(installedManifestPath);
+		Assert(!LumBridgeSupport.IsInstalled(manifest, application),
+			"missing LumBridge should require companion setup");
+
+		string lumBridgeApp = Path.Combine(application, "LumBridge", "app");
+		Directory.CreateDirectory(lumBridgeApp);
+		File.WriteAllText(Path.Combine(application, "LumBridge", "LumBridge.exe"), "stub");
+		File.WriteAllText(Path.Combine(lumBridgeApp, "lumbridge.jar"), "stub");
+		File.WriteAllText(
+			Path.Combine(lumBridgeApp, "release.json"),
+			"{\"version\":\"3.0.0\",\"architecture\":\"x64\","
+				+ "\"repository\":\"ashy0019/HapticScape\"}");
+		Assert(LumBridgeSupport.IsInstalled(manifest, application),
+			"matching LumBridge should satisfy companion setup");
+
+		File.WriteAllText(
+			Path.Combine(lumBridgeApp, "release.json"),
+			"{\"version\":\"2.9.9\",\"architecture\":\"x64\","
+				+ "\"repository\":\"ashy0019/HapticScape\"}");
+		Assert(!LumBridgeSupport.IsInstalled(manifest, application),
+			"a mismatched LumBridge should be refreshed");
+	}
+
 	private static void TestPreferences(string root)
 	{
 		string path = Path.Combine(root, "preferences", "updater-settings.json");
@@ -106,6 +218,24 @@ internal static class UpdateCoreTests
 		Assert(!loaded.UpdateNotifications, "notification choice should round-trip");
 		Assert(loaded.SkippedVersion == "1.6.2", "skipped version should round-trip");
 		Assert(loaded.ForceCheck, "manual check request should round-trip");
+	}
+
+	private static void TestPreferenceMigration(string root)
+	{
+		string legacy = Path.Combine(root, "legacy", "updater-settings.json");
+		string current = Path.Combine(root, "current", "updater-settings.json");
+		Directory.CreateDirectory(Path.GetDirectoryName(legacy));
+		File.WriteAllText(legacy, "{\"automaticUpdates\":true}");
+
+		UpdatePreferencesStore.TryMigrateLegacyPath(current, legacy);
+		Assert(File.Exists(current), "legacy updater preferences should migrate to HapticScape storage");
+		Assert(UpdatePreferencesStore.Load(current).AutomaticUpdates,
+			"migrated updater preferences should remain readable");
+
+		File.WriteAllText(current, "{\"automaticUpdates\":false}");
+		UpdatePreferencesStore.TryMigrateLegacyPath(current, legacy);
+		Assert(!UpdatePreferencesStore.Load(current).AutomaticUpdates,
+			"existing HapticScape preferences should win over legacy settings");
 	}
 
 	private static void TestChecksum(string root)

@@ -48,7 +48,7 @@ public class MusicSignalAnalyzerTest
 	}
 
 	@Test
-	public void windowsMasterVolumeScalesDetectedBeat()
+	public void outputVolumeScalesDetectedBeat()
 	{
 		double fullVolume = peakBassLevel(0.40, 1.0);
 		double quarterVolume = peakBassLevel(0.40, 0.25);
@@ -57,7 +57,7 @@ public class MusicSignalAnalyzerTest
 	}
 
 	@Test
-	public void windowsMuteImmediatelyProducesZero()
+	public void zeroOutputVolumeImmediatelyProducesZero()
 	{
 		List<Double> levels = new ArrayList<>();
 		MusicSignalAnalyzer analyzer = new MusicSignalAnalyzer(levels::add);

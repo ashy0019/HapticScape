@@ -1,32 +1,21 @@
 package com.ashy0019.hapticscape;
 
-import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
-import java.util.EnumSet;
-import java.util.List;
-import java.util.Locale;
+import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
-import net.runelite.api.Skill;
 
-/**
- * Immutable selection of skills which may trigger XP feedback.
- *
- * <p>The configuration stores disabled skills rather than enabled skills. This
- * means a skill added to RuneLite in the future is enabled by default until the
- * user explicitly disables it.</p>
- */
+/** Immutable source-neutral selection of skill identifiers which may trigger feedback. */
 public final class SkillSelection
 {
-	private static final List<Skill> SELECTABLE_SKILLS = createSelectableSkills();
+	private final Set<String> disabledSkillIds;
 
-	private final Set<Skill> disabledSkills;
-
-	private SkillSelection(Set<Skill> disabledSkills)
+	private SkillSelection(Set<String> disabledSkillIds)
 	{
-		EnumSet<Skill> copy = EnumSet.noneOf(Skill.class);
-		copy.addAll(disabledSkills);
-		this.disabledSkills = Collections.unmodifiableSet(copy);
+		this.disabledSkillIds = Collections.unmodifiableSet(
+			new LinkedHashSet<>(disabledSkillIds)
+		);
 	}
 
 	public static SkillSelection allEnabled()
@@ -41,98 +30,82 @@ public final class SkillSelection
 			return allEnabled();
 		}
 
-		EnumSet<Skill> disabled = EnumSet.noneOf(Skill.class);
+		LinkedHashSet<String> disabled = new LinkedHashSet<>();
 		for (String token : configuredValue.split(","))
 		{
-			String skillName = token.trim();
-			if (skillName.isEmpty())
+			String trimmed = token.trim();
+			if (trimmed.isEmpty())
 			{
 				continue;
 			}
-
 			try
 			{
-				Skill skill = Skill.valueOf(skillName.toUpperCase(Locale.ROOT));
-				disabled.add(skill);
+				disabled.add(SkillIds.canonical(trimmed));
 			}
 			catch (IllegalArgumentException ignored)
 			{
-				// Ignore values belonging to skills this RuneLite version does not know.
+				// Ignore malformed identifiers while preserving unknown future identifiers.
 			}
 		}
 		return new SkillSelection(disabled);
 	}
 
-	public boolean isEnabled(Skill skill)
+	public boolean isEnabled(String skillId)
 	{
-		Objects.requireNonNull(skill, "skill");
-		return !disabledSkills.contains(skill);
+		return !disabledSkillIds.contains(SkillIds.canonical(skillId));
 	}
 
-	public SkillSelection withEnabled(Skill skill, boolean enabled)
+	public SkillSelection withEnabled(String skillId, boolean enabled)
 	{
-		Objects.requireNonNull(skill, "skill");
-		EnumSet<Skill> updated = EnumSet.noneOf(Skill.class);
-		updated.addAll(disabledSkills);
+		String canonical = SkillIds.canonical(skillId);
+		LinkedHashSet<String> updated = new LinkedHashSet<>(disabledSkillIds);
 		if (enabled)
 		{
-			updated.remove(skill);
+			updated.remove(canonical);
 		}
 		else
 		{
-			updated.add(skill);
+			updated.add(canonical);
 		}
-		return updated.equals(disabledSkills) ? this : new SkillSelection(updated);
+		return updated.equals(disabledSkillIds) ? this : new SkillSelection(updated);
 	}
 
-	public SkillSelection withAllEnabled(boolean enabled)
+	public SkillSelection withAllEnabled(Collection<String> skillIds, boolean enabled)
 	{
-		if (enabled)
+		Objects.requireNonNull(skillIds, "skillIds");
+		SkillSelection updated = this;
+		for (String skillId : skillIds)
 		{
-			return allEnabled();
+			updated = updated.withEnabled(skillId, enabled);
 		}
-
-		EnumSet<Skill> disabled = EnumSet.noneOf(Skill.class);
-		disabled.addAll(SELECTABLE_SKILLS);
-		return new SkillSelection(disabled);
+		return updated;
 	}
 
-	public int getEnabledCount()
+	public int getEnabledCount(Collection<String> selectableSkillIds)
 	{
-		return SELECTABLE_SKILLS.size() - disabledSkills.size();
+		Objects.requireNonNull(selectableSkillIds, "selectableSkillIds");
+		int enabled = 0;
+		for (String skillId : selectableSkillIds)
+		{
+			if (isEnabled(skillId))
+			{
+				enabled++;
+			}
+		}
+		return enabled;
 	}
 
 	public String toConfigValue()
 	{
 		StringBuilder result = new StringBuilder();
-		for (Skill skill : SELECTABLE_SKILLS)
+		for (String skillId : disabledSkillIds)
 		{
-			if (!disabledSkills.contains(skill))
-			{
-				continue;
-			}
-
 			if (result.length() > 0)
 			{
 				result.append(',');
 			}
-			result.append(skill.name());
+			result.append(SkillIds.toConfigToken(skillId));
 		}
 		return result.toString();
-	}
-
-	public static List<Skill> getSelectableSkills()
-	{
-		return SELECTABLE_SKILLS;
-	}
-
-	private static List<Skill> createSelectableSkills()
-	{
-		List<Skill> skills = new ArrayList<>();
-		for (Skill skill : Skill.values())
-		{
-			skills.add(skill);
-		}
-		return Collections.unmodifiableList(skills);
 	}
 }

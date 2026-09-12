@@ -1,12 +1,13 @@
 package com.ashy0019.hapticscape.ui;
 
+import com.ashy0019.hapticscape.TestHapticScapeSettings;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import com.ashy0019.hapticscape.CustomPatternLibrary;
 import com.ashy0019.hapticscape.HapticPatternSelection;
-import com.ashy0019.hapticscape.HapticScapeConfig;
 import com.ashy0019.hapticscape.remote.RemoteActionAcknowledgement;
 import com.ashy0019.hapticscape.remote.RemotePermissions;
 import com.ashy0019.hapticscape.remote.RemoteRole;
@@ -161,7 +162,7 @@ public class RemoteActionsPanelTest
 	}
 
 	@Test
-	public void messageLimitAcknowledgementAndSidebarWidthStayCompact() throws Exception
+	public void messageLimitAcknowledgementAndMinimumWidthStayResponsive() throws Exception
 	{
 		RecordingDispatcher dispatcher = new RecordingDispatcher();
 		RemoteActionsPanel panel = onEdt(() -> new RemoteActionsPanel(dispatcher));
@@ -193,10 +194,7 @@ public class RemoteActionsPanelTest
 		assertTrue(status.getText().contains("42%, 900 ms"));
 		assertEquals(statusHeights[0], statusHeights[1]);
 		assertEquals(statusHeights[0], statusHeights[2]);
-		assertTrue(
-			"Preferred width was " + panel.getPreferredSize().width,
-			panel.getPreferredSize().width <= 202
-		);
+		assertEquals(0, panel.getMinimumSize().width);
 	}
 
 	@Test
@@ -205,7 +203,7 @@ public class RemoteActionsPanelTest
 		RecordingDispatcher dispatcher = new RecordingDispatcher();
 		RemoteActionsPanel panel = onEdt(() -> new RemoteActionsPanel(dispatcher));
 		RemoteSettingsSnapshot zeroIntensitySettings = RemoteSettingsSnapshot.capture(
-			new HapticScapeConfig()
+			new TestHapticScapeSettings()
 			{
 				@Override
 				public int intensityPercent()
@@ -268,7 +266,7 @@ public class RemoteActionsPanelTest
 
 	private static RemoteSettingsSnapshot subjectSettings()
 	{
-		return RemoteSettingsSnapshot.capture(new HapticScapeConfig()
+		return RemoteSettingsSnapshot.capture(new TestHapticScapeSettings()
 		{
 			@Override
 			public int intensityPercent()

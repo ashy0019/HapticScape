@@ -77,11 +77,38 @@ internal static class UpdatePreferencesStore
 {
 	internal static string GetDefaultPath()
 	{
-		return Path.Combine(
+		string currentPath = Path.Combine(
+			Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+			"HapticScape",
+			"updater-settings.json");
+		string legacyPath = Path.Combine(
 			Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
 			".runelite",
 			"hapticscape",
 			"updater-settings.json");
+		TryMigrateLegacyPath(currentPath, legacyPath);
+		return currentPath;
+	}
+
+	internal static void TryMigrateLegacyPath(string currentPath, string legacyPath)
+	{
+		try
+		{
+			if (File.Exists(currentPath) || !File.Exists(legacyPath))
+			{
+				return;
+			}
+			string directory = Path.GetDirectoryName(currentPath);
+			if (!string.IsNullOrEmpty(directory))
+			{
+				Directory.CreateDirectory(directory);
+			}
+			File.Copy(legacyPath, currentPath, false);
+		}
+		catch (Exception)
+		{
+			// Migration is best-effort; update preferences must never block launch.
+		}
 	}
 
 	internal static UpdatePreferences Load(string path)
@@ -159,13 +186,33 @@ internal sealed class UpdateRelease
 	internal string ZipName { get; private set; }
 	internal Uri ZipUri { get; private set; }
 	internal Uri ChecksumUri { get; private set; }
+	internal string LumBridgeZipName { get; private set; }
+	internal Uri LumBridgeZipUri { get; private set; }
+	internal Uri LumBridgeChecksumUri { get; private set; }
+	internal bool HasLumBridge
+	{
+		get
+		{
+			return LumBridgeZipUri != null && LumBridgeChecksumUri != null;
+		}
+	}
 
-	internal UpdateRelease(string version, string zipName, Uri zipUri, Uri checksumUri)
+	internal UpdateRelease(
+		string version,
+		string zipName,
+		Uri zipUri,
+		Uri checksumUri,
+		string lumBridgeZipName,
+		Uri lumBridgeZipUri,
+		Uri lumBridgeChecksumUri)
 	{
 		Version = version;
 		ZipName = zipName;
 		ZipUri = zipUri;
 		ChecksumUri = checksumUri;
+		LumBridgeZipName = lumBridgeZipName;
+		LumBridgeZipUri = lumBridgeZipUri;
+		LumBridgeChecksumUri = lumBridgeChecksumUri;
 	}
 }
 
@@ -201,6 +248,13 @@ internal static class GitHubReleaseClient
 		string version = VersionUtility.WithoutPrefix(tag);
 		string zipName = "HapticScape-Windows-" + architecture + "-" + version + ".zip";
 		string checksumName = zipName + ".sha256";
+		bool requiresLumBridge = LumBridgeSupport.IsRequired(version);
+		string lumBridgeZipName = requiresLumBridge
+			? LumBridgeSupport.AssetName(version, architecture)
+			: null;
+		string lumBridgeChecksumName = requiresLumBridge
+			? lumBridgeZipName + ".sha256"
+			: null;
 
 		object assetsValue;
 		if (!release.TryGetValue("assets", out assetsValue))
@@ -215,6 +269,8 @@ internal static class GitHubReleaseClient
 
 		Uri zipUri = null;
 		Uri checksumUri = null;
+		Uri lumBridgeZipUri = null;
+		Uri lumBridgeChecksumUri = null;
 		foreach (object assetValue in assets)
 		{
 			Dictionary<string, object> asset = assetValue as Dictionary<string, object>;
@@ -239,6 +295,16 @@ internal static class GitHubReleaseClient
 			{
 				checksumUri = uri;
 			}
+			else if (requiresLumBridge
+				&& string.Equals(name, lumBridgeZipName, StringComparison.Ordinal))
+			{
+				lumBridgeZipUri = uri;
+			}
+			else if (requiresLumBridge
+				&& string.Equals(name, lumBridgeChecksumName, StringComparison.Ordinal))
+			{
+				lumBridgeChecksumUri = uri;
+			}
 		}
 
 		if (zipUri == null || checksumUri == null)
@@ -246,7 +312,14 @@ internal static class GitHubReleaseClient
 			throw new InvalidDataException(
 				"The latest release does not contain " + zipName + " and its SHA-256 file.");
 		}
-		return new UpdateRelease(version, zipName, zipUri, checksumUri);
+		return new UpdateRelease(
+			version,
+			zipName,
+			zipUri,
+			checksumUri,
+			lumBridgeZipName,
+			lumBridgeZipUri,
+			lumBridgeChecksumUri);
 	}
 
 	private static bool IsTrustedDownloadUri(Uri uri)
@@ -262,6 +335,270 @@ internal static class GitHubReleaseClient
 		client.Headers[HttpRequestHeader.UserAgent] = "HapticScape-Updater";
 		client.Headers[HttpRequestHeader.Accept] = "application/vnd.github+json";
 		return client;
+	}
+}
+
+internal static class LumBridgeSupport
+{
+	internal static bool IsRequired(string version)
+	{
+		string normalized;
+		if (!VersionUtility.TryParse(version, out normalized))
+		{
+			return false;
+		}
+		string numeric = normalized.Split(new[] { '-' }, 2)[0];
+		Version parsed;
+		return Version.TryParse(numeric, out parsed) && parsed.Major >= 3;
+	}
+
+	internal static string AssetName(string version, string architecture)
+	{
+		return "LumBridge-Windows-" + architecture + "-" + version + ".zip";
+	}
+
+	internal static bool IsInstalled(
+		ReleaseManifest manifest,
+		string applicationDirectory)
+	{
+		if (!IsRequired(manifest.Version))
+		{
+			return true;
+		}
+		string directory = Path.Combine(applicationDirectory, "LumBridge");
+		if (!File.Exists(Path.Combine(directory, "LumBridge.exe"))
+			|| !File.Exists(Path.Combine(directory, "app", "lumbridge.jar")))
+		{
+			return false;
+		}
+		try
+		{
+			ReleaseManifest installed = ReleaseManifest.Load(
+				Path.Combine(directory, "app", "release.json"));
+			return string.Equals(
+					installed.Version,
+					manifest.Version,
+					StringComparison.Ordinal)
+				&& string.Equals(
+					installed.Architecture,
+					manifest.Architecture,
+					StringComparison.OrdinalIgnoreCase);
+		}
+		catch (Exception)
+		{
+			return false;
+		}
+	}
+
+	internal static bool EnsureInstalled(
+		ReleaseManifest manifest,
+		string applicationDirectory,
+		Action<string> reportProgress)
+	{
+		if (!IsRequired(manifest.Version)
+			|| IsInstalled(manifest, applicationDirectory))
+		{
+			return false;
+		}
+
+		string root = Path.GetFullPath(applicationDirectory)
+			.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+		string temporaryRoot = Path.Combine(
+			root,
+			".lumbridge-install-" + Guid.NewGuid().ToString("N"));
+		string backupDirectory = null;
+		string targetDirectory = Path.Combine(root, "LumBridge");
+		bool backupCreated = false;
+		bool installed = false;
+
+		Directory.CreateDirectory(temporaryRoot);
+		try
+		{
+			string zipName = AssetName(manifest.Version, manifest.Architecture);
+			string zipPath = Path.Combine(temporaryRoot, zipName);
+			string checksumPath = zipPath + ".sha256";
+			Uri zipUri = ReleaseAssetUri(
+				manifest.Repository,
+				manifest.Version,
+				zipName);
+			Uri checksumUri = ReleaseAssetUri(
+				manifest.Repository,
+				manifest.Version,
+				zipName + ".sha256");
+
+			Report(reportProgress, "Downloading LumBridge checksum...");
+			using (TimeoutWebClient client =
+				GitHubReleaseClient.CreateClient(UpdateConstants.DownloadTimeoutMillis))
+			{
+				client.DownloadFile(checksumUri, checksumPath);
+				Report(reportProgress, "Downloading LumBridge " + manifest.Version + "...");
+				client.DownloadFile(zipUri, zipPath);
+			}
+
+			ValidateDownloadedZip(zipPath);
+			Report(reportProgress, "Verifying LumBridge...");
+			UpdatePackagePreparer.VerifySha256(
+				zipPath,
+				File.ReadAllText(checksumPath));
+
+			string extractionRoot = Path.Combine(temporaryRoot, "extracted");
+			Report(reportProgress, "Preparing LumBridge...");
+			UpdatePackagePreparer.ExtractSafely(zipPath, extractionRoot);
+			string stagedDirectory = Path.Combine(extractionRoot, "LumBridge");
+			ValidateStagedLumBridge(
+				stagedDirectory,
+				manifest.Version,
+				manifest.Architecture);
+
+			if (Directory.Exists(targetDirectory))
+			{
+				backupDirectory = Path.Combine(
+					root,
+					".lumbridge-backup-" + Guid.NewGuid().ToString("N"));
+				Directory.Move(targetDirectory, backupDirectory);
+				backupCreated = true;
+			}
+
+			Directory.Move(stagedDirectory, targetDirectory);
+			installed = true;
+			TryDeleteDirectory(backupDirectory);
+			return true;
+		}
+		catch
+		{
+			if (installed && Directory.Exists(targetDirectory))
+			{
+				TryDeleteDirectory(targetDirectory);
+			}
+			if (backupCreated
+				&& !string.IsNullOrEmpty(backupDirectory)
+				&& Directory.Exists(backupDirectory)
+				&& !Directory.Exists(targetDirectory))
+			{
+				Directory.Move(backupDirectory, targetDirectory);
+			}
+			throw;
+		}
+		finally
+		{
+			TryDeleteDirectory(temporaryRoot);
+		}
+	}
+
+	internal static void StageForUpdate(
+		UpdateRelease release,
+		string temporaryRoot,
+		string stagedApplicationDirectory,
+		string expectedArchitecture,
+		Action<string> reportProgress)
+	{
+		if (!release.HasLumBridge)
+		{
+			return;
+		}
+
+		string zipPath = Path.Combine(temporaryRoot, release.LumBridgeZipName);
+		string checksumPath = zipPath + ".sha256";
+		Report(reportProgress, "Downloading LumBridge checksum...");
+		using (TimeoutWebClient client =
+			GitHubReleaseClient.CreateClient(UpdateConstants.DownloadTimeoutMillis))
+		{
+			client.DownloadFile(release.LumBridgeChecksumUri, checksumPath);
+			Report(reportProgress, "Downloading LumBridge " + release.Version + "...");
+			client.DownloadFile(release.LumBridgeZipUri, zipPath);
+		}
+
+		ValidateDownloadedZip(zipPath);
+		Report(reportProgress, "Verifying LumBridge...");
+		UpdatePackagePreparer.VerifySha256(
+			zipPath,
+			File.ReadAllText(checksumPath));
+
+		string extractionRoot = Path.Combine(temporaryRoot, "lumbridge-extracted");
+		UpdatePackagePreparer.ExtractSafely(zipPath, extractionRoot);
+		string stagedLumBridge = Path.Combine(extractionRoot, "LumBridge");
+		ValidateStagedLumBridge(
+			stagedLumBridge,
+			release.Version,
+			expectedArchitecture);
+
+		string destination = Path.Combine(stagedApplicationDirectory, "LumBridge");
+		if (Directory.Exists(destination))
+		{
+			Directory.Delete(destination, true);
+		}
+		Directory.Move(stagedLumBridge, destination);
+	}
+
+	private static Uri ReleaseAssetUri(
+		string repository,
+		string version,
+		string assetName)
+	{
+		return new Uri(
+			"https://github.com/" + repository
+				+ "/releases/download/v" + Uri.EscapeDataString(version)
+				+ "/" + Uri.EscapeDataString(assetName));
+	}
+
+	private static void ValidateDownloadedZip(string zipPath)
+	{
+		FileInfo zipInfo = new FileInfo(zipPath);
+		if (!zipInfo.Exists
+			|| zipInfo.Length == 0
+			|| zipInfo.Length > UpdateConstants.MaximumZipBytes)
+		{
+			throw new InvalidDataException("The downloaded LumBridge package has an invalid size.");
+		}
+	}
+
+	private static void ValidateStagedLumBridge(
+		string directory,
+		string expectedVersion,
+		string expectedArchitecture)
+	{
+		if (!File.Exists(Path.Combine(directory, "LumBridge.exe"))
+			|| !File.Exists(Path.Combine(directory, "app", "lumbridge.jar")))
+		{
+			throw new InvalidDataException("The LumBridge package is missing required files.");
+		}
+		ReleaseManifest manifest = ReleaseManifest.Load(
+			Path.Combine(directory, "app", "release.json"));
+		if (!string.Equals(
+				manifest.Version,
+				expectedVersion,
+				StringComparison.Ordinal)
+			|| !string.Equals(
+				manifest.Architecture,
+				expectedArchitecture,
+				StringComparison.OrdinalIgnoreCase))
+		{
+			throw new InvalidDataException(
+				"The LumBridge package metadata does not match HapticScape.");
+		}
+	}
+
+	private static void Report(Action<string> reporter, string message)
+	{
+		if (reporter != null)
+		{
+			reporter(message);
+		}
+	}
+
+	private static void TryDeleteDirectory(string directory)
+	{
+		try
+		{
+			if (!string.IsNullOrEmpty(directory) && Directory.Exists(directory))
+			{
+				Directory.Delete(directory, true);
+			}
+		}
+		catch (Exception)
+		{
+			// LumBridge staging cleanup is best-effort.
+		}
 	}
 }
 
@@ -327,6 +664,21 @@ internal static class UpdatePackagePreparer
 			ExtractSafely(zipPath, extractionRoot);
 			string stagedApplication = Path.Combine(extractionRoot, "HapticScape");
 			ValidateStagedApplication(stagedApplication, release, installedManifest.Architecture);
+			try
+			{
+				LumBridgeSupport.StageForUpdate(
+					release,
+					temporaryRoot,
+					stagedApplication,
+					installedManifest.Architecture,
+					reportProgress);
+			}
+			catch (Exception)
+			{
+				Report(
+					reportProgress,
+					"LumBridge will finish installing after HapticScape starts...");
+			}
 
 			string stagedUpdater = Path.Combine(
 				stagedApplication,
@@ -416,10 +768,12 @@ internal static class UpdatePackagePreparer
 		string expectedArchitecture)
 	{
 		string launcher = Path.Combine(stagedApplication, "HapticScape.exe");
-		string jar = Path.Combine(stagedApplication, "app", "hapticscape-client.jar");
+		string jar = Path.Combine(stagedApplication, "app", "hapticscape-desktop.jar");
 		string updater = Path.Combine(stagedApplication, "app", "HapticScapeUpdater.exe");
+		string runtime = Path.Combine(stagedApplication, "runtime", "bin", "javaw.exe");
 		string manifestPath = Path.Combine(stagedApplication, "app", "release.json");
-		if (!File.Exists(launcher) || !File.Exists(jar) || !File.Exists(updater))
+		if (!File.Exists(launcher) || !File.Exists(jar) || !File.Exists(updater)
+			|| !File.Exists(runtime))
 		{
 			throw new InvalidDataException("The update package is missing required HapticScape files.");
 		}

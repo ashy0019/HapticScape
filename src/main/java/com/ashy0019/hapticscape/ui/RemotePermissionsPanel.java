@@ -23,6 +23,8 @@ final class RemotePermissionsPanel extends JPanel
 	private final JCheckBox clicks = new JCheckBox("Click sounds");
 	private final JCheckBox notifications = new JCheckBox("Desktop notifications");
 	private final JCheckBox chatbox = new JCheckBox("Local chatbox notices");
+	private final JCheckBox protectedExit = new JCheckBox("Protected startup and exit requests");
+	private final JCheckBox activitySharing = new JCheckBox("Share live gameplay activity");
 	private final JSlider maximumIntensity = new JSlider(0, 100);
 	private final JLabel maximumIntensityValue = new JLabel();
 	private final JSpinner maximumDuration = new JSpinner(new SpinnerNumberModel(
@@ -45,28 +47,36 @@ final class RemotePermissionsPanel extends JPanel
 	{
 		this.sessionManager = sessionManager;
 		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
-		setBorder(BorderFactory.createTitledBorder("Your remote permissions"));
+		setBorder(PanelUi.createSectionBorder("Your remote permissions"));
 
-		SidebarTextLabel explanation = new SidebarTextLabel(
+		WrappedTextLabel explanation = new WrappedTextLabel(
 			"Only you can change these controls. They cannot be locked or changed remotely."
 		);
-		PanelUi.addVerticalComponent(this, explanation);
+		PanelUi.addPreferredHeightComponent(this, explanation);
 		settings.setToolTipText("Allow the controller to change feedback settings");
 		haptics.setToolTipText("Allow bounded haptic requests");
 		liveHaptics.setToolTipText(
 			"Allow continuous haptic intensity control while the controller holds Live Forge"
 		);
 		clicks.setToolTipText("Allow the controller to play your local click sound");
-		notifications.setToolTipText("Allow local RuneLite desktop notifications");
+		notifications.setToolTipText("Allow local operating-system notifications");
 		chatbox.setToolTipText(
 			"Show a local-only HapticScape console line; nothing is sent to game chat"
 		);
-		PanelUi.addVerticalComponent(this, settings);
-		PanelUi.addVerticalComponent(this, haptics);
-		PanelUi.addVerticalComponent(this, liveHaptics);
-		PanelUi.addVerticalComponent(this, clicks);
-		PanelUi.addVerticalComponent(this, notifications);
-		PanelUi.addVerticalComponent(this, chatbox);
+		protectedExit.setToolTipText(
+			"Allow the controller to request password-protected startup and exit locks"
+		);
+		activitySharing.setToolTipText(
+			"Share a sanitized live feed of XP and other allowlisted gameplay events"
+		);
+		PanelUi.addPreferredHeightComponent(this, settings);
+		PanelUi.addPreferredHeightComponent(this, haptics);
+		PanelUi.addPreferredHeightComponent(this, liveHaptics);
+		PanelUi.addPreferredHeightComponent(this, clicks);
+		PanelUi.addPreferredHeightComponent(this, notifications);
+		PanelUi.addPreferredHeightComponent(this, chatbox);
+		PanelUi.addPreferredHeightComponent(this, protectedExit);
+		PanelUi.addPreferredHeightComponent(this, activitySharing);
 
 		maximumIntensity.setPaintTicks(false);
 		maximumIntensity.setPaintLabels(false);
@@ -80,7 +90,7 @@ final class RemotePermissionsPanel extends JPanel
 		intensityRow.add(maximumIntensityValue, BorderLayout.EAST);
 		allowHorizontalShrink(intensityRow);
 		allowHorizontalShrink(maximumIntensity);
-		PanelUi.addVerticalComponent(this, intensityRow);
+		PanelUi.addPreferredHeightComponent(this, intensityRow);
 
 		JPanel durationRow = new JPanel(new BorderLayout(6, 0));
 		PanelUi.setFixedWidth(maximumDuration, 70);
@@ -88,7 +98,7 @@ final class RemotePermissionsPanel extends JPanel
 		durationRow.add(new JLabel("Max duration"), BorderLayout.WEST);
 		durationRow.add(maximumDuration, BorderLayout.CENTER);
 		allowHorizontalShrink(durationRow);
-		PanelUi.addVerticalComponent(this, durationRow);
+		PanelUi.addPreferredHeightComponent(this, durationRow);
 
 		JPanel liveDurationRow = new JPanel(new BorderLayout(6, 0));
 		PanelUi.setFixedWidth(maximumLiveDurationSeconds, 70);
@@ -98,7 +108,7 @@ final class RemotePermissionsPanel extends JPanel
 		liveDurationRow.add(new JLabel("Max live hold (s)"), BorderLayout.WEST);
 		liveDurationRow.add(maximumLiveDurationSeconds, BorderLayout.CENTER);
 		allowHorizontalShrink(liveDurationRow);
-		PanelUi.addVerticalComponent(this, liveDurationRow);
+		PanelUi.addPreferredHeightComponent(this, liveDurationRow);
 
 		settings.addActionListener(event -> save());
 		haptics.addActionListener(event -> save());
@@ -110,6 +120,8 @@ final class RemotePermissionsPanel extends JPanel
 		clicks.addActionListener(event -> save());
 		notifications.addActionListener(event -> save());
 		chatbox.addActionListener(event -> save());
+		protectedExit.addActionListener(event -> save());
+		activitySharing.addActionListener(event -> save());
 		maximumIntensity.addChangeListener(event ->
 		{
 			maximumIntensityValue.setText(maximumIntensity.getValue() + "%");
@@ -134,6 +146,8 @@ final class RemotePermissionsPanel extends JPanel
 			clicks.setSelected(permissions.isClicksAllowed());
 			notifications.setSelected(permissions.isDesktopNotificationsAllowed());
 			chatbox.setSelected(permissions.isLocalChatboxMessagesAllowed());
+			protectedExit.setSelected(permissions.isProtectedExitAllowed());
+			activitySharing.setSelected(permissions.isActivitySharingAllowed());
 			maximumIntensity.setValue(permissions.getMaximumIntensityPercent());
 			maximumIntensityValue.setText(permissions.getMaximumIntensityPercent() + "%");
 			maximumDuration.setValue(permissions.getMaximumDurationMillis());
@@ -164,6 +178,8 @@ final class RemotePermissionsPanel extends JPanel
 			clicks.isSelected(),
 			notifications.isSelected(),
 			chatbox.isSelected(),
+			protectedExit.isSelected(),
+			activitySharing.isSelected(),
 			maximumIntensity.getValue(),
 			((Number) maximumDuration.getValue()).intValue(),
 			((Number) maximumLiveDurationSeconds.getValue()).intValue() * 1_000

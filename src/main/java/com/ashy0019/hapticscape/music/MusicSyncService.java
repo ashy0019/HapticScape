@@ -85,7 +85,7 @@ public final class MusicSyncService implements AutoCloseable
 			source = sourceFactory.get();
 			publish(new MusicSyncSnapshot(
 				MusicSyncSnapshot.State.STARTING,
-				"Opening Windows system audio",
+				"Opening system audio",
 				0
 			));
 			source.start(new AudioCaptureSource.Listener()

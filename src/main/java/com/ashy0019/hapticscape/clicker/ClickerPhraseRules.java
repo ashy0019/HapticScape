@@ -15,7 +15,8 @@ public final class ClickerPhraseRules
 	public static final int MAXIMUM_RULES = 50;
 
 	private static final String LEGACY_FORMAT_VERSION = "v1";
-	private static final String FORMAT_VERSION = "v2";
+	private static final String PREVIOUS_FORMAT_VERSION = "v2";
+	private static final String FORMAT_VERSION = "v3";
 	private static final Base64.Encoder ENCODER =
 		Base64.getUrlEncoder().withoutPadding();
 	private static final Base64.Decoder DECODER =
@@ -62,11 +63,13 @@ public final class ClickerPhraseRules
 		String[] entries = configuredValue.split(";", -1);
 		if (entries.length == 0
 			|| (!FORMAT_VERSION.equals(entries[0])
+				&& !PREVIOUS_FORMAT_VERSION.equals(entries[0])
 				&& !LEGACY_FORMAT_VERSION.equals(entries[0])))
 		{
 			return empty();
 		}
 		boolean legacy = LEGACY_FORMAT_VERSION.equals(entries[0]);
+		boolean previous = PREVIOUS_FORMAT_VERSION.equals(entries[0]);
 
 		List<ClickerPhraseRule> restored = new ArrayList<>();
 
@@ -80,16 +83,15 @@ public final class ClickerPhraseRules
 				continue;
 			}
 
-			String[] fields = entry.split(",", legacy ? 3 : 4);
-			if (fields.length != (legacy ? 3 : 4))
+			int expectedFields = legacy ? 3 : previous ? 4 : 5;
+			String[] fields = entry.split(",", expectedFields);
+			if (fields.length != expectedFields)
 			{
 				continue;
 			}
 
-			boolean enabled;
 			int enabledField = legacy ? 0 : 1;
-			int modeField = legacy ? 1 : 2;
-			int expressionField = legacy ? 2 : 3;
+			boolean enabled;
 			if ("1".equals(fields[enabledField]))
 			{
 				enabled = true;
@@ -105,6 +107,16 @@ public final class ClickerPhraseRules
 
 			try
 			{
+				int sequenceField = legacy || previous ? -1 : 2;
+				int modeField = legacy ? 1 : previous ? 2 : 3;
+				int expressionField = legacy ? 2 : previous ? 3 : 4;
+				ClickSequence sequence = sequenceField < 0
+					? ClickSequence.ONE
+					: ClickSequence.fromConfigValue(fields[sequenceField], ClickSequence.NONE);
+				if (!sequence.isEnabled())
+				{
+					continue;
+				}
 				ClickerPhraseMatchMode mode =
 					ClickerPhraseMatchMode.valueOf(
 						fields[modeField].trim().toUpperCase(Locale.ROOT)
@@ -121,6 +133,7 @@ public final class ClickerPhraseRules
 				ClickerPhraseRule rule = new ClickerPhraseRule(
 					id,
 					enabled,
+					sequence,
 					mode,
 					expression
 				);
@@ -149,9 +162,14 @@ public final class ClickerPhraseRules
 
 	public static boolean requiresMigration(String configuredValue)
 	{
-		return configuredValue != null
-			&& (configuredValue.equals(LEGACY_FORMAT_VERSION)
-				|| configuredValue.startsWith(LEGACY_FORMAT_VERSION + ";"));
+		if (configuredValue == null)
+		{
+			return false;
+		}
+		return configuredValue.equals(LEGACY_FORMAT_VERSION)
+			|| configuredValue.startsWith(LEGACY_FORMAT_VERSION + ";")
+			|| configuredValue.equals(PREVIOUS_FORMAT_VERSION)
+			|| configuredValue.startsWith(PREVIOUS_FORMAT_VERSION + ";");
 	}
 
 	public List<ClickerPhraseRule> getRules()
@@ -161,15 +179,20 @@ public final class ClickerPhraseRules
 
 	public boolean matches(String message)
 	{
+		return strongestMatch(message).isEnabled();
+	}
+
+	public ClickSequence strongestMatch(String message)
+	{
+		ClickSequence strongest = ClickSequence.NONE;
 		for (ClickerPhraseRule rule : rules)
 		{
 			if (rule.matches(message))
 			{
-				return true;
+				strongest = ClickSequence.strongest(strongest, rule.getSequence());
 			}
 		}
-
-		return false;
+		return strongest;
 	}
 
 	public ClickerPhraseRules withAdded(ClickerPhraseRule rule)
@@ -225,6 +248,8 @@ public final class ClickerPhraseRules
 				.append(rule.getId())
 				.append(',')
 				.append(rule.isEnabled() ? '1' : '0')
+				.append(',')
+				.append(rule.getSequence().toConfigValue())
 				.append(',')
 				.append(rule.getMode().name())
 				.append(',')

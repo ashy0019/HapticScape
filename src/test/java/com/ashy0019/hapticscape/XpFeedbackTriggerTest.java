@@ -1,7 +1,6 @@
 package com.ashy0019.hapticscape;
 
-import net.runelite.api.Experience;
-import net.runelite.api.Skill;
+import com.ashy0019.hapticscape.event.XpEvent;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -11,144 +10,156 @@ public class XpFeedbackTriggerTest
 	@Test
 	public void ordinaryXpGainUsesXpTriggerWhenThresholdIsMet()
 	{
-		XpChange change = changeBetweenXp(1_000, 1_050);
+		XpEvent event = eventBetweenXp(1_000, 1_050);
 
 		assertEquals(
 			XpFeedbackTrigger.XP_GAIN,
-			XpFeedbackTrigger.classify(change, 25, true, true, true)
+			XpFeedbackTrigger.classify(event, 25, true, true, true)
 		);
 	}
 
 	@Test
 	public void ordinaryXpGainBelowThresholdIsIgnored()
 	{
-		XpChange change = changeBetweenXp(1_000, 1_010);
+		XpEvent event = eventBetweenXp(1_000, 1_010);
 
 		assertEquals(
 			XpFeedbackTrigger.NONE,
-			XpFeedbackTrigger.classify(change, 25, true, true, true)
+			XpFeedbackTrigger.classify(event, 25, true, true, true)
 		);
 	}
 
 	@Test
 	public void levelUpTakesPriorityOverXpThreshold()
 	{
-		XpChange change = changeBetweenLevels(5, 6);
+		XpEvent event = eventBetweenLevels(5, 6);
 
 		assertEquals(
 			XpFeedbackTrigger.LEVEL_UP,
-			XpFeedbackTrigger.classify(change, 200_000_000, true, true, true)
+			XpFeedbackTrigger.classify(event, 200_000_000, true, true, true)
 		);
 	}
 
 	@Test
 	public void decadeMilestoneTakesPriorityOverOrdinaryLevelUp()
 	{
-		XpChange change = changeBetweenLevels(9, 10);
+		XpEvent event = eventBetweenLevels(9, 10);
 
 		assertEquals(
 			XpFeedbackTrigger.MILESTONE,
-			XpFeedbackTrigger.classify(change, 1, true, true, true)
+			XpFeedbackTrigger.classify(event, 1, true, true, true)
 		);
 	}
 
 	@Test
 	public void levelNinetyNineTakesHighestPriority()
 	{
-		XpChange change = changeBetweenLevels(89, 99);
+		XpEvent event = eventBetweenLevels(89, 99);
 
 		assertEquals(
 			XpFeedbackTrigger.LEVEL_99,
-			XpFeedbackTrigger.classify(change, 1, true, true, true)
+			XpFeedbackTrigger.classify(event, 1, true, true, true)
 		);
 	}
 
 	@Test
 	public void levelNinetyNineDoesNotDependOnOrdinaryLevelUpOrMilestoneSettings()
 	{
-		XpChange change = changeBetweenLevels(98, 99);
+		XpEvent event = eventBetweenLevels(98, 99);
 
 		assertEquals(
 			XpFeedbackTrigger.LEVEL_99,
-			XpFeedbackTrigger.classify(change, 200_000_000, false, false, true)
+			XpFeedbackTrigger.classify(event, 200_000_000, false, false, true)
 		);
 	}
 
 	@Test
 	public void levelNinetyNineTriggerRetainsTheSkillThatActuallyReachedNinetyNine()
 	{
-		XpChange change = changeBetweenLevels(Skill.COOKING, 98, 99);
+		XpEvent event = eventBetweenLevels("cooking", 98, 99);
 
-		assertEquals(Skill.COOKING, change.getSkill());
+		assertEquals("cooking", event.getSkillId());
 		assertEquals(
 			XpFeedbackTrigger.LEVEL_99,
-			XpFeedbackTrigger.classify(change, 1, true, true, true)
+			XpFeedbackTrigger.classify(event, 1, true, true, true)
 		);
 	}
 
 	@Test
 	public void disablingLevelNinetyNineFallsBackToOrdinaryLevelUp()
 	{
-		XpChange change = changeBetweenLevels(98, 99);
+		XpEvent event = eventBetweenLevels(98, 99);
 
 		assertEquals(
 			XpFeedbackTrigger.LEVEL_UP,
-			XpFeedbackTrigger.classify(change, 200_000_000, true, true, false)
+			XpFeedbackTrigger.classify(event, 200_000_000, true, true, false)
 		);
 	}
 
 	@Test
 	public void disablingLevelNinetyNineAndLevelUpsFallsBackToQualifiedXp()
 	{
-		XpChange change = changeBetweenLevels(98, 99);
+		XpEvent event = eventBetweenLevels(98, 99);
 
 		assertEquals(
 			XpFeedbackTrigger.XP_GAIN,
-			XpFeedbackTrigger.classify(change, 1, false, true, false)
+			XpFeedbackTrigger.classify(event, 1, false, true, false)
 		);
 	}
 
 	@Test
 	public void disablingMilestonesFallsBackToOrdinaryLevelUp()
 	{
-		XpChange change = changeBetweenLevels(9, 10);
+		XpEvent event = eventBetweenLevels(9, 10);
 
 		assertEquals(
 			XpFeedbackTrigger.LEVEL_UP,
-			XpFeedbackTrigger.classify(change, 1, true, false, true)
+			XpFeedbackTrigger.classify(event, 1, true, false, true)
 		);
 	}
 
 	@Test
 	public void disablingLevelUpFeedbackFallsBackToQualifiedXp()
 	{
-		XpChange change = changeBetweenLevels(9, 10);
+		XpEvent event = eventBetweenLevels(9, 10);
 
 		assertEquals(
 			XpFeedbackTrigger.XP_GAIN,
-			XpFeedbackTrigger.classify(change, 1, false, true, false)
+			XpFeedbackTrigger.classify(event, 1, false, true, false)
 		);
 	}
 
-	private static XpChange changeBetweenXp(int previousXp, int currentXp)
+	private static XpEvent eventBetweenXp(int previousXp, int currentXp)
 	{
-		XpTracker tracker = new XpTracker();
-		tracker.seed(Skill.AGILITY, previousXp);
-		return tracker.update(Skill.AGILITY, currentXp);
+		return new XpEvent(
+			"test-source",
+			"agility",
+			previousXp,
+			currentXp,
+			Math.max(0, currentXp - previousXp),
+			1,
+			1
+		);
 	}
 
-	private static XpChange changeBetweenLevels(int previousLevel, int currentLevel)
+	private static XpEvent eventBetweenLevels(int previousLevel, int currentLevel)
 	{
-		return changeBetweenLevels(Skill.AGILITY, previousLevel, currentLevel);
+		return eventBetweenLevels("agility", previousLevel, currentLevel);
 	}
 
-	private static XpChange changeBetweenLevels(
-		Skill skill,
+	private static XpEvent eventBetweenLevels(
+		String skillId,
 		int previousLevel,
 		int currentLevel)
 	{
-		XpTracker tracker = new XpTracker();
-		tracker.seed(skill, Experience.getXpForLevel(previousLevel));
-		return tracker.update(skill, Experience.getXpForLevel(currentLevel));
+		return new XpEvent(
+			"test-source",
+			skillId,
+			previousLevel * 1_000,
+			currentLevel * 1_000,
+			Math.max(0, (currentLevel - previousLevel) * 1_000),
+			previousLevel,
+			currentLevel
+		);
 	}
 }

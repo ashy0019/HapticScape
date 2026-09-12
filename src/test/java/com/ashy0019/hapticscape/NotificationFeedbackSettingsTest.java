@@ -17,7 +17,7 @@ public class NotificationFeedbackSettingsTest
 	}
 
 	@Test
-	public void focusedClientIsSuppressedWhenRuneLiteWouldSuppressNotification()
+	public void focusedSourceIsSuppressedWhenSourceWouldSuppressNotification()
 	{
 		NotificationFeedbackSettings settings = settings(true, true);
 
@@ -25,7 +25,7 @@ public class NotificationFeedbackSettingsTest
 	}
 
 	@Test
-	public void unfocusedClientPlaysWhenRespectingRuneLiteFocus()
+	public void unfocusedSourcePlaysWhenRespectingSourceFocus()
 	{
 		NotificationFeedbackSettings settings = settings(true, true);
 
@@ -33,7 +33,7 @@ public class NotificationFeedbackSettingsTest
 	}
 
 	@Test
-	public void focusedClientPlaysWhenNotificationAllowsIt()
+	public void focusedSourcePlaysWhenNotificationAllowsIt()
 	{
 		NotificationFeedbackSettings settings = settings(true, true);
 
@@ -69,7 +69,7 @@ public class NotificationFeedbackSettingsTest
 		);
 
 		assertTrue(settings.isEnabled());
-		assertTrue(settings.isRespectRuneLiteFocus());
+		assertTrue(settings.isRespectSourceFocus());
 		assertEquals(47, settings.getIntensityPercent());
 		assertEquals(650, settings.getDurationMillis());
 		assertEquals(HapticPatternSelection.custom(3), settings.getPatternSelection());
@@ -89,11 +89,11 @@ public class NotificationFeedbackSettingsTest
 
 	private static NotificationFeedbackSettings settings(
 		boolean enabled,
-		boolean respectRuneLiteFocus)
+		boolean respectSourceFocus)
 	{
 		return new NotificationFeedbackSettings(
 			enabled,
-			respectRuneLiteFocus,
+			respectSourceFocus,
 			50,
 			500,
 			HapticPatternSelection.DOUBLE

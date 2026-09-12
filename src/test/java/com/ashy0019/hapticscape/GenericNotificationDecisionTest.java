@@ -1,5 +1,6 @@
 package com.ashy0019.hapticscape;
 
+import com.ashy0019.hapticscape.event.NotificationEvent;
 import org.junit.Test;
 
 import static org.junit.Assert.assertFalse;
@@ -11,10 +12,9 @@ public class GenericNotificationDecisionTest
 	public void clickOnlyNotificationIsDispatched()
 	{
 		assertTrue(GenericNotificationDecision.shouldDispatch(
+			event(false, false),
 			settings(false, true),
-			true,
-			false,
-			false
+			true
 		));
 	}
 
@@ -22,9 +22,8 @@ public class GenericNotificationDecisionTest
 	public void hapticOnlyNotificationIsDispatched()
 	{
 		assertTrue(GenericNotificationDecision.shouldDispatch(
+			event(false, false),
 			settings(true, true),
-			false,
-			false,
 			false
 		));
 	}
@@ -33,10 +32,9 @@ public class GenericNotificationDecisionTest
 	public void notificationWithNoOutputIsIgnored()
 	{
 		assertFalse(GenericNotificationDecision.shouldDispatch(
+			event(false, true),
 			settings(false, false),
-			false,
-			false,
-			true
+			false
 		));
 	}
 
@@ -44,11 +42,15 @@ public class GenericNotificationDecisionTest
 	public void focusRuleAlsoAppliesToClickOnlyNotification()
 	{
 		assertFalse(GenericNotificationDecision.shouldDispatch(
+			event(true, false),
 			settings(false, true),
-			true,
-			true,
-			false
+			true
 		));
+	}
+
+	private static NotificationEvent event(boolean sourceFocused, boolean sendWhenFocused)
+	{
+		return new NotificationEvent("test", sourceFocused, sendWhenFocused);
 	}
 
 	private static NotificationFeedbackSettings settings(

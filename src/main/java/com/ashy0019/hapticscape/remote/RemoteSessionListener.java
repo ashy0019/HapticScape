@@ -23,4 +23,12 @@ public interface RemoteSessionListener
 	default void onRemoteActionAcknowledged(RemoteActionAcknowledgement acknowledgement)
 	{
 	}
+
+	default void onRemoteActivity(RemoteActivityEvent event)
+	{
+	}
+
+	default void onUnauthorizedEnd(String reason)
+	{
+	}
 }

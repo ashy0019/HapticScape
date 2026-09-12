@@ -1,6 +1,7 @@
 package com.ashy0019.hapticscape;
 
-import net.runelite.api.Skill;
+import java.util.Arrays;
+import java.util.List;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -9,14 +10,16 @@ import static org.junit.Assert.assertTrue;
 
 public class SkillSelectionTest
 {
+	private static final List<String> SKILLS = Arrays.asList("agility", "cooking");
+
 	@Test
-	public void defaultSelectionEnablesEveryAvailableSkill()
+	public void defaultSelectionEnablesEverySuppliedSkill()
 	{
 		SkillSelection selection = SkillSelection.fromConfigValue("");
 
-		for (Skill skill : SkillSelection.getSelectableSkills())
+		for (String skillId : SKILLS)
 		{
-			assertTrue(skill.getName(), selection.isEnabled(skill));
+			assertTrue(skillId, selection.isEnabled(skillId));
 		}
 	}
 
@@ -24,26 +27,27 @@ public class SkillSelectionTest
 	public void individualSkillsCanBeDisabledAndEnabledAgain()
 	{
 		SkillSelection selection = SkillSelection.allEnabled()
-			.withEnabled(Skill.AGILITY, false);
+			.withEnabled("agility", false);
 
-		assertFalse(selection.isEnabled(Skill.AGILITY));
-		assertTrue(selection.isEnabled(Skill.COOKING));
-		assertTrue(selection.withEnabled(Skill.AGILITY, true).isEnabled(Skill.AGILITY));
+		assertFalse(selection.isEnabled("AGILITY"));
+		assertTrue(selection.isEnabled("cooking"));
+		assertTrue(selection.withEnabled("Agility", true).isEnabled("agility"));
 	}
 
 	@Test
 	public void savedSelectionRoundTripsThroughConfiguration()
 	{
 		SkillSelection selection = SkillSelection.allEnabled()
-			.withEnabled(Skill.AGILITY, false)
-			.withEnabled(Skill.COOKING, false);
+			.withEnabled("agility", false)
+			.withEnabled("cooking", false);
 
 		String configuredValue = selection.toConfigValue();
 		SkillSelection restored = SkillSelection.fromConfigValue(configuredValue);
 
+		assertEquals("AGILITY,COOKING", configuredValue);
 		assertEquals(configuredValue, restored.toConfigValue());
-		assertFalse(restored.isEnabled(Skill.AGILITY));
-		assertFalse(restored.isEnabled(Skill.COOKING));
+		assertFalse(restored.isEnabled("agility"));
+		assertFalse(restored.isEnabled("cooking"));
 	}
 
 	@Test
@@ -51,33 +55,34 @@ public class SkillSelectionTest
 	{
 		SkillSelection restored = SkillSelection.fromConfigValue("AGILITY");
 
-		assertFalse(restored.isEnabled(Skill.AGILITY));
-		assertTrue(restored.isEnabled(Skill.COOKING));
+		assertFalse(restored.isEnabled("agility"));
+		assertTrue(restored.isEnabled("cooking"));
 	}
 
 	@Test
-	public void unknownSavedSkillsAreIgnored()
+	public void unknownSavedSkillIdsArePreservedForForwardCompatibility()
 	{
 		SkillSelection restored = SkillSelection.fromConfigValue(
-			"AGILITY,FUTURE_SKILL,OVERALL"
+			"AGILITY,FUTURE_SKILL"
 		);
 
-		assertEquals("AGILITY", restored.toConfigValue());
+		assertEquals("AGILITY,FUTURE_SKILL", restored.toConfigValue());
+		assertFalse(restored.isEnabled("future_skill"));
 	}
 
 	@Test
-	public void allAndNoneSelectionsCoverEveryAvailableSkill()
+	public void allAndNoneSelectionsUseAnExternalSkillCatalog()
 	{
-		SkillSelection none = SkillSelection.allEnabled().withAllEnabled(false);
+		SkillSelection none = SkillSelection.allEnabled().withAllEnabled(SKILLS, false);
 
-		assertEquals(0, none.getEnabledCount());
-		for (Skill skill : SkillSelection.getSelectableSkills())
+		assertEquals(0, none.getEnabledCount(SKILLS));
+		for (String skillId : SKILLS)
 		{
-			assertFalse(skill.getName(), none.isEnabled(skill));
+			assertFalse(skillId, none.isEnabled(skillId));
 		}
 		assertEquals(
-			SkillSelection.getSelectableSkills().size(),
-			none.withAllEnabled(true).getEnabledCount()
+			SKILLS.size(),
+			none.withAllEnabled(SKILLS, true).getEnabledCount(SKILLS)
 		);
 	}
 }

@@ -1,25 +1,22 @@
 package com.ashy0019.hapticscape;
 
 import java.util.Collections;
-import java.util.EnumMap;
-import java.util.Locale;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.StringJoiner;
-import net.runelite.api.Skill;
 
+/** Source-neutral per-skill XP feedback overrides keyed by canonical skill ID. */
 public final class SkillFeedbackProfiles
 {
 	private static final String VERSION_PREFIX = "v1|";
 
-	private final Map<Skill, XpFeedbackSettings> overrides;
+	private final Map<String, XpFeedbackSettings> overrides;
 
-	private SkillFeedbackProfiles(Map<Skill, XpFeedbackSettings> overrides)
+	private SkillFeedbackProfiles(Map<String, XpFeedbackSettings> overrides)
 	{
-		EnumMap<Skill, XpFeedbackSettings> copy = new EnumMap<>(Skill.class);
-		copy.putAll(overrides);
-		this.overrides = Collections.unmodifiableMap(copy);
+		this.overrides = Collections.unmodifiableMap(new LinkedHashMap<>(overrides));
 	}
 
 	public static SkillFeedbackProfiles empty()
@@ -40,7 +37,7 @@ public final class SkillFeedbackProfiles
 			return empty();
 		}
 
-		EnumMap<Skill, XpFeedbackSettings> parsed = new EnumMap<>(Skill.class);
+		LinkedHashMap<String, XpFeedbackSettings> parsed = new LinkedHashMap<>();
 		String entries = trimmed.substring(VERSION_PREFIX.length());
 		for (String entry : entries.split(";"))
 		{
@@ -52,14 +49,14 @@ public final class SkillFeedbackProfiles
 
 			try
 			{
-				Skill skill = Skill.valueOf(fields[0].trim().toUpperCase(Locale.ROOT));
+				String skillId = SkillIds.canonical(fields[0]);
 				int minimumXpGain = Integer.parseInt(fields[1].trim());
 				int intensityPercent = Integer.parseInt(fields[2].trim());
 				int durationMillis = Integer.parseInt(fields[3].trim());
 				HapticPatternSelection pattern =
 					HapticPatternSelection.fromConfigValue(fields[4]);
 				parsed.put(
-					skill,
+					skillId,
 					new XpFeedbackSettings(
 						minimumXpGain,
 						intensityPercent,
@@ -70,45 +67,43 @@ public final class SkillFeedbackProfiles
 			}
 			catch (IllegalArgumentException ignored)
 			{
-				// Ignore unknown skills, removed presets, and invalid numeric values.
+				// Ignore malformed identifiers, removed presets, and invalid numeric values.
 			}
 		}
 		return new SkillFeedbackProfiles(parsed);
 	}
 
-	public Optional<XpFeedbackSettings> getOverride(Skill skill)
+	public Optional<XpFeedbackSettings> getOverride(String skillId)
 	{
-		return Optional.ofNullable(overrides.get(Objects.requireNonNull(skill, "skill")));
+		return Optional.ofNullable(overrides.get(SkillIds.canonical(skillId)));
 	}
 
-	public XpFeedbackSettings resolve(Skill skill, XpFeedbackSettings globalSettings)
+	public XpFeedbackSettings resolve(String skillId, XpFeedbackSettings globalSettings)
 	{
 		Objects.requireNonNull(globalSettings, "globalSettings");
-		return getOverride(skill).orElse(globalSettings);
+		return getOverride(skillId).orElse(globalSettings);
 	}
 
-	public SkillFeedbackProfiles withOverride(Skill skill, XpFeedbackSettings settings)
+	public SkillFeedbackProfiles withOverride(String skillId, XpFeedbackSettings settings)
 	{
-		EnumMap<Skill, XpFeedbackSettings> updated = new EnumMap<>(Skill.class);
-		updated.putAll(overrides);
+		LinkedHashMap<String, XpFeedbackSettings> updated = new LinkedHashMap<>(overrides);
 		updated.put(
-			Objects.requireNonNull(skill, "skill"),
+			SkillIds.canonical(skillId),
 			Objects.requireNonNull(settings, "settings")
 		);
 		return new SkillFeedbackProfiles(updated);
 	}
 
-	public SkillFeedbackProfiles withoutOverride(Skill skill)
+	public SkillFeedbackProfiles withoutOverride(String skillId)
 	{
-		Objects.requireNonNull(skill, "skill");
-		if (!overrides.containsKey(skill))
+		String canonical = SkillIds.canonical(skillId);
+		if (!overrides.containsKey(canonical))
 		{
 			return this;
 		}
 
-		EnumMap<Skill, XpFeedbackSettings> updated = new EnumMap<>(Skill.class);
-		updated.putAll(overrides);
-		updated.remove(skill);
+		LinkedHashMap<String, XpFeedbackSettings> updated = new LinkedHashMap<>(overrides);
+		updated.remove(canonical);
 		return new SkillFeedbackProfiles(updated);
 	}
 
@@ -120,9 +115,9 @@ public final class SkillFeedbackProfiles
 	public SkillFeedbackProfiles replaceMissingCustomPatterns(
 		CustomPatternLibrary customPatterns)
 	{
-		EnumMap<Skill, XpFeedbackSettings> updated = new EnumMap<>(Skill.class);
+		LinkedHashMap<String, XpFeedbackSettings> updated = new LinkedHashMap<>();
 		boolean changed = false;
-		for (Map.Entry<Skill, XpFeedbackSettings> entry : overrides.entrySet())
+		for (Map.Entry<String, XpFeedbackSettings> entry : overrides.entrySet())
 		{
 			XpFeedbackSettings settings = entry.getValue();
 			HapticPatternSelection resolved = settings.getPatternSelection()
@@ -150,16 +145,11 @@ public final class SkillFeedbackProfiles
 		}
 
 		StringJoiner entries = new StringJoiner(";");
-		for (Skill skill : Skill.values())
+		for (Map.Entry<String, XpFeedbackSettings> entry : overrides.entrySet())
 		{
-			XpFeedbackSettings settings = overrides.get(skill);
-			if (settings == null)
-			{
-				continue;
-			}
-
+			XpFeedbackSettings settings = entry.getValue();
 			entries.add(
-				skill.name()
+				SkillIds.toConfigToken(entry.getKey())
 					+ "," + settings.getMinimumXpGain()
 					+ "," + settings.getIntensityPercent()
 					+ "," + settings.getDurationMillis()

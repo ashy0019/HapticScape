@@ -1,9 +1,10 @@
 package com.ashy0019.hapticscape;
 
+import com.ashy0019.hapticscape.event.NotificationEvent;
 import java.util.Objects;
 
 /**
- * Decides whether a RuneLite notification has any enabled output channel.
+ * Decides whether a source-neutral notification has any enabled output channel.
  */
 public final class GenericNotificationDecision
 {
@@ -12,16 +13,16 @@ public final class GenericNotificationDecision
 	}
 
 	public static boolean shouldDispatch(
+		NotificationEvent event,
 		NotificationFeedbackSettings hapticSettings,
-		boolean clickEnabled,
-		boolean runeLiteFocused,
-		boolean notificationSendsWhenFocused)
+		boolean clickEnabled)
 	{
+		Objects.requireNonNull(event, "event");
 		Objects.requireNonNull(hapticSettings, "hapticSettings");
 		return (hapticSettings.isEnabled() || clickEnabled)
 			&& hapticSettings.allowsFocus(
-				runeLiteFocused,
-				notificationSendsWhenFocused
+				event.isSourceFocused(),
+				event.isSendWhenFocused()
 			);
 	}
 }

@@ -4,83 +4,50 @@ plugins {
 
 repositories {
 	mavenLocal()
-	maven {
-		url = 'https://repo.runelite.net'
-		content {
-			includeGroupByRegex("net\\.runelite.*")
-		}
-	}
 	mavenCentral()
 }
 
-def runeLiteVersion = '1.12.38'
-def pluginMainClass = 'com.ashy0019.hapticscape.HapticScapeClient'
+def desktopMainClass = 'com.ashy0019.hapticscape.desktop.HapticScapeDesktopMain'
 def appVersion = providers.gradleProperty('appVersion').orElse('development')
 version = appVersion.get()
-def approvedRuntimeModules = [
-	'aopalliance:aopalliance',
+// Keep the packaged desktop runtime dependency set explicit.
+// verifyStandaloneDependencies fails if the runtime graph grows unexpectedly.
+def standaloneRuntimeModules = [
 	'ch.qos.logback:logback-classic',
 	'ch.qos.logback:logback-core',
-	'com.fifesoft:autocomplete',
-	'com.fifesoft:rsyntaxtextarea',
-	'com.github.weisj:jsvg',
-	'com.google.code.findbugs:jsr305',
+	'com.formdev:flatlaf',
 	'com.google.code.gson:gson',
-	'com.google.guava:guava',
-	'com.google.inject:guice',
-	'com.google.protobuf:protobuf-javalite',
 	'com.squareup.okhttp3:okhttp',
 	'com.squareup.okio:okio',
-	'javax.inject:javax.inject',
 	'net.java.dev.jna:jna',
 	'net.java.dev.jna:jna-platform',
-	'net.runelite.arn:http-api',
-	'net.runelite:client',
-	'net.runelite:discord',
-	'net.runelite:flatlaf',
-	'net.runelite:flatlaf-extras',
-	'net.runelite:injected-client',
-	'net.runelite:jshell',
-	'net.runelite:rlawt',
-	'net.runelite:rlicn',
-	'net.runelite:runelite-api',
-	'net.sf.jopt-simple:jopt-simple',
-	'org.apache.commons:commons-lang3',
-	'org.apache.commons:commons-text',
-	'org.json:json',
-	'org.lwjgl:lwjgl',
-	'org.lwjgl:lwjgl-opencl',
-	'org.lwjgl:lwjgl-opengl',
 	'org.slf4j:slf4j-api'
 ] as Set
 
 dependencies {
-	compileOnly group: 'net.runelite', name:'client', version: runeLiteVersion
+	implementation 'com.formdev:flatlaf:3.7.2'
+	implementation 'com.google.code.gson:gson:2.8.5'
+	implementation 'com.squareup.okhttp3:okhttp:3.14.9'
+	implementation 'net.java.dev.jna:jna:5.9.0'
+	implementation 'net.java.dev.jna:jna-platform:5.9.0'
+	implementation 'org.slf4j:slf4j-api:1.7.32'
+	runtimeOnly 'ch.qos.logback:logback-classic:1.2.9'
 
 	compileOnly 'org.projectlombok:lombok:1.18.30'
 	annotationProcessor 'org.projectlombok:lombok:1.18.30'
 
 	testImplementation 'junit:junit:4.12'
-	testImplementation group: 'net.runelite', name:'client', version: runeLiteVersion
-	testImplementation group: 'net.runelite', name:'jshell', version: runeLiteVersion
 }
 
-def isTestOnlyRuntimeArtifact = { artifact ->
-	(artifact.moduleVersion.id.group == 'junit' && artifact.name == 'junit') ||
-		(artifact.moduleVersion.id.group == 'org.hamcrest' && artifact.name == 'hamcrest-core')
-}
-
-def packagedRuntimeArtifacts = {
-	configurations.testRuntimeClasspath.resolvedConfiguration.resolvedArtifacts.findAll { artifact ->
-		!isTestOnlyRuntimeArtifact(artifact)
+def standaloneRuntimeArtifacts = {
+	configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts.findAll { artifact ->
+		def module = "${artifact.moduleVersion.id.group}:${artifact.name}".toString()
+		standaloneRuntimeModules.contains(module)
 	}
 }
 
-def packagedRuntimeFiles = {
-	def testOnlyFiles = configurations.testRuntimeClasspath.resolvedConfiguration.resolvedArtifacts.findAll { artifact ->
-		isTestOnlyRuntimeArtifact(artifact)
-	}.collect { it.file }.toSet()
-	configurations.testRuntimeClasspath.findAll { !testOnlyFiles.contains(it) }
+def standaloneRuntimeFiles = {
+	standaloneRuntimeArtifacts().collect { it.file }
 }
 
 group = 'com.ashy0019'
@@ -96,24 +63,22 @@ tasks.named('processResources') {
 	}
 }
 
-tasks.register('run', JavaExec) {
-	classpath = sourceSets.test.runtimeClasspath
-	mainClass = pluginMainClass
-
-	jvmArgs "-ea"
-	args "--developer-mode", "--debug"
-}
-
-tasks.register('shadowJar', Jar) {
-	dependsOn configurations.testRuntimeClasspath
+tasks.register('standaloneJar', Jar) {
+	dependsOn tasks.named('classes')
+	dependsOn configurations.runtimeClasspath
 	manifest {
-		attributes('Main-Class': pluginMainClass, 'Multi-Release': true)
+		attributes(
+			'Main-Class': desktopMainClass,
+			'Multi-Release': true,
+			'Implementation-Title': 'HapticScape Desktop',
+			'Implementation-Version': appVersion.get()
+		)
 	}
 
 	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-	from sourceSets.main.output
+	from(sourceSets.main.output)
 	from {
-		packagedRuntimeFiles().collect { file ->
+		standaloneRuntimeFiles().collect { file ->
 			file.isDirectory() ? file : zipTree(file)
 		}
 	}
@@ -125,53 +90,121 @@ tasks.register('shadowJar', Jar) {
 	exclude '**/module-info.class'
 
 	group = BasePlugin.BUILD_GROUP
-	archiveClassifier.set('shadow')
-	archiveFileName.set("hapticscape-client.jar")
+	archiveClassifier.set('desktop')
+	archiveFileName.set('hapticscape-desktop.jar')
 }
 
-tasks.register('verifyClientJar') {
-	dependsOn tasks.named('shadowJar')
+tasks.register('runStandalone', JavaExec) {
+	dependsOn tasks.named('standaloneJar')
+	classpath = files(tasks.named('standaloneJar').flatMap { it.archiveFile })
+	mainClass = desktopMainClass
+	jvmArgs "-ea"
+}
+
+tasks.register('verifySourceIndependence') {
+	def forbiddenHostTerms = ['rune' + 'lite']
+	def productionJavaSources = fileTree('src/main/java') {
+		include '**/*.java'
+	}
+	inputs.files(productionJavaSources)
 
 	doLast {
-		def clientJar = tasks.named('shadowJar').get().archiveFile.get().asFile
-		def forbiddenEntries = []
+		def violations = []
+		productionJavaSources.files.sort { left, right ->
+			project.relativePath(left) <=> project.relativePath(right)
+		}.each { sourceFile ->
+			def relativePath = project.relativePath(sourceFile).replace('\\', '/')
+			sourceFile.eachLine('UTF-8') { line, lineNumber ->
+				def normalized = line.toLowerCase(java.util.Locale.ROOT)
+				if (forbiddenHostTerms.any { normalized.contains(it) }) {
+					violations.add("${relativePath}:${lineNumber}: ${line.trim()}")
+				}
+			}
+		}
+
+		if (!violations.isEmpty()) {
+			throw new GradleException(
+				'Host-specific terminology leaked into the standalone production source:\n  '
+					+ violations.join('\n  ')
+			)
+		}
+	}
+}
+
+tasks.register('verifyStandaloneDependencies') {
+	dependsOn configurations.runtimeClasspath
+
+	doLast {
+		def runtimeArtifacts = configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts
+		def runtimeModules = runtimeArtifacts.collect { artifact ->
+			"${artifact.moduleVersion.id.group}:${artifact.name}".toString()
+		}.toSet()
+		def unexpectedModules = runtimeModules.findAll { !standaloneRuntimeModules.contains(it) }
+
+		if (!unexpectedModules.isEmpty()) {
+			throw new GradleException(
+				"Standalone runtime contains unreviewed dependencies: ${unexpectedModules.sort().join(', ')}"
+			)
+		}
+	}
+}
+
+tasks.register('verifyStandaloneJar') {
+	dependsOn tasks.named('standaloneJar')
+	dependsOn tasks.named('verifyStandaloneDependencies')
+
+	doLast {
+		def jarFile = tasks.named('standaloneJar').get().archiveFile.get().asFile
 		def hasLauncher = false
 		def hasVersionResource = false
+		def forbiddenEntries = []
 
-		zipTree(clientJar).visit { details ->
+		zipTree(jarFile).visit { details ->
 			if (details.directory) {
 				return
 			}
 
 			def path = details.relativePath.pathString
-			if (path == 'com/ashy0019/hapticscape/HapticScapeClient.class') {
+			if (path == 'com/ashy0019/hapticscape/desktop/HapticScapeDesktopMain.class') {
 				hasLauncher = true
 			}
 			if (path == 'hapticscape-version.properties') {
 				hasVersionResource = true
 			}
-			if (path.startsWith('org/junit/') ||
-				path.startsWith('org/hamcrest/') ||
-				(path.startsWith('com/ashy0019/hapticscape/') && path.endsWith('Test.class'))) {
+			if (path.startsWith('org/junit/')
+				|| path.startsWith('org/hamcrest/')
+				|| (path.startsWith('com/ashy0019/hapticscape/') && path.endsWith('Test.class'))) {
 				forbiddenEntries.add(path)
 			}
 		}
 
 		if (!hasLauncher) {
-			throw new GradleException('The packaged client launcher class is missing.')
+			throw new GradleException('The standalone desktop launcher class is missing.')
 		}
 		if (!hasVersionResource) {
-			throw new GradleException('The packaged client version metadata is missing.')
+			throw new GradleException('The standalone version metadata is missing.')
 		}
 		if (!forbiddenEntries.isEmpty()) {
-			throw new GradleException("Test code leaked into the packaged client: ${forbiddenEntries.join(', ')}")
+			throw new GradleException(
+				"Test code leaked into the standalone JAR: ${forbiddenEntries.sort().join(', ')}"
+			)
 		}
 	}
 }
 
+tasks.register('verifyStandaloneArtifact') {
+	dependsOn tasks.named('verifySourceIndependence')
+	dependsOn tasks.named('verifyStandaloneJar')
+}
+
+// Keep every ordinary test run enforcing the standalone boundary as well.
+tasks.named('test') {
+	dependsOn tasks.named('verifyStandaloneArtifact')
+}
+
 tasks.register('collectRuntimeLicenses') {
-	dependsOn configurations.testRuntimeClasspath
-	inputs.files(configurations.testRuntimeClasspath)
+	dependsOn configurations.runtimeClasspath
+	inputs.files(configurations.runtimeClasspath)
 	outputs.dir(layout.buildDirectory.dir('generated/runtime-licenses'))
 
 	doLast {
@@ -179,14 +212,14 @@ tasks.register('collectRuntimeLicenses') {
 		delete outputDirectory
 		outputDirectory.mkdirs()
 
-		def artifacts = packagedRuntimeArtifacts().sort {
+		def artifacts = standaloneRuntimeArtifacts().sort {
 			left, right ->
 			"${left.moduleVersion.id.group}:${left.name}:${left.moduleVersion.id.version}:${left.classifier ?: ''}" <=>
 				"${right.moduleVersion.id.group}:${right.name}:${right.moduleVersion.id.version}:${right.classifier ?: ''}"
 		}
 		def unexpectedModules = artifacts.collect {
 			"${it.moduleVersion.id.group}:${it.name}".toString()
-		}.toSet().findAll { !approvedRuntimeModules.contains(it) }
+		}.toSet().findAll { !standaloneRuntimeModules.contains(it) }
 		if (!unexpectedModules.isEmpty()) {
 			throw new GradleException(
 				"The runtime contains dependencies that have not been reviewed for redistribution: ${unexpectedModules.sort().join(', ')}"

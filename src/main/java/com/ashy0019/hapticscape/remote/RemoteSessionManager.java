@@ -35,6 +35,7 @@ public final class RemoteSessionManager implements AutoCloseable
 	private final EffectiveSettingsService effectiveSettings;
 	private final SettingsLockService settingsLockService;
 	private final RemoteActionCoordinator actionCoordinator;
+	private final RemoteActivityCoordinator activityCoordinator;
 	private final RemoteLockCoordinator lockCoordinator;
 	private final RemotePermissionsCoordinator permissionsCoordinator;
 	private final RemoteSettingsCoordinator settingsCoordinator;
@@ -61,7 +62,8 @@ public final class RemoteSessionManager implements AutoCloseable
 		Gson gson,
 		RemoteSettingsStore settingsStore,
 		EffectiveSettingsService effectiveSettings,
-		SettingsLockService settingsLockService)
+		SettingsLockService settingsLockService,
+		SavedUnlockKeyStore savedUnlockKeyStore)
 	{
 		this(
 			httpClient,
@@ -69,6 +71,7 @@ public final class RemoteSessionManager implements AutoCloseable
 			settingsStore,
 			effectiveSettings,
 			settingsLockService,
+			savedUnlockKeyStore,
 			new InMemoryRemotePermissionsStore(RemotePermissions.defaults()),
 			RemoteActionExecutor.NO_OP
 		);
@@ -80,6 +83,7 @@ public final class RemoteSessionManager implements AutoCloseable
 		RemoteSettingsStore settingsStore,
 		EffectiveSettingsService effectiveSettings,
 		SettingsLockService settingsLockService,
+		SavedUnlockKeyStore savedUnlockKeyStore,
 		RemotePermissionsStore permissionsStore,
 		RemoteActionExecutor remoteActionExecutor)
 	{
@@ -88,7 +92,7 @@ public final class RemoteSessionManager implements AutoCloseable
 			settingsStore,
 			effectiveSettings,
 			settingsLockService,
-			new SavedUnlockKeyStore(gson),
+			Objects.requireNonNull(savedUnlockKeyStore, "savedUnlockKeyStore"),
 			permissionsStore,
 			remoteActionExecutor,
 			Clock.systemUTC(),
@@ -179,13 +183,10 @@ public final class RemoteSessionManager implements AutoCloseable
 			this::send,
 			this::publishActionAcknowledgement
 		);
-		this.lockCoordinator = new RemoteLockCoordinator(
+		this.activityCoordinator = new RemoteActivityCoordinator(
 			gson,
-			settingsLockService,
-			requiredSavedUnlockKeyStore,
 			this::send,
-			this::publishLockSnapshot,
-			this::publishLockProposal
+			this::publishActivity
 		);
 		this.permissionsCoordinator = new RemotePermissionsCoordinator(
 			gson,
@@ -193,6 +194,15 @@ public final class RemoteSessionManager implements AutoCloseable
 			this::send,
 			this::publishPermissions,
 			actionCoordinator::clearControllerLiveStream
+		);
+		this.lockCoordinator = new RemoteLockCoordinator(
+			gson,
+			settingsLockService,
+			requiredSavedUnlockKeyStore,
+			this::send,
+			this::publishLockSnapshot,
+			this::publishLockProposal,
+			() -> permissionsCoordinator.getLocal().isProtectedExitAllowed()
 		);
 		this.settingsCoordinator = new RemoteSettingsCoordinator(
 			gson,
@@ -208,6 +218,7 @@ public final class RemoteSessionManager implements AutoCloseable
 			permissionsCoordinator,
 			lockCoordinator,
 			actionCoordinator,
+			activityCoordinator,
 			new LifecycleMessages()
 		);
 		this.settingsLockService.addListener(settingsLockListener);
@@ -304,6 +315,32 @@ public final class RemoteSessionManager implements AutoCloseable
 	public synchronized String stopRemoteOutput()
 	{
 		return actionCoordinator.stop(role, snapshot.getState());
+	}
+
+	/** Publishes one sanitized local gameplay fact when the participant allows it. */
+	public synchronized boolean publishGameplayActivity(RemoteActivityEvent event)
+	{
+		return activityCoordinator.publish(
+			role,
+			snapshot.getState(),
+			permissionsCoordinator.getLocal(),
+			event
+		);
+	}
+
+	/** Reports an end which was not authorized by the protected-exit password. */
+	public synchronized boolean reportUnauthorizedEnd(String reason)
+	{
+		if (role != RemoteRole.PARTICIPANT
+			|| snapshot.getState() == RemoteSessionState.LOCAL
+			|| snapshot.getState() == RemoteSessionState.DISCONNECTED)
+		{
+			return false;
+		}
+		String message = reason == null || reason.trim().isEmpty()
+			? "UNAUTHORIZED_END"
+			: reason.trim();
+		return send(RemoteMessageType.UNAUTHORIZED_END, 0, message);
 	}
 
 	public synchronized void beginRemoteLiveHaptic(int intensityPercent)
@@ -424,6 +461,15 @@ public final class RemoteSessionManager implements AutoCloseable
 		char[] password,
 		java.util.Collection<SettingsLockTarget> targets)
 	{
+		if (targets != null
+			&& (targets.contains(SettingsLockCatalog.PROTECTED_EXIT)
+				|| targets.contains(SettingsLockCatalog.STARTUP_BEHAVIOR))
+			&& !permissionsCoordinator.getPeer().isProtectedExitAllowed())
+		{
+			throw new IllegalStateException(
+				"The participant has not allowed protected startup/exit requests"
+			);
+		}
 		lockCoordinator.propose(role, snapshot.getState(), password, targets);
 	}
 
@@ -841,6 +887,14 @@ public final class RemoteSessionManager implements AutoCloseable
 		}
 	}
 
+	private void publishActivity(RemoteActivityEvent event)
+	{
+		for (RemoteSessionListener listener : listeners)
+		{
+			listener.onRemoteActivity(event);
+		}
+	}
+
 	private RemotePermissions visiblePermissions()
 	{
 		return permissionsCoordinator.getVisible(role);
@@ -985,6 +1039,20 @@ public final class RemoteSessionManager implements AutoCloseable
 		public void handlePeerEnd()
 		{
 			endSessionInternal(false, "Remote peer ended the session");
+		}
+
+		@Override
+		public void handleUnauthorizedEnd(String reason)
+		{
+			if (role != RemoteRole.CONTROLLER)
+			{
+				return;
+			}
+			publish(snapshot.getState(), "Unauthorized end flagged by participant client");
+			for (RemoteSessionListener listener : listeners)
+			{
+				listener.onUnauthorizedEnd(reason);
+			}
 		}
 
 		@Override

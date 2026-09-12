@@ -1,5 +1,6 @@
 package com.ashy0019.hapticscape.remote;
 
+import com.ashy0019.hapticscape.storage.HapticScapeStoragePaths;
 import com.google.gson.Gson;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -23,9 +24,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import net.runelite.client.RuneLite;
 
-/** Persistent controller vault containing only DPAPI-protected unlock keys. */
+/** Persistent controller vault containing only platform-protected unlock keys. */
 public final class SavedUnlockKeyStore
 {
 	private static final Logger LOG = Logger.getLogger(SavedUnlockKeyStore.class.getName());
@@ -44,14 +44,15 @@ public final class SavedUnlockKeyStore
 	private List<SavedUnlockKey> entries = Collections.emptyList();
 	private String loadFailure;
 
-	public SavedUnlockKeyStore(Gson gson)
+	public SavedUnlockKeyStore(
+		Gson gson,
+		HapticScapeStoragePaths storagePaths,
+		UnlockKeyProtector protector)
 	{
 		this(
 			gson,
-			RuneLite.RUNELITE_DIR.toPath()
-				.resolve("hapticscape")
-				.resolve("saved-unlock-keys.json"),
-			new WindowsDpapiUnlockKeyProtector(),
+			Objects.requireNonNull(storagePaths, "storagePaths").getSavedUnlockKeysPath(),
+			Objects.requireNonNull(protector, "protector"),
 			Clock.systemDefaultZone()
 		);
 	}
@@ -63,8 +64,10 @@ public final class SavedUnlockKeyStore
 		Clock clock)
 	{
 		this.gson = Objects.requireNonNull(gson, "gson");
-		this.path = Objects.requireNonNull(path, "path");
 		this.protector = Objects.requireNonNull(protector, "protector");
+		this.path = protector.isAvailable()
+			? Objects.requireNonNull(path, "path")
+			: path;
 		this.clock = Objects.requireNonNull(clock, "clock");
 		if (protector.isAvailable())
 		{
@@ -76,7 +79,7 @@ public final class SavedUnlockKeyStore
 	{
 		return new SavedUnlockKeyStore(
 			gson,
-			java.nio.file.Paths.get("saved-unlock-keys-disabled.json"),
+			null,
 			new UnavailableProtector(),
 			Clock.systemUTC()
 		);

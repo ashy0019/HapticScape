@@ -2,51 +2,64 @@ package com.ashy0019.hapticscape.ui;
 
 import com.ashy0019.hapticscape.CustomPatternLibrary;
 import com.ashy0019.hapticscape.HapticPatternSelection;
-import com.ashy0019.hapticscape.HapticScapeConfig;
+import com.ashy0019.hapticscape.HapticScapeSettingKeys;
+import com.ashy0019.hapticscape.SkillCatalog;
+import com.ashy0019.hapticscape.SkillClickProfiles;
+import com.ashy0019.hapticscape.SkillDescriptor;
 import com.ashy0019.hapticscape.SkillFeedbackProfiles;
-import com.ashy0019.hapticscape.SkillSelection;
 import com.ashy0019.hapticscape.XpFeedbackSettings;
+import com.ashy0019.hapticscape.clicker.ClickSequence;
+import com.ashy0019.hapticscape.clicker.ClickerXpSettings;
 import com.ashy0019.hapticscape.remote.RemoteSessionManager;
 import com.ashy0019.hapticscape.remote.SettingsLockCatalog;
 import com.ashy0019.hapticscape.remote.SettingsLockService;
 import com.ashy0019.hapticscape.remote.SettingsLockTarget;
 import java.awt.BorderLayout;
-import java.awt.Component;
+import java.awt.Font;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
-import javax.swing.DefaultListCellRenderer;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
-import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
 import javax.swing.SpinnerNumberModel;
-import net.runelite.api.Skill;
 
 final class ProfilesPanel extends JPanel
 {
 	private final SettingsChangeSink settingsSink;
 	private final Supplier<XpFeedbackSettings> globalSettingsSupplier;
+	private final Supplier<ClickerXpSettings> globalClickSettingsSupplier;
 	private final Supplier<CustomPatternLibrary> customPatternsSupplier;
-	private final JComboBox<Skill> skillComboBox;
+	private final Map<String, SkillDescriptor> skillsById = new LinkedHashMap<>();
+	private final JLabel selectedSkillLabel = new JLabel();
 	private final JCheckBox useGlobalCheckBox = new JCheckBox("Use global XP settings");
 	private final JSpinner minimumXpSpinner;
 	private final JSlider intensitySlider;
 	private final JLabel intensityValueLabel = new JLabel();
 	private final JComboBox<HapticPatternSelection> patternComboBox;
 	private final JSpinner durationSpinner;
+	private final JSpinner minimumClickXpSpinner;
+	private final JComboBox<ClickSequence> xpClickSequenceComboBox =
+		ClickSequenceControls.enabledOnly();
+	private final JComboBox<ClickSequence> levelUpClickSequenceComboBox =
+		ClickSequenceControls.override();
+	private final JComboBox<ClickSequence> milestoneClickSequenceComboBox =
+		ClickSequenceControls.override();
 	private final JButton testButton = new JButton("Test selected skill");
 	private final LockableCheckBoxBinding useGlobalLockBinding;
 	private final LockableSectionHeader profileBlockHeader;
 
 	private volatile SkillFeedbackProfiles profiles;
-	private volatile Skill selectedSkill;
+	private volatile SkillClickProfiles clickProfiles;
+	private volatile SkillDescriptor selectedSkill;
 	private boolean updatingControls;
 	private boolean updatingPatternChoices;
 	private boolean connected;
@@ -54,9 +67,12 @@ final class ProfilesPanel extends JPanel
 	private boolean previewAllowed = true;
 
 	ProfilesPanel(
+		SkillCatalog skillCatalog,
 		SkillFeedbackProfiles profiles,
+		SkillClickProfiles clickProfiles,
 		SettingsChangeSink settingsSink,
 		Supplier<XpFeedbackSettings> globalSettingsSupplier,
+		Supplier<ClickerXpSettings> globalClickSettingsSupplier,
 		Supplier<CustomPatternLibrary> customPatternsSupplier,
 		Runnable testAction,
 		RemoteSessionManager sessionManager,
@@ -66,40 +82,26 @@ final class ProfilesPanel extends JPanel
 		BooleanSupplier lockSelectionEnabled)
 	{
 		this.profiles = profiles;
+		this.clickProfiles = clickProfiles;
 		this.settingsSink = settingsSink;
 		this.globalSettingsSupplier = globalSettingsSupplier;
+		this.globalClickSettingsSupplier = globalClickSettingsSupplier;
 		this.customPatternsSupplier = customPatternsSupplier;
+		setName("skillProfileEditor");
 		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
-		setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+		setBorder(PanelUi.createSectionBorder("Skill override"));
 
-		Skill[] skills = SkillSelection.getSelectableSkills().toArray(new Skill[0]);
-		skillComboBox = new JComboBox<>(skills);
-		skillComboBox.setRenderer(new DefaultListCellRenderer()
+		SkillDescriptor[] skills = skillCatalog.getSkills().toArray(new SkillDescriptor[0]);
+		for (SkillDescriptor skill : skills)
 		{
-			@Override
-			public Component getListCellRendererComponent(
-				JList<?> list,
-				Object value,
-				int index,
-				boolean isSelected,
-				boolean cellHasFocus)
-			{
-				super.getListCellRendererComponent(
-					list,
-					value,
-					index,
-					isSelected,
-					cellHasFocus
-				);
-				setText(value instanceof Skill ? ((Skill) value).getName() : "");
-				return this;
-			}
-		});
-		PanelUi.setFixedWidth(skillComboBox, PanelUi.SELECTOR_CONTROL_WIDTH);
+			skillsById.put(skill.getId(), skill);
+		}
 		selectedSkill = skills[0];
+		selectedSkillLabel.setFont(selectedSkillLabel.getFont().deriveFont(Font.BOLD));
+		selectedSkillLabel.setBorder(BorderFactory.createEmptyBorder(2, 2, 5, 2));
 		profileBlockHeader = new LockableSectionHeader(
-			"Selected skill settings",
-			() -> SettingsLockCatalog.profileBlock(selectedSkill),
+			"XP feedback",
+			() -> SettingsLockCatalog.profileBlock(selectedSkill.getId()),
 			lockDraft,
 			lockService,
 			sessionManager::getLockSnapshot,
@@ -114,6 +116,7 @@ final class ProfilesPanel extends JPanel
 			XpFeedbackSettings.MAXIMUM_XP_GAIN,
 			1
 		));
+		minimumXpSpinner.setName("skillHapticMinimumXpGain");
 		PanelUi.setFixedWidth(minimumXpSpinner, PanelUi.NUMERIC_CONTROL_WIDTH);
 		intensitySlider = new JSlider(
 			XpFeedbackSettings.MINIMUM_INTENSITY_PERCENT,
@@ -130,59 +133,76 @@ final class ProfilesPanel extends JPanel
 		PanelUi.setFixedWidth(durationSpinner, PanelUi.NUMERIC_CONTROL_WIDTH);
 		intensityValueLabel.setText(global.getIntensityPercent() + "%");
 
-		JPanel skillRow = new JPanel(new BorderLayout(8, 0));
-		skillRow.add(new JLabel("Skill"), BorderLayout.CENTER);
-		skillRow.add(skillComboBox, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(this, skillRow);
-		PanelUi.addVerticalComponent(this, profileBlockHeader);
-		PanelUi.addVerticalComponent(this, useGlobalCheckBox);
+		ClickerXpSettings globalClicks = globalClickSettingsSupplier.get();
+		minimumClickXpSpinner = new JSpinner(new SpinnerNumberModel(
+			globalClicks.getMinimumXpGain(),
+			ClickerXpSettings.MINIMUM_XP_GAIN,
+			ClickerXpSettings.MAXIMUM_XP_GAIN,
+			1
+		));
+		minimumClickXpSpinner.setName("skillClickMinimumXpGain");
+		xpClickSequenceComboBox.setName("skillClickXpSequence");
+		levelUpClickSequenceComboBox.setName("skillClickLevelUpSequence");
+		milestoneClickSequenceComboBox.setName("skillClickMilestoneSequence");
+		PanelUi.setFixedWidth(minimumClickXpSpinner, PanelUi.NUMERIC_CONTROL_WIDTH);
+
+		PanelUi.addPreferredHeightComponent(this, selectedSkillLabel);
+		PanelUi.addPreferredHeightComponent(this, profileBlockHeader);
+		PanelUi.addPreferredHeightComponent(this, useGlobalCheckBox);
 		add(Box.createVerticalStrut(6));
+		PanelUi.addPreferredHeightComponent(this, subsectionLabel("Haptic feedback"));
 
 		JPanel thresholdRow = new JPanel(new BorderLayout(8, 0));
-		thresholdRow.add(new JLabel("Minimum XP gain"), BorderLayout.CENTER);
+		thresholdRow.add(new JLabel("Minimum haptic XP gain"), BorderLayout.CENTER);
 		thresholdRow.add(minimumXpSpinner, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(this, thresholdRow);
+		PanelUi.addPreferredHeightComponent(this, thresholdRow);
 
 		JPanel intensityHeader = new JPanel(new BorderLayout());
 		intensityHeader.add(new JLabel("Intensity"), BorderLayout.WEST);
 		intensityHeader.add(intensityValueLabel, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(this, intensityHeader);
-		PanelUi.addVerticalComponent(this, intensitySlider);
+		PanelUi.addPreferredHeightComponent(this, intensityHeader);
+		PanelUi.addPreferredHeightComponent(this, intensitySlider);
 
 		JPanel patternRow = new JPanel(new BorderLayout(8, 0));
 		patternRow.add(new JLabel("Pattern"), BorderLayout.CENTER);
 		patternRow.add(patternComboBox, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(this, patternRow);
+		PanelUi.addPreferredHeightComponent(this, patternRow);
 
 		JPanel durationRow = new JPanel(new BorderLayout(8, 0));
 		durationRow.add(new JLabel(PanelUi.DURATION_LABEL), BorderLayout.CENTER);
 		durationRow.add(durationSpinner, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(this, durationRow);
+		PanelUi.addPreferredHeightComponent(this, durationRow);
+
+		add(Box.createVerticalStrut(6));
+		PanelUi.addPreferredHeightComponent(this, subsectionLabel("Click feedback"));
+		PanelUi.addPreferredHeightComponent(
+			this,
+			row("Minimum clicker XP gain", minimumClickXpSpinner)
+		);
+		PanelUi.addPreferredHeightComponent(this, row("XP gain", xpClickSequenceComboBox));
+		PanelUi.addPreferredHeightComponent(
+			this,
+			row("Level-up", levelUpClickSequenceComboBox)
+		);
+		PanelUi.addPreferredHeightComponent(
+			this,
+			row("Milestone", milestoneClickSequenceComboBox)
+		);
 
 		JPanel testRow = new JPanel(new BorderLayout());
 		testButton.setToolTipText("Preview the selected skill's effective XP settings");
 		testRow.add(testButton, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(this, testRow);
+		PanelUi.addPreferredHeightComponent(this, testRow);
 
-		skillComboBox.addActionListener(event ->
-		{
-			Skill selected = (Skill) skillComboBox.getSelectedItem();
-			if (selected != null)
-			{
-				selectedSkill = selected;
-				profileBlockHeader.refresh();
-				loadSelectedProfile();
-			}
-		});
 		useGlobalLockBinding = new LockableCheckBoxBinding(
 			useGlobalCheckBox,
-			() -> SettingsLockCatalog.profileUsesGlobal(selectedSkill),
+			() -> SettingsLockCatalog.profileUsesGlobal(selectedSkill.getId()),
 			lockDraft,
 			lockService,
 			sessionManager::getLockSnapshot,
 			editingRemoteSubject,
 			lockSelectionEnabled,
-			() -> !profiles.getOverride(selectedSkill).isPresent()
+			this::selectedSkillUsesGlobalSettings
 		);
 		useGlobalCheckBox.addActionListener(event ->
 		{
@@ -191,47 +211,74 @@ final class ProfilesPanel extends JPanel
 				toggleOverride();
 			}
 		});
-		minimumXpSpinner.addChangeListener(event -> updateSelectedProfile());
+		minimumXpSpinner.addChangeListener(event -> updateSelectedHapticProfile());
 		intensitySlider.addChangeListener(event ->
 		{
 			intensityValueLabel.setText(intensitySlider.getValue() + "%");
 			if (!intensitySlider.getValueIsAdjusting())
 			{
-				updateSelectedProfile();
+				updateSelectedHapticProfile();
 			}
 		});
 		patternComboBox.addActionListener(event ->
 		{
-			updateSelectedProfile();
+			updateSelectedHapticProfile();
 			updateControlState();
 		});
-		durationSpinner.addChangeListener(event -> updateSelectedProfile());
+		durationSpinner.addChangeListener(event -> updateSelectedHapticProfile());
+		minimumClickXpSpinner.addChangeListener(event -> updateSelectedClickProfile());
+		xpClickSequenceComboBox.addActionListener(event -> updateSelectedClickProfile());
+		levelUpClickSequenceComboBox.addActionListener(event -> updateSelectedClickProfile());
+		milestoneClickSequenceComboBox.addActionListener(event -> updateSelectedClickProfile());
 		testButton.addActionListener(event -> testAction.run());
 		loadSelectedProfile();
 		setConnected(false);
 	}
 
-	XpFeedbackSettings getSettings(Skill skill)
+	void selectSkill(SkillDescriptor skill)
 	{
-		return profiles.resolve(skill, globalSettingsSupplier.get());
+		if (skill == null)
+		{
+			return;
+		}
+		SkillDescriptor known = skillsById.get(skill.getId());
+		if (known == null)
+		{
+			return;
+		}
+		selectedSkill = known;
+		profileBlockHeader.refresh();
+		loadSelectedProfile();
 	}
 
-	Skill getSelectedSkill()
+	XpFeedbackSettings getSettings(String skillId)
 	{
-		return selectedSkill;
+		return profiles.resolve(skillId, globalSettingsSupplier.get());
+	}
+
+	ClickerXpSettings getClickSettings(String skillId)
+	{
+		return clickProfiles.resolve(skillId, globalClickSettingsSupplier.get());
+	}
+
+	String getSelectedSkillId()
+	{
+		return selectedSkill == null ? null : selectedSkill.getId();
 	}
 
 	void applyDisplayedSettings(
 		SkillFeedbackProfiles displayedProfiles,
+		SkillClickProfiles displayedClickProfiles,
 		CustomPatternLibrary library)
 	{
 		profiles = displayedProfiles.replaceMissingCustomPatterns(library);
+		clickProfiles = displayedClickProfiles;
 		updatingPatternChoices = true;
 		try
 		{
 			PanelUi.setPatternChoices(
 				patternComboBox,
-				getSettings(selectedSkill).getPatternSelection(),
+				getSettings(selectedSkill.getId()).getPatternSelection(),
 				library
 			);
 		}
@@ -256,7 +303,13 @@ final class ProfilesPanel extends JPanel
 
 	void refreshInheritedProfile()
 	{
-		if (selectedSkill != null && !profiles.getOverride(selectedSkill).isPresent())
+		if (selectedSkill == null)
+		{
+			return;
+		}
+		String skillId = selectedSkill.getId();
+		if (!profiles.getOverride(skillId).isPresent()
+			|| !clickProfiles.getOverride(skillId).isPresent())
 		{
 			loadSelectedProfile();
 		}
@@ -268,14 +321,14 @@ final class ProfilesPanel extends JPanel
 		if (resolved != profiles)
 		{
 			profiles = resolved;
-			persist();
+			persistHapticProfiles(null);
 		}
 		updatingPatternChoices = true;
 		try
 		{
 			PanelUi.setPatternChoices(
 				patternComboBox,
-				getSettings(selectedSkill).getPatternSelection(),
+				getSettings(selectedSkill.getId()).getPatternSelection(),
 				library
 			);
 		}
@@ -302,15 +355,20 @@ final class ProfilesPanel extends JPanel
 		{
 			return;
 		}
+		String skillId = selectedSkill.getId();
 		if (useGlobalCheckBox.isSelected())
 		{
-			profiles = profiles.withoutOverride(selectedSkill);
+			profiles = profiles.withoutOverride(skillId);
+			clickProfiles = clickProfiles.withoutOverride(skillId);
 		}
 		else
 		{
-			profiles = profiles.withOverride(selectedSkill, globalSettingsSupplier.get());
+			profiles = profiles.withOverride(skillId, globalSettingsSupplier.get());
+			clickProfiles = clickProfiles.withOverride(skillId, globalClickSettingsSupplier.get());
 		}
-		persist(SettingsLockCatalog.profileUsesGlobal(selectedSkill));
+		SettingsLockTarget target = SettingsLockCatalog.profileUsesGlobal(skillId);
+		persistHapticProfiles(target);
+		persistClickProfiles(target);
 		loadSelectedProfile();
 	}
 
@@ -320,20 +378,37 @@ final class ProfilesPanel extends JPanel
 		{
 			return;
 		}
-		XpFeedbackSettings override = profiles.getOverride(selectedSkill).orElse(null);
+		String skillId = selectedSkill.getId();
+		XpFeedbackSettings override = profiles.getOverride(skillId).orElse(null);
+		ClickerXpSettings clickOverride = clickProfiles.getOverride(skillId).orElse(null);
+		selectedSkillLabel.setText(selectedSkill.getDisplayName());
+		selectedSkillLabel.setToolTipText(
+			"XP feedback settings for " + selectedSkill.getDisplayName()
+		);
 		XpFeedbackSettings displayed = override == null
 			? globalSettingsSupplier.get()
 			: override;
+		ClickerXpSettings displayedClicks = clickOverride == null
+			? globalClickSettingsSupplier.get()
+			: clickOverride;
 
 		updatingControls = true;
 		try
 		{
-			useGlobalCheckBox.setSelected(override == null);
+			useGlobalCheckBox.setSelected(override == null && clickOverride == null);
 			minimumXpSpinner.setValue(displayed.getMinimumXpGain());
 			intensitySlider.setValue(displayed.getIntensityPercent());
 			intensityValueLabel.setText(displayed.getIntensityPercent() + "%");
 			patternComboBox.setSelectedItem(displayed.getPatternSelection());
 			durationSpinner.setValue(displayed.getDurationMillis());
+			minimumClickXpSpinner.setValue(displayedClicks.getMinimumXpGain());
+			xpClickSequenceComboBox.setSelectedItem(normalizeEnabled(
+				displayedClicks.getXpGainSequence()
+			));
+			levelUpClickSequenceComboBox.setSelectedItem(displayedClicks.getLevelUpOverride());
+			milestoneClickSequenceComboBox.setSelectedItem(
+				displayedClicks.getMilestoneOverride()
+			);
 		}
 		finally
 		{
@@ -342,7 +417,7 @@ final class ProfilesPanel extends JPanel
 		updateControlState();
 	}
 
-	private void updateSelectedProfile()
+	private void updateSelectedHapticProfile()
 	{
 		if (remoteReadOnly
 			|| updatingControls
@@ -360,7 +435,7 @@ final class ProfilesPanel extends JPanel
 			return;
 		}
 		profiles = profiles.withOverride(
-			selectedSkill,
+			selectedSkill.getId(),
 			new XpFeedbackSettings(
 				((Number) minimumXpSpinner.getValue()).intValue(),
 				intensitySlider.getValue(),
@@ -368,7 +443,29 @@ final class ProfilesPanel extends JPanel
 				pattern
 			)
 		);
-		persist(SettingsLockCatalog.profileBlock(selectedSkill));
+		persistHapticProfiles(SettingsLockCatalog.profileBlock(selectedSkill.getId()));
+	}
+
+	private void updateSelectedClickProfile()
+	{
+		if (remoteReadOnly
+			|| updatingControls
+			|| selectedSkill == null
+			|| profileBlockHeader.isEditLocked()
+			|| useGlobalCheckBox.isSelected())
+		{
+			return;
+		}
+		clickProfiles = clickProfiles.withOverride(
+			selectedSkill.getId(),
+			new ClickerXpSettings(
+				((Number) minimumClickXpSpinner.getValue()).intValue(),
+				selected(xpClickSequenceComboBox, ClickSequence.ONE),
+				selected(levelUpClickSequenceComboBox, ClickSequence.NONE),
+				selected(milestoneClickSequenceComboBox, ClickSequence.NONE)
+			)
+		);
+		persistClickProfiles(SettingsLockCatalog.profileBlock(selectedSkill.getId()));
 	}
 
 	private void updateControlState()
@@ -380,8 +477,6 @@ final class ProfilesPanel extends JPanel
 		HapticPatternSelection pattern =
 			(HapticPatternSelection) patternComboBox.getSelectedItem();
 		boolean externallyScaled = pattern == null || !pattern.isCustom();
-		// Skill selection is navigation only and remains available in remote mode.
-		skillComboBox.setEnabled(true);
 		useGlobalLockBinding.refresh();
 		useGlobalCheckBox.setEnabled(blockEditable && !useGlobalLockBinding.isEditLocked());
 		minimumXpSpinner.setEnabled(blockEditable && overridden);
@@ -389,23 +484,67 @@ final class ProfilesPanel extends JPanel
 		intensitySlider.setEnabled(blockEditable && overridden && externallyScaled);
 		intensityValueLabel.setEnabled(blockEditable && overridden && externallyScaled);
 		durationSpinner.setEnabled(blockEditable && overridden && externallyScaled);
+		minimumClickXpSpinner.setEnabled(blockEditable && overridden);
+		xpClickSequenceComboBox.setEnabled(blockEditable && overridden);
+		levelUpClickSequenceComboBox.setEnabled(blockEditable && overridden);
+		milestoneClickSequenceComboBox.setEnabled(blockEditable && overridden);
 		testButton.setEnabled(editable && connected && previewAllowed);
 	}
 
-	private void persist()
+	private boolean selectedSkillUsesGlobalSettings()
+	{
+		if (selectedSkill == null)
+		{
+			return true;
+		}
+		String skillId = selectedSkill.getId();
+		return !profiles.getOverride(skillId).isPresent()
+			&& !clickProfiles.getOverride(skillId).isPresent();
+	}
+
+	private void persistHapticProfiles(SettingsLockTarget target)
 	{
 		settingsSink.set(
-			HapticScapeConfig.SKILL_FEEDBACK_PROFILES_KEY,
+			target,
+			HapticScapeSettingKeys.SKILL_FEEDBACK_PROFILES,
 			profiles.toConfigValue()
 		);
 	}
 
-	private void persist(SettingsLockTarget target)
+	private void persistClickProfiles(SettingsLockTarget target)
 	{
 		settingsSink.set(
 			target,
-			HapticScapeConfig.SKILL_FEEDBACK_PROFILES_KEY,
-			profiles.toConfigValue()
+			HapticScapeSettingKeys.SKILL_CLICK_PROFILES,
+			clickProfiles.toConfigValue()
 		);
+	}
+
+	private static JLabel subsectionLabel(String text)
+	{
+		JLabel label = new JLabel(text);
+		label.setFont(label.getFont().deriveFont(Font.BOLD));
+		return label;
+	}
+
+	private static JPanel row(String name, java.awt.Component control)
+	{
+		JPanel row = new JPanel(new BorderLayout(8, 0));
+		row.add(new JLabel(name), BorderLayout.CENTER);
+		row.add(control, BorderLayout.EAST);
+		return row;
+	}
+
+	private static ClickSequence normalizeEnabled(ClickSequence sequence)
+	{
+		return sequence != null && sequence.isEnabled() ? sequence : ClickSequence.ONE;
+	}
+
+	private static ClickSequence selected(
+		JComboBox<ClickSequence> comboBox,
+		ClickSequence fallback)
+	{
+		Object selected = comboBox.getSelectedItem();
+		return selected instanceof ClickSequence ? (ClickSequence) selected : fallback;
 	}
 }

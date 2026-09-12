@@ -31,10 +31,13 @@ internal static class HapticScapeLauncher
 				ShowUpdateSettings(preferencesPath, manifest.Version);
 				return 0;
 			}
+			HapticScapeLaunchOptions launchOptions = deepLink == null
+				? HapticScapeLaunchOptions.Parse(args)
+				: HapticScapeLaunchOptions.Defaults();
 			bool ownsInstance;
 			using (Mutex instance = new Mutex(
 				true,
-				@"Local\HapticScape.Client",
+				launchOptions.MutexName,
 				out ownsInstance))
 			{
 				if (deepLink != null)
@@ -46,12 +49,16 @@ internal static class HapticScapeLauncher
 					return 0;
 				}
 
-				if (deepLink == null
+				if (deepLink == null && launchOptions.IsDefault
 					&& TryBeginUpdate(applicationDirectory, manifest, preferencesPath))
 				{
 					return 0;
 				}
-				return LaunchClient(applicationDirectory);
+				if (deepLink == null && launchOptions.IsDefault)
+				{
+					TryEnsureLumBridge(applicationDirectory, manifest);
+				}
+				return LaunchClient(applicationDirectory, launchOptions);
 			}
 		}
 		catch (Exception exception)
@@ -159,6 +166,66 @@ internal static class HapticScapeLauncher
 		}
 	}
 
+	private static void TryEnsureLumBridge(
+		string applicationDirectory,
+		ReleaseManifest manifest)
+	{
+		if (!LumBridgeSupport.IsRequired(manifest.Version)
+			|| LumBridgeSupport.IsInstalled(manifest, applicationDirectory))
+		{
+			return;
+		}
+
+		try
+		{
+			bool installed = LumBridgeInstallDialog.Ensure(
+				manifest,
+				applicationDirectory);
+			if (installed)
+			{
+				MessageBox.Show(
+					"HapticScape 3 uses LumBridge for RuneLite gameplay events. "
+						+ "LumBridge was installed alongside HapticScape and will open now.",
+					"LumBridge installed",
+					MessageBoxButtons.OK,
+					MessageBoxIcon.Information);
+				TryLaunchLumBridge(applicationDirectory);
+			}
+		}
+		catch (Exception exception)
+		{
+			MessageBox.Show(
+				"HapticScape was updated successfully, but LumBridge could not be installed automatically. "
+					+ "HapticScape will still start normally.\n\n"
+					+ exception.Message,
+				"LumBridge setup failed",
+				MessageBoxButtons.OK,
+				MessageBoxIcon.Warning);
+		}
+	}
+
+	private static void TryLaunchLumBridge(string applicationDirectory)
+	{
+		try
+		{
+			string lumBridgeDirectory = Path.Combine(applicationDirectory, "LumBridge");
+			string executable = Path.Combine(lumBridgeDirectory, "LumBridge.exe");
+			if (!File.Exists(executable))
+			{
+				return;
+			}
+			ProcessStartInfo startInfo = new ProcessStartInfo();
+			startInfo.FileName = executable;
+			startInfo.WorkingDirectory = lumBridgeDirectory;
+			startInfo.UseShellExecute = false;
+			Process.Start(startInfo);
+		}
+		catch (Exception)
+		{
+			// LumBridge is installed; failure to launch it must not block HapticScape.
+		}
+	}
+
 	private static void StartUpdateHelper(string applicationDirectory, PreparedUpdate prepared)
 	{
 		ProcessStartInfo startInfo = new ProcessStartInfo();
@@ -173,26 +240,29 @@ internal static class HapticScapeLauncher
 		Process.Start(startInfo);
 	}
 
-	private static int LaunchClient(string applicationDirectory)
+	private static int LaunchClient(
+		string applicationDirectory,
+		HapticScapeLaunchOptions launchOptions)
 	{
-		string clientJar = Path.Combine(applicationDirectory, "app", "hapticscape-client.jar");
+		string clientJar = Path.Combine(applicationDirectory, "app", "hapticscape-desktop.jar");
 		if (!File.Exists(clientJar))
 		{
-			throw new FileNotFoundException("The HapticScape client JAR is missing.", clientJar);
+			throw new FileNotFoundException("The HapticScape desktop JAR is missing.", clientJar);
 		}
 
-		string javaExecutable = FindJavaExecutable(applicationDirectory);
+		string javaExecutable = FindBundledJavaExecutable(applicationDirectory);
 		if (javaExecutable == null)
 		{
 			MessageBox.Show(
-				"The official RuneLite Java runtime was not found. Install RuneLite from runelite.net and try again.",
+				"The bundled HapticScape Java runtime is missing or incomplete. Reinstall HapticScape and try again.",
 				"HapticScape", MessageBoxButtons.OK, MessageBoxIcon.Error);
 			return 1;
 		}
 
 		ProcessStartInfo startInfo = new ProcessStartInfo();
 		startInfo.FileName = javaExecutable;
-		startInfo.Arguments = "-ea -jar \"" + clientJar + "\"";
+		startInfo.Arguments = "-ea -jar \"" + clientJar + "\""
+			+ launchOptions.JavaArguments();
 		startInfo.WorkingDirectory = applicationDirectory;
 		startInfo.UseShellExecute = false;
 		using (Process client = Process.Start(startInfo))
@@ -288,51 +358,20 @@ internal static class HapticScapeLauncher
 		}
 	}
 
-	private static string FindJavaExecutable(string applicationDirectory)
+	private static string FindBundledJavaExecutable(string applicationDirectory)
 	{
-		string localApplicationData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-		string javaHome = Environment.GetEnvironmentVariable("JAVA_HOME");
+		string runtimeBin = Path.Combine(applicationDirectory, "runtime", "bin");
 		string[] candidates =
 		{
-			Path.Combine(applicationDirectory, "runtime", "bin", "javaw.exe"),
-			Path.Combine(localApplicationData, "RuneLite", "jre", "bin", "javaw.exe"),
-			Path.Combine(localApplicationData, "RuneLite", "jre", "bin", "java.exe"),
-			string.IsNullOrEmpty(javaHome) ? null : Path.Combine(javaHome, "bin", "javaw.exe"),
-			string.IsNullOrEmpty(javaHome) ? null : Path.Combine(javaHome, "bin", "java.exe"),
-			FindOnPath("javaw.exe"),
-			FindOnPath("java.exe")
+			Path.Combine(runtimeBin, "javaw.exe"),
+			Path.Combine(runtimeBin, "java.exe")
 		};
 
 		foreach (string candidate in candidates)
 		{
-			if (!string.IsNullOrEmpty(candidate) && File.Exists(candidate))
+			if (File.Exists(candidate))
 			{
 				return candidate;
-			}
-		}
-		return null;
-	}
-
-	private static string FindOnPath(string fileName)
-	{
-		string path = Environment.GetEnvironmentVariable("PATH");
-		if (string.IsNullOrEmpty(path))
-		{
-			return null;
-		}
-		foreach (string directory in path.Split(Path.PathSeparator))
-		{
-			try
-			{
-				string candidate = Path.Combine(directory.Trim(), fileName);
-				if (File.Exists(candidate))
-				{
-					return candidate;
-				}
-			}
-			catch (Exception)
-			{
-				// Ignore malformed PATH entries and continue searching.
 			}
 		}
 		return null;
@@ -473,6 +512,91 @@ internal sealed class UpdateSettingsDialog : Form
 		cancel.SetBounds(305, 126, 75, 27);
 		Controls.Add(cancel);
 		CancelButton = cancel;
+	}
+}
+
+internal sealed class LumBridgeInstallDialog : Form
+{
+	private readonly Label status = new Label();
+	private readonly ReleaseManifest manifest;
+	private readonly string applicationDirectory;
+	private bool installed;
+	private Exception failure;
+
+	private LumBridgeInstallDialog(
+		ReleaseManifest manifest,
+		string applicationDirectory)
+	{
+		this.manifest = manifest;
+		this.applicationDirectory = applicationDirectory;
+		Text = "Installing LumBridge";
+		FormBorderStyle = FormBorderStyle.FixedDialog;
+		StartPosition = FormStartPosition.CenterScreen;
+		ControlBox = false;
+		ClientSize = new Size(390, 95);
+
+		status.AutoSize = false;
+		status.TextAlign = ContentAlignment.MiddleCenter;
+		status.Text = "Preparing LumBridge...";
+		status.SetBounds(15, 12, 360, 25);
+		Controls.Add(status);
+
+		ProgressBar progress = new ProgressBar();
+		progress.Style = ProgressBarStyle.Marquee;
+		progress.MarqueeAnimationSpeed = 25;
+		progress.SetBounds(20, 50, 350, 20);
+		Controls.Add(progress);
+
+		Shown += delegate
+		{
+			Thread worker = new Thread(InstallOnWorker);
+			worker.IsBackground = true;
+			worker.Name = "LumBridge setup download";
+			worker.Start();
+		};
+	}
+
+	internal static bool Ensure(
+		ReleaseManifest manifest,
+		string applicationDirectory)
+	{
+		using (LumBridgeInstallDialog dialog = new LumBridgeInstallDialog(
+			manifest,
+			applicationDirectory))
+		{
+			dialog.ShowDialog();
+			if (dialog.failure != null)
+			{
+				throw new InvalidOperationException(
+					dialog.failure.Message,
+					dialog.failure);
+			}
+			return dialog.installed;
+		}
+	}
+
+	private void InstallOnWorker()
+	{
+		try
+		{
+			installed = LumBridgeSupport.EnsureInstalled(
+				manifest,
+				applicationDirectory,
+				SetStatus);
+		}
+		catch (Exception exception)
+		{
+			failure = exception;
+		}
+		BeginInvoke((MethodInvoker) Close);
+	}
+
+	private void SetStatus(string message)
+	{
+		if (!IsDisposed)
+		{
+			BeginInvoke((MethodInvoker) delegate { status.Text = message; });
+		}
 	}
 }
 

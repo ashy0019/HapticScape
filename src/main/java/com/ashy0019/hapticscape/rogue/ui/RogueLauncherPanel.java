@@ -20,7 +20,7 @@ import javax.swing.Timer;
  */
 public final class RogueLauncherPanel extends JComponent
 {
-	private static final int EXPANDED_HEIGHT = 52;
+	private static final int EXPANDED_HEIGHT = 34;
 	private static final long EMERGE_NANOS = 850_000_000L;
 	private static final long CELEBRATION_NANOS = 4_500_000_000L;
 	private static final Color PANEL_TOP = new Color(47, 35, 26);
@@ -216,13 +216,13 @@ public final class RogueLauncherPanel extends JComponent
 				drawGoldLabel(g, "ROGUE", Math.max(18, height / 2 + 4));
 			}
 
-			if (height >= 40)
+			if (height >= 30)
 			{
-				g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 9));
+				g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 8));
 				g.setColor(new Color(232, 217, 178));
 				String subtitle = active ? "CLICK TO RETURN" : "ENTER THE ROGUE'S DEN";
 				FontMetrics metrics = g.getFontMetrics();
-				g.drawString(subtitle, Math.max(4, (width - metrics.stringWidth(subtitle)) / 2), height - 8);
+				g.drawString(subtitle, Math.max(4, (width - metrics.stringWidth(subtitle)) / 2), height - 4);
 			}
 		}
 		finally
@@ -233,7 +233,7 @@ public final class RogueLauncherPanel extends JComponent
 
 	private void drawGoldLabel(Graphics2D g, String text, int baseY)
 	{
-		int fontSize = Math.max(16, Math.min(24, getHeight() - 20));
+		int fontSize = Math.max(13, Math.min(19, getHeight() - 16));
 		g.setFont(new Font(Font.SERIF, Font.BOLD, fontSize));
 		FontMetrics metrics = g.getFontMetrics();
 		int x = Math.max(3, (getWidth() - metrics.stringWidth(text)) / 2);
@@ -253,7 +253,7 @@ public final class RogueLauncherPanel extends JComponent
 		double waveSpeed,
 		double hueSpeed)
 	{
-		int fontSize = Math.max(16, Math.min(24, getHeight() - 20));
+		int fontSize = Math.max(13, Math.min(19, getHeight() - 16));
 		g.setFont(new Font(Font.SERIF, Font.BOLD, fontSize));
 		FontMetrics metrics = g.getFontMetrics();
 		int spacing = 3;

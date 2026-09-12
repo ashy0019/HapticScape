@@ -11,6 +11,7 @@ public final class ClickerPhraseRule
 
 	private final String id;
 	private final boolean enabled;
+	private final ClickSequence sequence;
 	private final ClickerPhraseMatchMode mode;
 	private final String expression;
 	private final String normalizedLiteral;
@@ -21,7 +22,16 @@ public final class ClickerPhraseRule
 		ClickerPhraseMatchMode mode,
 		String expression)
 	{
-		this(UUID.randomUUID().toString(), enabled, mode, expression);
+		this(UUID.randomUUID().toString(), enabled, ClickSequence.ONE, mode, expression);
+	}
+
+	public ClickerPhraseRule(
+		boolean enabled,
+		ClickSequence sequence,
+		ClickerPhraseMatchMode mode,
+		String expression)
+	{
+		this(UUID.randomUUID().toString(), enabled, sequence, mode, expression);
 	}
 
 	ClickerPhraseRule(
@@ -30,8 +40,23 @@ public final class ClickerPhraseRule
 		ClickerPhraseMatchMode mode,
 		String expression)
 	{
+		this(id, enabled, ClickSequence.ONE, mode, expression);
+	}
+
+	ClickerPhraseRule(
+		String id,
+		boolean enabled,
+		ClickSequence sequence,
+		ClickerPhraseMatchMode mode,
+		String expression)
+	{
 		this.id = canonicalUuid(id);
 		this.enabled = enabled;
+		this.sequence = Objects.requireNonNull(sequence, "sequence");
+		if (!sequence.isEnabled())
+		{
+			throw new IllegalArgumentException("Enabled phrase rules must request one to three clicks");
+		}
 		this.mode = Objects.requireNonNull(mode, "mode");
 		this.expression = Objects.requireNonNull(expression, "expression");
 
@@ -68,12 +93,26 @@ public final class ClickerPhraseRule
 		ClickerPhraseMatchMode mode,
 		String expression)
 	{
-		return new ClickerPhraseRule(id, enabled, mode, expression);
+		return new ClickerPhraseRule(id, enabled, sequence, mode, expression);
+	}
+
+	public ClickerPhraseRule withValues(
+		boolean enabled,
+		ClickSequence sequence,
+		ClickerPhraseMatchMode mode,
+		String expression)
+	{
+		return new ClickerPhraseRule(id, enabled, sequence, mode, expression);
 	}
 
 	public boolean isEnabled()
 	{
 		return enabled;
+	}
+
+	public ClickSequence getSequence()
+	{
+		return sequence;
 	}
 
 	public ClickerPhraseMatchMode getMode()
@@ -122,6 +161,7 @@ public final class ClickerPhraseRule
 		ClickerPhraseRule that = (ClickerPhraseRule) other;
 		return id.equals(that.id)
 			&& enabled == that.enabled
+			&& sequence == that.sequence
 			&& mode == that.mode
 			&& expression.equals(that.expression);
 	}
@@ -129,7 +169,7 @@ public final class ClickerPhraseRule
 	@Override
 	public int hashCode()
 	{
-		return Objects.hash(id, enabled, mode, expression);
+		return Objects.hash(id, enabled, sequence, mode, expression);
 	}
 
 	@Override
@@ -145,6 +185,8 @@ public final class ClickerPhraseRule
 		}
 
 		return (enabled ? "" : "(off) ")
+			+ sequence.getClickCount()
+			+ (sequence == ClickSequence.ONE ? " click · " : " clicks · ")
 			+ mode
 			+ ": "
 			+ preview;

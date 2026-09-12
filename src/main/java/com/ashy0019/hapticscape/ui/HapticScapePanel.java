@@ -6,17 +6,24 @@ import com.ashy0019.hapticscape.AlertTriggerSettings;
 import com.ashy0019.hapticscape.CustomPatternEntry;
 import com.ashy0019.hapticscape.CustomPatternLibrary;
 import com.ashy0019.hapticscape.HapticPatternSelection;
-import com.ashy0019.hapticscape.HapticScapeConfig;
+import com.ashy0019.hapticscape.HapticScapeSettingKeys;
+import com.ashy0019.hapticscape.HapticScapeSettingsSource;
 import com.ashy0019.hapticscape.NotificationFeedbackSettings;
+import com.ashy0019.hapticscape.SkillCatalog;
+import com.ashy0019.hapticscape.SkillClickProfiles;
 import com.ashy0019.hapticscape.SkillFeedbackProfiles;
 import com.ashy0019.hapticscape.SkillSelection;
 import com.ashy0019.hapticscape.XpFeedbackSettings;
+import com.ashy0019.hapticscape.clicker.ClickSequence;
 import com.ashy0019.hapticscape.clicker.ClickerSettings;
 import com.ashy0019.hapticscape.clicker.ClickerXpSettings;
 import com.ashy0019.hapticscape.clicker.ClickerPhraseRules;
 import com.ashy0019.hapticscape.device.ConnectionSnapshot;
 import com.ashy0019.hapticscape.device.ConnectionState;
 import com.ashy0019.hapticscape.device.DeviceInfo;
+import com.ashy0019.hapticscape.host.ExternalLinkOpener;
+import com.ashy0019.hapticscape.host.GlobalUiHooks;
+import com.ashy0019.hapticscape.host.TextClipboard;
 import com.ashy0019.hapticscape.music.MusicSyncSettings;
 import com.ashy0019.hapticscape.music.MusicSyncSnapshot;
 import com.ashy0019.hapticscape.rogue.KonamiCodeDetector;
@@ -38,6 +45,7 @@ import com.ashy0019.hapticscape.remote.SettingsLockListener;
 import com.ashy0019.hapticscape.remote.SettingsLockService;
 import com.ashy0019.hapticscape.remote.SettingsLockSnapshot;
 import com.ashy0019.hapticscape.remote.SettingsLockTarget;
+import com.ashy0019.hapticscape.remote.SettingsStore;
 import com.ashy0019.hapticscape.rogue.ui.RogueLauncherPanel;
 import com.ashy0019.hapticscape.rogue.ui.RoguePanel;
 import com.ashy0019.hapticscape.update.UpdateCheckService;
@@ -46,13 +54,10 @@ import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.Font;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
-import java.awt.KeyEventDispatcher;
-import java.awt.KeyboardFocusManager;
-import java.awt.Window;
 import java.awt.event.InputEvent;
-import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.Arrays;
@@ -77,23 +82,18 @@ import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
-import javax.swing.text.JTextComponent;
-import net.runelite.api.Skill;
-import net.runelite.client.config.ConfigManager;
-import net.runelite.client.ui.PluginPanel;
 
-public final class HapticScapePanel extends PluginPanel
+public final class HapticScapePanel extends JPanel
 	implements RemoteSessionListener, SettingsLockListener
 {
-	private static final int DEVELOPER_UNLOCK_CLICKS = 9;
+	private static final int DEVELOPER_UNLOCK_CLICKS = 8;
 	private static final long DEVELOPER_UNLOCK_WINDOW_NANOS = TimeUnit.SECONDS.toNanos(4);
-	private static final String ROGUE_UNLOCKED_KEY = "rogueUnlocked";
-	private static final String ROGUE_UNLOCK_STING_PLAYED_KEY = "rogueUnlockStingPlayed";
 	private static final String NORMAL_CARD = "normal";
-	private static final String REMOTE_CARD = "remote";
 	private static final String ROGUE_CARD = "rogue";
-	private static final String LOCAL_FEEDBACK_CARD = "localFeedback";
-	private static final String REMOTE_FEEDBACK_CARD = "remoteFeedback";
+	private static final String GAMEPLAY_WORKSPACE = "gameplay";
+	private static final String PATTERNS_WORKSPACE = "patterns";
+	private static final String REMOTE_WORKSPACE = "remote";
+	private static final String SETTINGS_WORKSPACE = "settings";
 	private static final int MINE_WORKSPACE_INDEX = 0;
 	private static final int SUBJECT_WORKSPACE_INDEX = 1;
 	private static final String SETTINGS_LOCKED_MESSAGE =
@@ -101,31 +101,32 @@ public final class HapticScapePanel extends PluginPanel
 	private static final String POST_SESSION_LOCK_MESSAGE =
 		"<html><b>Post-session lock</b><br>armed after session</html>";
 
-	private final HapticScapeConfig config;
-	private final ConfigManager configManager;
+	private final HapticScapeSettingsSource config;
+	private final SettingsStore settingsStore;
 	private final Consumer<RogueFeedbackEvent> rogueFeedbackAction;
 	private final Runnable rogueUnlockSoundAction;
 	private final KonamiCodeDetector konamiCodeDetector = new KonamiCodeDetector();
-	private final KeyEventDispatcher rogueKeyDispatcher;
+	private final GlobalUiHooks.Registration rogueKeyHook;
 	private final JTabbedPane tabs;
+	private final JTabbedPane patternTabs;
 	private final CardLayout contentLayout = new CardLayout();
 	private final JPanel contentHost = new JPanel(contentLayout);
-	private final CardLayout feedbackLayout = new CardLayout();
-	private final JPanel feedbackHost = new JPanel(feedbackLayout);
 	private final JTabbedPane controllerWorkspaceTabs = new JTabbedPane(JTabbedPane.TOP);
-	private final JLabel statusLabel = new JLabel("Disconnected", SwingConstants.CENTER);
+	private final JLabel statusLabel = new JLabel("Disconnected");
+	private final JLabel connectionIndicator = new JLabel("\u25cf");
+	private final JLabel deviceSummaryLabel = new JLabel("No device connected");
+	private final JLabel sourceStatusLabel = new JLabel(" ", SwingConstants.RIGHT);
+	private final JLabel pageTitleLabel = new JLabel("Gameplay");
 	private final DefaultListModel<DeviceInfo> deviceModel = new DefaultListModel<>();
 	private final JButton connectButton = new JButton("Connect");
 	private final JButton disconnectButton = new JButton("Disconnect");
-	private final JButton testButton = new JButton("Test pattern");
+	private final JButton testButton = new JButton("Test");
 	private final JButton testLevelUpButton = new JButton("Test level-up");
 	private final JButton previewLevel99Button = new JButton("Test 99");
 	private final JButton resetRogueDiscoveryButton = new JButton("Reset Rogue");
+	private final JButton hideRogueBannerButton = new JButton("Hide Rogue banner");
 	private final JButton clearSettingsLockButton = new JButton("Clear settings lock");
-	private final JButton stopButton = new JButton("Stop now");
-	private final JButton updatesButton = new JButton("Updates");
-	private final JButton remoteButton = new JButton("Remote Control");
-	private final JButton remoteBackButton = new JButton("Back to HapticScape");
+	private final JButton stopButton = new JButton("STOP ALL");
 	private final JPanel settingsLockBanner = new JPanel(new BorderLayout(6, 0));
 	private final JLabel settingsLockLabel = new JLabel(SETTINGS_LOCKED_MESSAGE);
 	private final JButton unlockSettingsButton = new JButton("Unlock");
@@ -152,8 +153,11 @@ public final class HapticScapePanel extends PluginPanel
 	private final AlertsPanel alertsPanel;
 	private final CustomPatternsPanel customPatternsPanel;
 	private final MusicPanel musicPanel;
-	private final ClickerPanel clickerPanel;
+	private final ClickOutputPanel clickOutputPanel;
+	private final XpClickSettingsPanel xpClickSettingsPanel;
+	private final ClickerPhraseRulesPanel phraseRulesPanel;
 	private final UpdatesPanel updatesPanel;
+	private final ApplicationStartupPanel applicationStartupPanel;
 	private final RemoteSessionManager remoteSessionManager;
 	private final SettingsLockService settingsLockService;
 	private final SettingsLockDraft settingsLockDraft = new SettingsLockDraft();
@@ -162,12 +166,15 @@ public final class HapticScapePanel extends PluginPanel
 	private final LockableCheckBoxBinding level99LockBinding;
 	private final LockableSectionHeader feedbackBlockHeader;
 	private final RemoteControlPanel remoteControlPanel;
-	private final SidebarScrollRouter pageScrollRouter;
-	private final SidebarActionFocusGuard sidebarActionFocusGuard;
+	private final ForgeWorkspacePanel forgeWorkspacePanel;
+	private final WorkspaceShell workspaceShell;
+	private final JScrollPane pageScrollPane;
+	private final GlobalUiHooks.Registration pageScrollRouting;
 	private final RoguePanel roguePanel;
 	private final RogueLauncherPanel rogueLauncher;
 	private boolean rogueModeUnlocked;
 	private boolean rogueViewActive;
+	private boolean forgeDocked;
 	private final Timer developerStatusTimer;
 
 	private volatile int intensityPercent;
@@ -194,8 +201,13 @@ public final class HapticScapePanel extends PluginPanel
 	private RemoteSessionSnapshot appliedRemoteSessionSnapshot = RemoteSessionSnapshot.local();
 
 	public HapticScapePanel(
-		HapticScapeConfig config,
-		ConfigManager configManager,
+		HapticScapeSettingsSource config,
+		SkillCatalog skillCatalog,
+		SettingsStore settingsStore,
+		ExternalLinkOpener externalLinkOpener,
+		TextClipboard clipboard,
+		GlobalUiHooks globalUiHooks,
+		JScrollPane pageScrollPane,
 		Runnable connectAction,
 		Runnable disconnectAction,
 		Runnable testAction,
@@ -220,19 +232,28 @@ public final class HapticScapePanel extends PluginPanel
 	{
 		super();
 		this.config = config;
-		this.configManager = configManager;
+		this.settingsStore = settingsStore;
 		this.remoteSessionManager = remoteSessionManager;
 		this.settingsLockService = settingsLockService;
 		this.rogueFeedbackAction = rogueFeedbackAction;
 		this.rogueUnlockSoundAction = rogueUnlockSoundAction;
-		setLayout(new BorderLayout(0, 6));
-		setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+		this.pageScrollPane = java.util.Objects.requireNonNull(
+			pageScrollPane,
+			"pageScrollPane"
+		);
+		workspaceShell = new WorkspaceShell(this.pageScrollPane);
+		setLayout(new BorderLayout());
+		setBorder(BorderFactory.createEmptyBorder());
 
-		statusLabel.setBorder(BorderFactory.createEmptyBorder(4, 2, 4, 2));
-		updatesButton.setMargin(new java.awt.Insets(2, 5, 2, 5));
-		updatesButton.setToolTipText("Configure HapticScape client updates");
-		remoteButton.setText("Remote Play");
-		remoteButton.setToolTipText("Create or join an opt-in encrypted Remote Play session");
+		statusLabel.setName("connectionStatusText");
+		statusLabel.setForeground(HapticScapeTheme.TEXT);
+		deviceSummaryLabel.setName("connectionDeviceSummary");
+		deviceSummaryLabel.setForeground(HapticScapeTheme.MUTED_TEXT);
+		sourceStatusLabel.setName("gameplaySourceStatus");
+		sourceStatusLabel.setForeground(HapticScapeTheme.MUTED_TEXT);
+		sourceStatusLabel.setBorder(BorderFactory.createEmptyBorder(0, 16, 0, 0));
+		connectionIndicator.setName("connectionStatusIndicator");
+		connectionIndicator.setForeground(HapticScapeTheme.MUTED_TEXT);
 		developerStatusTimer = new Timer(1600, event ->
 			statusLabel.setText(latestConnectionSnapshot.getMessage()));
 		developerStatusTimer.setRepeats(false);
@@ -298,9 +319,6 @@ public final class HapticScapePanel extends PluginPanel
 		milestoneCheckBox.setSelected(milestoneEnabled);
 		milestoneCheckBox.setToolTipText("Use distinct feedback for levels 10–90");
 		level99CheckBox.setSelected(level99Enabled);
-		level99CheckBox.setToolTipText(
-			"Celebrate real skill level 99 with a dedicated mastery ceremony"
-		);
 		testLevelUpButton.setToolTipText("Preview the configured ordinary level-up pattern");
 		previewLevel99Button.setToolTipText(
 			"Preview the Level 99 ceremony using the skill selected on Profiles"
@@ -310,9 +328,16 @@ public final class HapticScapePanel extends PluginPanel
 		resetRogueDiscoveryButton.setToolTipText(
 			"Forget Rogue discovery and the unlock sting so the Konami code can be tested again"
 		);
+		hideRogueBannerButton.setMargin(new java.awt.Insets(2, 6, 2, 6));
+		hideRogueBannerButton.setToolTipText(
+			"Hide Rogue Mode and require the Konami code to reveal the banner again"
+		);
+		hideRogueBannerButton.setVisible(false);
 		clearSettingsLockButton.setMargin(new java.awt.Insets(2, 6, 2, 6));
+		clearSettingsLockButton.setText("Release all locks");
+		clearSettingsLockButton.setVisible(false);
 		clearSettingsLockButton.setToolTipText(
-			"Emergency recovery: remove the persistent feedback-settings lock"
+			"Developer recovery: release every persistent settings lock"
 		);
 		developerControlsRow.setVisible(false);
 		levelUpLockBinding = bindLockableCheckBox(
@@ -344,6 +369,7 @@ public final class HapticScapePanel extends PluginPanel
 		settingsPanel = createGlobalSettingsPanel();
 
 		skillsPanel = new SkillsPanel(
+			skillCatalog,
 			SkillSelection.fromConfigValue(config.disabledSkills()),
 			SkillSelection.fromConfigValue(config.clickerDisabledSkills()),
 			this::writeFeedbackSetting,
@@ -353,11 +379,24 @@ public final class HapticScapePanel extends PluginPanel
 			this::isSubjectWorkspaceActive,
 			this::isLockSelectionEnabled
 		);
+		xpClickSettingsPanel = new XpClickSettingsPanel(
+			config,
+			this::writeFeedbackSetting,
+			this::refreshInheritedProfileIfReady,
+			remoteSessionManager,
+			settingsLockService,
+			settingsLockDraft,
+			this::isSubjectWorkspaceActive,
+			this::isLockSelectionEnabled
+		);
 		profilesPanel = new ProfilesPanel(
+			skillCatalog,
 			SkillFeedbackProfiles.fromConfigValue(config.skillFeedbackProfiles())
 				.replaceMissingCustomPatterns(customPatterns),
+			SkillClickProfiles.fromConfigValue(config.skillClickProfiles()),
 			this::writeFeedbackSetting,
 			this::getGlobalXpFeedbackSettings,
+			xpClickSettingsPanel::getSettings,
 			() -> customPatterns,
 			testSkillProfileAction,
 			remoteSessionManager,
@@ -395,60 +434,85 @@ public final class HapticScapePanel extends PluginPanel
 				}
 			}
 		);
-		clickerPanel = new ClickerPanel(
+		phraseRulesPanel = new ClickerPhraseRulesPanel(
 			config,
 			this::writeFeedbackSetting,
-			settings ->
-			{
-				if (!isSubjectWorkspaceActive())
-				{
-					clickerSettingsAction.accept(settings);
-				}
-			},
-			testClickAction,
 			remoteSessionManager,
 			settingsLockService,
 			settingsLockDraft,
 			this::isSubjectWorkspaceActive,
 			this::isLockSelectionEnabled
 		);
+		clickOutputPanel = new ClickOutputPanel(
+			config,
+			settingsStore,
+			clickerSettingsAction,
+			testClickAction
+		);
 		updatesPanel = new UpdatesPanel(updatePreferencesStore, updateCheckService);
+		applicationStartupPanel = new ApplicationStartupPanel(
+			(key, value) -> writeFeedbackSetting(
+				SettingsLockCatalog.STARTUP_BEHAVIOR, key, value),
+			settingsLockService,
+			settingsLockDraft,
+			remoteSessionManager::getLockSnapshot,
+			this::isSubjectWorkspaceActive,
+			this::isLockSelectionEnabled
+		);
+		applicationStartupPanel.apply(config.startWithWindows(), config.startMinimized());
+		RemoteLiveForgePanel liveForgePanel = new RemoteLiveForgePanel(
+			remoteSessionManager,
+			globalUiHooks
+		);
+		forgeWorkspacePanel = new ForgeWorkspacePanel(
+			customPatternsPanel,
+			liveForgePanel,
+			remoteSessionManager
+		);
 		remoteControlPanel = new RemoteControlPanel(
 			config,
-			configManager,
+			settingsStore,
+			externalLinkOpener,
+			clipboard,
+			globalUiHooks,
 			remoteSessionManager,
 			remotePairingService,
 			discordPairingBridge,
-			settingsLockDraft
+			settingsLockDraft,
+			this::openSubjectSettings,
+			this::openLiveForge
 		);
-		roguePanel = new RoguePanel(configManager, rogueFeedbackAction);
+		roguePanel = new RoguePanel(settingsStore, rogueFeedbackAction);
 		rogueLauncher = new RogueLauncherPanel(this::toggleRogueView);
 
 		tabs = new JTabbedPane(JTabbedPane.TOP, JTabbedPane.SCROLL_TAB_LAYOUT);
-		tabs.putClientProperty(
-			"FlatLaf.style",
-			"tabInsets: 2,1,2,1; tabHeight: 26; tabAreaAlignment: center"
+		tabs.setName("gameplayWorkspaceTabs");
+		PanelUi.configureWorkspaceTabs(tabs);
+		JPanel xpDefaults = new JPanel();
+		xpDefaults.setLayout(new BoxLayout(xpDefaults, BoxLayout.Y_AXIS));
+		PanelUi.addPreferredHeightComponent(xpDefaults, settingsPanel);
+		PanelUi.addPreferredHeightComponent(xpDefaults, xpClickSettingsPanel);
+		JPanel xpAndSkills = new XpSkillsWorkspacePanel(
+			xpDefaults,
+			skillsPanel,
+			profilesPanel
 		);
-		PanelUi.addCompactTab(tabs, "Skills", skillsPanel);
-		PanelUi.addCompactTab(tabs, "XP", profilesPanel);
+		PanelUi.addCompactTab(tabs, "XP + Skills", xpAndSkills);
 		PanelUi.addCompactTab(tabs, "Alerts", alertsPanel);
-		PanelUi.addCompactTab(tabs, "Forge", customPatternsPanel);
-		PanelUi.addCompactTab(tabs, "Music", musicPanel);
-		PanelUi.addCompactTab(tabs, "Click", clickerPanel);
+		PanelUi.addCompactTab(tabs, "Phrases", phraseRulesPanel);
 		JPanel topPanel = new JPanel();
 		topPanel.setLayout(new BoxLayout(topPanel, BoxLayout.Y_AXIS));
-		PanelUi.addVerticalComponent(topPanel, statusLabel);
 
-		settingsLockBanner.setBorder(BorderFactory.createTitledBorder("Settings access"));
+		settingsLockBanner.setBorder(PanelUi.createSectionBorder("Settings access"));
 		settingsLockBanner.add(settingsLockLabel, BorderLayout.CENTER);
 		JPanel unlockButtonHost = new JPanel(new GridBagLayout());
 		unlockButtonHost.setOpaque(false);
 		unlockButtonHost.add(unlockSettingsButton);
 		settingsLockBanner.add(unlockButtonHost, BorderLayout.EAST);
 		settingsLockBanner.setVisible(false);
-		PanelUi.addVerticalComponent(topPanel, settingsLockBanner);
+		PanelUi.addFlexibleVerticalComponent(topPanel, settingsLockBanner);
 
-		remoteBanner.setBorder(BorderFactory.createTitledBorder("Remote Control"));
+		remoteBanner.setBorder(PanelUi.createSectionBorder("Remote Control"));
 		remoteBanner.add(remoteBannerLabel, BorderLayout.CENTER);
 		JPanel remoteBannerButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 3, 0));
 		remoteBannerButtons.add(remoteEmergencyButton);
@@ -456,14 +520,12 @@ public final class HapticScapePanel extends PluginPanel
 		remoteBannerButtons.add(remoteEndButton);
 		remoteBanner.add(remoteBannerButtons, BorderLayout.SOUTH);
 		remoteBanner.setVisible(false);
-		PanelUi.addVerticalComponent(topPanel, remoteBanner);
+		PanelUi.addFlexibleVerticalComponent(topPanel, remoteBanner);
 
-		controllerWorkspaceTabs.putClientProperty(
-			"FlatLaf.style",
-			"tabHeight: 26; tabAreaAlignment: center"
-		);
-		controllerWorkspaceTabs.addTab("Mine", new JPanel());
-		controllerWorkspaceTabs.addTab("Subject", new JPanel());
+		controllerWorkspaceTabs.setName("controllerWorkspaceTabs");
+		PanelUi.configureWorkspaceTabs(controllerWorkspaceTabs);
+		PanelUi.addCompactTab(controllerWorkspaceTabs, "Mine", new JPanel());
+		PanelUi.addCompactTab(controllerWorkspaceTabs, "Subject", new JPanel());
 		controllerWorkspaceTabs.setSelectedIndex(SUBJECT_WORKSPACE_INDEX);
 		controllerWorkspaceTabs.setPreferredSize(new Dimension(0, 31));
 		controllerWorkspaceTabs.setMinimumSize(new Dimension(0, 31));
@@ -478,29 +540,12 @@ public final class HapticScapePanel extends PluginPanel
 				);
 			}
 		});
-		PanelUi.addVerticalComponent(topPanel, controllerWorkspaceTabs);
-
-		JPanel localFeedback = new JPanel();
-		localFeedback.setLayout(new BoxLayout(localFeedback, BoxLayout.Y_AXIS));
-		PanelUi.addVerticalComponent(localFeedback, settingsPanel);
-		PanelUi.addFlexibleVerticalComponent(localFeedback, tabs);
-
-		JPanel remoteFeedback = new JPanel(new BorderLayout());
-		remoteFeedback.setBorder(BorderFactory.createTitledBorder("Feedback settings"));
-		JLabel remoteFeedbackLabel = new JLabel(
-			"<html><center>Settings are controlled by the paired controller.<br>"
-				+ "Intiface connection and Emergency Off remain local.</center></html>",
-			SwingConstants.CENTER
-		);
-		remoteFeedback.add(remoteFeedbackLabel, BorderLayout.CENTER);
-		feedbackHost.add(localFeedback, LOCAL_FEEDBACK_CARD);
-		feedbackHost.add(remoteFeedback, REMOTE_FEEDBACK_CARD);
-		PanelUi.addFlexibleVerticalComponent(topPanel, feedbackHost);
+		PanelUi.addFlexibleVerticalComponent(topPanel, controllerWorkspaceTabs);
 
 		JList<DeviceInfo> deviceList = new JList<>(deviceModel);
 		JScrollPane scrollPane = new JScrollPane(deviceList);
-		scrollPane.setPreferredSize(new Dimension(0, 140));
-		scrollPane.setBorder(BorderFactory.createTitledBorder("Devices"));
+		PanelUi.setFlexibleWidthHeightHint(scrollPane, 140, 90);
+		scrollPane.setBorder(PanelUi.createSectionBorder("Devices"));
 
 		connectButton.addActionListener(event ->
 		{
@@ -513,6 +558,7 @@ public final class HapticScapePanel extends PluginPanel
 		testLevelUpButton.addActionListener(event -> testLevelUpAction.run());
 		previewLevel99Button.addActionListener(event -> previewLevel99Action.run());
 		resetRogueDiscoveryButton.addActionListener(event -> resetRogueDiscovery());
+		hideRogueBannerButton.addActionListener(event -> hideRogueBanner());
 		clearSettingsLockButton.addActionListener(event -> clearSettingsLockFromDeveloperMode());
 		unlockSettingsButton.addActionListener(event -> unlockSettings());
 		stopButton.addActionListener(event ->
@@ -525,68 +571,124 @@ public final class HapticScapePanel extends PluginPanel
 			musicPanel.disableMusicSync();
 			stopAction.run();
 		});
-		remoteButton.addActionListener(event -> showRemoteView());
-		remoteBackButton.addActionListener(event -> showNormalView());
 		remoteEmergencyButton.addActionListener(event -> remoteSessionManager.emergencyPause());
 		remoteResumeButton.addActionListener(event -> remoteSessionManager.resumeParticipant());
 		remoteEndButton.addActionListener(event -> remoteSessionManager.endSession());
 
-		updatesButton.addActionListener(event -> JOptionPane.showMessageDialog(
-			this,
-			updatesPanel,
-			"HapticScape updates",
-			JOptionPane.PLAIN_MESSAGE));
-
-		JPanel primaryButtons = new JPanel(new GridLayout(2, 2, 6, 6));
-		primaryButtons.add(connectButton);
-		primaryButtons.add(disconnectButton);
+		JPanel primaryButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+		primaryButtons.setOpaque(false);
+		testButton.setToolTipText("Preview the current feedback pattern");
+		stopButton.setToolTipText("Immediately stop every active output");
+		stopButton.putClientProperty("JComponent.outline", "error");
 		primaryButtons.add(testButton);
 		primaryButtons.add(stopButton);
 
-		JPanel buttons = new JPanel();
-		buttons.setLayout(new BoxLayout(buttons, BoxLayout.Y_AXIS));
-		PanelUi.addVerticalComponent(buttons, primaryButtons);
-		PanelUi.addVerticalComponent(buttons, updatesButton);
+		JPanel deviceSettings = new JPanel(new BorderLayout(0, 6));
+		deviceSettings.setBorder(PanelUi.createSectionBorder("Intiface devices"));
+		deviceSettings.add(scrollPane, BorderLayout.CENTER);
+		JPanel deviceButtons = new JPanel(new GridLayout(1, 2, 4, 0));
+		deviceButtons.add(connectButton);
+		deviceButtons.add(disconnectButton);
+		deviceSettings.add(deviceButtons, BorderLayout.SOUTH);
 
-		JPanel normalContent = new JPanel(new BorderLayout(0, 8));
-		normalContent.add(topPanel, BorderLayout.NORTH);
-		normalContent.add(scrollPane, BorderLayout.CENTER);
-		normalContent.add(buttons, BorderLayout.SOUTH);
+		JPanel applicationSettings = new JPanel();
+		applicationSettings.setLayout(new BoxLayout(applicationSettings, BoxLayout.Y_AXIS));
+		PanelUi.addPreferredHeightComponent(applicationSettings, clickOutputPanel);
+		PanelUi.addPreferredHeightComponent(applicationSettings, applicationStartupPanel);
+		PanelUi.addPreferredHeightComponent(applicationSettings, updatesPanel);
+		JPanel settingsWorkspace = new ResponsiveColumnsPanel(
+			deviceSettings,
+			applicationSettings,
+			developerControlsRow
+		);
 
-		JPanel normalView = new JPanel(new BorderLayout(0, 6));
-		normalView.add(remoteButton, BorderLayout.NORTH);
-		normalView.add(normalContent, BorderLayout.CENTER);
+		patternTabs = new JTabbedPane(JTabbedPane.TOP);
+		patternTabs.setName("patternsWorkspaceTabs");
+		PanelUi.configureWorkspaceTabs(patternTabs);
+		PanelUi.addCompactTab(patternTabs, "Forge", forgeWorkspacePanel);
+		PanelUi.addCompactTab(patternTabs, "Music Sync", musicPanel);
 
-		JPanel remoteView = new JPanel(new BorderLayout(0, 6));
-		remoteBackButton.setToolTipText("Return to the main HapticScape controls");
-		remoteView.add(remoteBackButton, BorderLayout.NORTH);
-		remoteView.add(remoteControlPanel, BorderLayout.CENTER);
+		workspaceShell.addWorkspace(GAMEPLAY_WORKSPACE, "Gameplay", tabs);
+		workspaceShell.addWorkspace(PATTERNS_WORKSPACE, "Patterns + Audio", patternTabs);
+		workspaceShell.addWorkspace(REMOTE_WORKSPACE, "Remote Play", remoteControlPanel);
+		workspaceShell.addWorkspace(SETTINGS_WORKSPACE, "Settings", settingsWorkspace);
+		workspaceShell.setUserSelectionAction(this::handleWorkspaceSelected);
+		workspaceShell.setSelectionAction(workspace ->
+			pageTitleLabel.setText(workspaceShell.getWorkspaceLabel(workspace)));
+		workspaceShell.setStatusComponent(createConnectionStatusPanel());
+		workspaceShell.setWideDockVisibilityAction(this::setForgeDocked);
 
-		contentHost.add(normalView, NORMAL_CARD);
-		contentHost.add(remoteView, REMOTE_CARD);
-		contentHost.add(roguePanel, ROGUE_CARD);
+		JPanel applicationHeader = new JPanel(new BorderLayout(8, 0));
+		applicationHeader.setName("applicationHeader");
+		applicationHeader.setBackground(HapticScapeTheme.SURFACE);
+		applicationHeader.setBorder(BorderFactory.createCompoundBorder(
+			BorderFactory.createMatteBorder(0, 0, 1, 0, HapticScapeTheme.BORDER),
+			BorderFactory.createEmptyBorder(7, 12, 7, 12)
+		));
+		pageTitleLabel.setName("applicationPageTitle");
+		pageTitleLabel.setFont(pageTitleLabel.getFont().deriveFont(Font.BOLD));
+		applicationHeader.add(pageTitleLabel, BorderLayout.WEST);
+		JPanel developerHeaderButtons = new JPanel(new FlowLayout(FlowLayout.CENTER, 4, 0));
+		developerHeaderButtons.setOpaque(false);
+		developerHeaderButtons.add(hideRogueBannerButton);
+		developerHeaderButtons.add(clearSettingsLockButton);
+		applicationHeader.add(developerHeaderButtons, BorderLayout.CENTER);
+		applicationHeader.add(primaryButtons, BorderLayout.EAST);
+
+		JPanel fixedHeader = new JPanel();
+		fixedHeader.setName("applicationFixedHeader");
+		fixedHeader.setLayout(new BoxLayout(fixedHeader, BoxLayout.Y_AXIS));
+		PanelUi.addFlexibleVerticalComponent(fixedHeader, applicationHeader);
+		PanelUi.addFlexibleVerticalComponent(fixedHeader, topPanel);
+
+		JPanel normalContent = new JPanel(new BorderLayout());
+		normalContent.add(fixedHeader, BorderLayout.NORTH);
+		normalContent.add(workspaceShell, BorderLayout.CENTER);
+
+		contentHost.add(normalContent, NORMAL_CARD);
+		JScrollPane rogueScrollPane = new JScrollPane(roguePanel);
+		rogueScrollPane.setName("roguePageScrollPane");
+		rogueScrollPane.setBorder(BorderFactory.createEmptyBorder());
+		rogueScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+		rogueScrollPane.getVerticalScrollBar().setUnitIncrement(16);
+		contentHost.add(rogueScrollPane, ROGUE_CARD);
 		add(rogueLauncher, BorderLayout.NORTH);
 		add(contentHost, BorderLayout.CENTER);
-		// PluginPanel already owns the scroll pane displayed by RuneLite. A second
-		// full-page scroll pane expands inside that wrapper and has no range to move.
-		JScrollPane pageScrollPane = getScrollPane();
-		pageScrollPane.getVerticalScrollBar().setUnitIncrement(16);
-		pageScrollRouter = SidebarScrollRouter.install(pageScrollPane, this);
-		sidebarActionFocusGuard = SidebarActionFocusGuard.install(this);
+		// WorkspaceShell owns the normal page viewport; global routing preserves
+		// nested list/textarea scrolling and the existing remote viewport anchor.
+		pageScrollRouting = globalUiHooks.installPageScrollRouting(pageScrollPane, this);
 		contentLayout.show(contentHost, NORMAL_CARD);
-
-		if (Boolean.parseBoolean(configManager.getConfiguration(HapticScapeConfig.GROUP, ROGUE_UNLOCKED_KEY)))
-		{
-			ensureRogueAccess(false, false);
-		}
 
 		remoteSessionManager.addListener(this);
 		settingsLockService.addListener(this);
 		applyRemoteSessionState(remoteSessionManager.getSnapshot());
 		applyState(ConnectionSnapshot.disconnected());
-		rogueKeyDispatcher = this::handleRogueKeyEvent;
-		KeyboardFocusManager.getCurrentKeyboardFocusManager()
-			.addKeyEventDispatcher(rogueKeyDispatcher);
+		rogueKeyHook = globalUiHooks.onScopedKeyPress(this, this::handleRogueKeyPress);
+	}
+
+	private JPanel createConnectionStatusPanel()
+	{
+		JPanel status = new JPanel(new BorderLayout(12, 0));
+		status.setName("connectionStatus");
+		status.setBackground(HapticScapeTheme.SURFACE);
+		status.setBorder(BorderFactory.createEmptyBorder(7, 12, 7, 12));
+
+		JPanel connection = new JPanel(new BorderLayout(7, 0));
+		connection.setOpaque(false);
+		connectionIndicator.setVerticalAlignment(SwingConstants.CENTER);
+		connection.add(connectionIndicator, BorderLayout.WEST);
+
+		JPanel details = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+		details.setOpaque(false);
+		details.add(statusLabel);
+		JLabel separator = new JLabel("  \u2022  ");
+		separator.setForeground(HapticScapeTheme.BORDER_HOVER);
+		details.add(separator);
+		details.add(deviceSummaryLabel);
+		connection.add(details, BorderLayout.CENTER);
+		status.add(connection, BorderLayout.WEST);
+		status.add(sourceStatusLabel, BorderLayout.CENTER);
+		return status;
 	}
 
 	public int getIntensityPercent()
@@ -597,6 +699,21 @@ public final class HapticScapePanel extends PluginPanel
 	public void showDiscordRemoteView()
 	{
 		showRemoteView();
+	}
+
+	public void updateSourceStatus(String message, Integer rgb)
+	{
+		if (!SwingUtilities.isEventDispatchThread())
+		{
+			SwingUtilities.invokeLater(() -> updateSourceStatus(message, rgb));
+			return;
+		}
+		String displayed = message == null || message.trim().isEmpty() ? " " : message;
+		sourceStatusLabel.setText(displayed);
+		sourceStatusLabel.setToolTipText(displayed.trim().isEmpty() ? null : displayed);
+		sourceStatusLabel.setForeground(rgb == null
+			? HapticScapeTheme.MUTED_TEXT
+			: new java.awt.Color(rgb));
 	}
 
 	public boolean confirmDiscordRemoteControl(DiscordJoinRequest request)
@@ -641,14 +758,14 @@ public final class HapticScapePanel extends PluginPanel
 		);
 	}
 
-	public XpFeedbackSettings getXpFeedbackSettings(Skill skill)
+	public XpFeedbackSettings getXpFeedbackSettings(String skillId)
 	{
-		return profilesPanel.getSettings(skill);
+		return profilesPanel.getSettings(skillId);
 	}
 
-	public Skill getSelectedProfileSkill()
+	public String getSelectedProfileSkillId()
 	{
-		return profilesPanel.getSelectedSkill();
+		return profilesPanel.getSelectedSkillId();
 	}
 
 	public HapticPatternSelection getLevelUpPatternPreset()
@@ -676,19 +793,19 @@ public final class HapticScapePanel extends PluginPanel
 		return level99Enabled;
 	}
 
-	public boolean isSkillEnabled(Skill skill)
+	public boolean isSkillEnabled(String skillId)
 	{
-		return isHapticSkillEnabled(skill);
+		return isHapticSkillEnabled(skillId);
 	}
 
-	public boolean isHapticSkillEnabled(Skill skill)
+	public boolean isHapticSkillEnabled(String skillId)
 	{
-		return skillsPanel.isHapticSkillEnabled(skill);
+		return skillsPanel.isHapticSkillEnabled(skillId);
 	}
 
-	public boolean isClickSkillEnabled(Skill skill)
+	public boolean isClickSkillEnabled(String skillId)
 	{
-		return skillsPanel.isClickSkillEnabled(skill);
+		return skillsPanel.isClickSkillEnabled(skillId);
 	}
 
 	public CustomPatternLibrary getCustomPatterns()
@@ -711,9 +828,19 @@ public final class HapticScapePanel extends PluginPanel
 		return alertsPanel.isGenericClickEnabled();
 	}
 
+	public ClickSequence getGenericNotificationClickSequence()
+	{
+		return alertsPanel.getGenericClickSequence();
+	}
+
 	public boolean isAlertClickEnabled(AlertCategory category)
 	{
 		return alertsPanel.isClickEnabled(category);
+	}
+
+	public ClickSequence getAlertClickSequence(AlertCategory category)
+	{
+		return alertsPanel.getClickSequence(category);
 	}
 
 	public AlertTriggerSettings getAlertTriggerSettings()
@@ -728,18 +855,17 @@ public final class HapticScapePanel extends PluginPanel
 
 	public ClickerSettings getClickerSettings()
 	{
-		return clickerPanel.getSettings();
+		return clickOutputPanel.getSettings();
 	}
 
 	public ClickerXpSettings getClickerXpSettings()
 	{
-		return clickerPanel.getXpSettings();
+		return xpClickSettingsPanel.getSettings();
 	}
-
 
 	public ClickerPhraseRules getClickerPhraseRules()
 	{
-		return clickerPanel.getPhraseRules();
+		return phraseRulesPanel.getRules();
 	}
 
 	public void updateMusicSync(MusicSyncSnapshot snapshot)
@@ -762,7 +888,7 @@ public final class HapticScapePanel extends PluginPanel
 			{
 				writeFeedbackSetting(
 					SettingsLockCatalog.FEEDBACK_BLOCK,
-					HapticScapeConfig.INTENSITY_PERCENT_KEY,
+					HapticScapeSettingKeys.INTENSITY_PERCENT,
 					intensityPercent
 				);
 			}
@@ -776,7 +902,7 @@ public final class HapticScapePanel extends PluginPanel
 			minimumXpGain = ((Number) minimumXpSpinner.getValue()).intValue();
 			writeFeedbackSetting(
 				SettingsLockCatalog.FEEDBACK_BLOCK,
-				HapticScapeConfig.MINIMUM_XP_GAIN_KEY,
+				HapticScapeSettingKeys.MINIMUM_XP_GAIN,
 				minimumXpGain
 			);
 			refreshInheritedProfileIfReady();
@@ -790,7 +916,7 @@ public final class HapticScapePanel extends PluginPanel
 			durationMillis = ((Number) durationSpinner.getValue()).intValue();
 			writeFeedbackSetting(
 				SettingsLockCatalog.FEEDBACK_BLOCK,
-				HapticScapeConfig.PULSE_DURATION_MILLIS_KEY,
+				HapticScapeSettingKeys.PULSE_DURATION_MILLIS,
 				durationMillis
 			);
 			refreshInheritedProfileIfReady();
@@ -812,7 +938,7 @@ public final class HapticScapePanel extends PluginPanel
 				patternSelection = selected;
 				writeFeedbackSetting(
 					SettingsLockCatalog.FEEDBACK_BLOCK,
-					HapticScapeConfig.PATTERN_PRESET_KEY,
+					HapticScapeSettingKeys.PATTERN_PRESET,
 					selected.toConfigValue()
 				);
 				refreshInheritedProfileIfReady();
@@ -833,7 +959,7 @@ public final class HapticScapePanel extends PluginPanel
 					levelUpPatternSelection = selected;
 					writeFeedbackSetting(
 						SettingsLockCatalog.FEEDBACK_BLOCK,
-						HapticScapeConfig.LEVEL_UP_PATTERN_PRESET_KEY,
+						HapticScapeSettingKeys.LEVEL_UP_PATTERN_PRESET,
 						selected.toConfigValue()
 					);
 				}
@@ -854,7 +980,7 @@ public final class HapticScapePanel extends PluginPanel
 					milestonePatternSelection = selected;
 					writeFeedbackSetting(
 						SettingsLockCatalog.FEEDBACK_BLOCK,
-						HapticScapeConfig.MILESTONE_PATTERN_PRESET_KEY,
+						HapticScapeSettingKeys.MILESTONE_PATTERN_PRESET,
 						selected.toConfigValue()
 					);
 				}
@@ -873,7 +999,7 @@ public final class HapticScapePanel extends PluginPanel
 			levelUpEnabled = levelUpCheckBox.isSelected();
 			writeFeedbackSetting(
 				SettingsLockCatalog.LEVEL_UP_HAPTICS,
-				HapticScapeConfig.LEVEL_UP_FEEDBACK_ENABLED_KEY,
+				HapticScapeSettingKeys.LEVEL_UP_FEEDBACK_ENABLED,
 				levelUpEnabled
 			);
 		});
@@ -890,7 +1016,7 @@ public final class HapticScapePanel extends PluginPanel
 			milestoneEnabled = milestoneCheckBox.isSelected();
 			writeFeedbackSetting(
 				SettingsLockCatalog.MILESTONE_HAPTICS,
-				HapticScapeConfig.MILESTONE_FEEDBACK_ENABLED_KEY,
+				HapticScapeSettingKeys.MILESTONE_FEEDBACK_ENABLED,
 				milestoneEnabled
 			);
 		});
@@ -907,11 +1033,19 @@ public final class HapticScapePanel extends PluginPanel
 			level99Enabled = level99CheckBox.isSelected();
 			writeFeedbackSetting(
 				SettingsLockCatalog.LEVEL_99_HAPTICS,
-				HapticScapeConfig.LEVEL_99_CELEBRATION_ENABLED_KEY,
+				HapticScapeSettingKeys.LEVEL_99_CELEBRATION_ENABLED,
 				level99Enabled
 			);
 		});
 		statusLabel.addMouseListener(new MouseAdapter()
+		{
+			@Override
+			public void mouseClicked(MouseEvent event)
+			{
+				handleDeveloperUnlockClick(event);
+			}
+		});
+		pageTitleLabel.addMouseListener(new MouseAdapter()
 		{
 			@Override
 			public void mouseClicked(MouseEvent event)
@@ -943,7 +1077,7 @@ public final class HapticScapePanel extends PluginPanel
 		{
 			return;
 		}
-		configManager.setConfiguration(HapticScapeConfig.GROUP, key, value);
+		settingsStore.set(key, value);
 	}
 
 	private void writeFeedbackSetting(String key, Object value)
@@ -955,51 +1089,50 @@ public final class HapticScapePanel extends PluginPanel
 	{
 		JPanel settings = new JPanel();
 		settings.setLayout(new BoxLayout(settings, BoxLayout.Y_AXIS));
-		settings.setBorder(BorderFactory.createTitledBorder("Feedback"));
-		PanelUi.addVerticalComponent(settings, feedbackBlockHeader);
+		settings.setBorder(PanelUi.createSectionBorder("XP haptics"));
+		PanelUi.addPreferredHeightComponent(settings, feedbackBlockHeader);
 
 		JPanel thresholdRow = new JPanel(new BorderLayout(8, 0));
 		thresholdRow.add(new JLabel("Minimum XP gain"), BorderLayout.CENTER);
 		thresholdRow.add(minimumXpSpinner, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(settings, thresholdRow);
+		PanelUi.addPreferredHeightComponent(settings, thresholdRow);
 
 		JPanel intensityHeader = new JPanel(new BorderLayout());
 		intensityHeader.add(new JLabel("Intensity"), BorderLayout.WEST);
 		intensityHeader.add(intensityValueLabel, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(settings, intensityHeader);
-		PanelUi.addVerticalComponent(settings, intensitySlider);
+		PanelUi.addPreferredHeightComponent(settings, intensityHeader);
+		PanelUi.addPreferredHeightComponent(settings, intensitySlider);
 
 		JPanel patternRow = new JPanel(new BorderLayout(8, 0));
 		patternRow.add(new JLabel("Pattern"), BorderLayout.CENTER);
 		patternRow.add(patternComboBox, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(settings, patternRow);
+		PanelUi.addPreferredHeightComponent(settings, patternRow);
 
 		JPanel durationRow = new JPanel(new BorderLayout(8, 0));
 		durationRow.add(new JLabel(PanelUi.DURATION_LABEL), BorderLayout.CENTER);
 		durationRow.add(durationSpinner, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(settings, durationRow);
+		PanelUi.addPreferredHeightComponent(settings, durationRow);
 
 		JPanel levelUpRow = new JPanel(new BorderLayout(8, 0));
 		levelUpRow.add(levelUpCheckBox, BorderLayout.CENTER);
 		levelUpRow.add(levelUpPatternComboBox, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(settings, levelUpRow);
+		PanelUi.addPreferredHeightComponent(settings, levelUpRow);
 
 		JPanel levelUpTestRow = new JPanel(new BorderLayout());
 		levelUpTestRow.add(testLevelUpButton, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(settings, levelUpTestRow);
+		PanelUi.addPreferredHeightComponent(settings, levelUpTestRow);
 
 		JPanel milestoneRow = new JPanel(new BorderLayout(8, 0));
 		milestoneRow.add(milestoneCheckBox, BorderLayout.CENTER);
 		milestoneRow.add(milestonePatternComboBox, BorderLayout.EAST);
-		PanelUi.addVerticalComponent(settings, milestoneRow);
+		PanelUi.addPreferredHeightComponent(settings, milestoneRow);
 
 		level99Row.add(level99CheckBox, BorderLayout.CENTER);
-		PanelUi.addVerticalComponent(settings, level99Row);
+		PanelUi.addPreferredHeightComponent(settings, level99Row);
 
 		developerControlsRow.add(previewLevel99Button);
 		developerControlsRow.add(resetRogueDiscoveryButton);
-		developerControlsRow.add(clearSettingsLockButton);
-		PanelUi.addVerticalComponent(settings, developerControlsRow);
+		PanelUi.addPreferredHeightComponent(settings, developerControlsRow);
 		return settings;
 	}
 
@@ -1008,15 +1141,15 @@ public final class HapticScapePanel extends PluginPanel
 		customPatterns = updatedLibrary;
 		patternSelection = resolveAndPersist(
 			patternSelection,
-			HapticScapeConfig.PATTERN_PRESET_KEY
+			HapticScapeSettingKeys.PATTERN_PRESET
 		);
 		levelUpPatternSelection = resolveAndPersist(
 			levelUpPatternSelection,
-			HapticScapeConfig.LEVEL_UP_PATTERN_PRESET_KEY
+			HapticScapeSettingKeys.LEVEL_UP_PATTERN_PRESET
 		);
 		milestonePatternSelection = resolveAndPersist(
 			milestonePatternSelection,
-			HapticScapeConfig.MILESTONE_PATTERN_PRESET_KEY
+			HapticScapeSettingKeys.MILESTONE_PATTERN_PRESET
 		);
 		profilesPanel.applyCustomPatternLibrary(updatedLibrary);
 		alertsPanel.applyCustomPatternLibrary(updatedLibrary);
@@ -1068,64 +1201,42 @@ public final class HapticScapePanel extends PluginPanel
 
 	public void close()
 	{
-		sidebarActionFocusGuard.close();
-		pageScrollRouter.close();
+		pageScrollRouting.close();
 		remoteSessionManager.removeListener(this);
 		settingsLockService.removeListener(this);
 		remoteControlPanel.close();
+		forgeWorkspacePanel.close();
 		developerStatusTimer.stop();
-		KeyboardFocusManager.getCurrentKeyboardFocusManager()
-			.removeKeyEventDispatcher(rogueKeyDispatcher);
+		rogueKeyHook.close();
 		roguePanel.close();
 		rogueLauncher.close();
 		customPatternsPanel.close();
 	}
 
-	private boolean handleRogueKeyEvent(KeyEvent event)
+	private void handleRogueKeyPress(GlobalUiHooks.ScopedKeyPress event)
 	{
-		if (event.getID() != KeyEvent.KEY_PRESSED || event.isConsumed())
-		{
-			return false;
-		}
-
-		Window panelWindow = SwingUtilities.getWindowAncestor(this);
-		if (panelWindow == null
-			|| KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow() != panelWindow)
-		{
-			return false;
-		}
-
-		if (KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner() instanceof JTextComponent)
+		if (event.isTextInputFocused())
 		{
 			konamiCodeDetector.reset();
-			return false;
+			return;
 		}
-
 		if (konamiCodeDetector.acceptKeyCode(event.getKeyCode()))
 		{
 			SwingUtilities.invokeLater(() -> unlockRogueMode(true));
 		}
-		return false;
 	}
 
 	private void unlockRogueMode(boolean celebrate)
 	{
 		boolean firstUnlock = !rogueModeUnlocked;
-		boolean unlockStingPlayed = Boolean.parseBoolean(configManager.getConfiguration(
-			HapticScapeConfig.GROUP,
-			ROGUE_UNLOCK_STING_PLAYED_KEY
-		));
+		boolean unlockStingPlayed = Boolean.parseBoolean(settingsStore.get(HapticScapeSettingKeys.ROGUE_UNLOCK_STING_PLAYED));
 		if (!unlockStingPlayed && rogueUnlockSoundAction != null)
 		{
 			rogueUnlockSoundAction.run();
-			configManager.setConfiguration(
-				HapticScapeConfig.GROUP,
-				ROGUE_UNLOCK_STING_PLAYED_KEY,
-				true
-			);
+			settingsStore.set(HapticScapeSettingKeys.ROGUE_UNLOCK_STING_PLAYED, true);
 		}
 		ensureRogueAccess(true, firstUnlock);
-		configManager.setConfiguration(HapticScapeConfig.GROUP, ROGUE_UNLOCKED_KEY, true);
+		settingsStore.set(HapticScapeSettingKeys.ROGUE_UNLOCKED, true);
 		rogueLauncher.celebrate();
 		roguePanel.reveal();
 		if (celebrate && rogueFeedbackAction != null)
@@ -1172,6 +1283,7 @@ public final class HapticScapePanel extends PluginPanel
 
 	private void showRogueView()
 	{
+		forgeWorkspacePanel.leaveWorkspace();
 		rogueViewActive = true;
 		contentLayout.show(contentHost, ROGUE_CARD);
 		rogueLauncher.setActive(true);
@@ -1190,26 +1302,99 @@ public final class HapticScapePanel extends PluginPanel
 
 	private void showRemoteView()
 	{
-		rogueViewActive = false;
-		contentLayout.show(contentHost, REMOTE_CARD);
-		rogueLauncher.setActive(false);
-		contentHost.revalidate();
-		contentHost.repaint();
+		showNormalView();
+		if (!forgeDocked)
+		{
+			forgeWorkspacePanel.leaveWorkspace();
+		}
+		workspaceShell.showWorkspace(REMOTE_WORKSPACE);
+	}
+
+	private void openLiveForge()
+	{
+		selectControllerWorkspace(false);
+		showNormalView();
+		forgeWorkspacePanel.showLive();
+		if (!forgeDocked)
+		{
+			workspaceShell.showWorkspace(PATTERNS_WORKSPACE);
+		}
+	}
+
+	private void openSubjectSettings()
+	{
+		selectControllerWorkspace(true);
+		showNormalView();
+		workspaceShell.showWorkspace(GAMEPLAY_WORKSPACE);
+	}
+
+	private void handleWorkspaceSelected(String workspace)
+	{
+		if (PATTERNS_WORKSPACE.equals(workspace) && !forgeDocked)
+		{
+			forgeWorkspacePanel.enterWorkspace();
+		}
+		else if (!forgeDocked)
+		{
+			forgeWorkspacePanel.leaveWorkspace();
+		}
+	}
+
+	private void setForgeDocked(boolean docked)
+	{
+		if (forgeDocked == docked)
+		{
+			return;
+		}
+		forgeDocked = docked;
+		if (docked)
+		{
+			boolean wasVisible = PATTERNS_WORKSPACE.equals(
+				workspaceShell.getSelectedWorkspace()
+			);
+			patternTabs.remove(forgeWorkspacePanel);
+			workspaceShell.setWideDockComponent(forgeWorkspacePanel);
+			if (!wasVisible)
+			{
+				forgeWorkspacePanel.showCompose();
+			}
+		}
+		else
+		{
+			workspaceShell.clearWideDockComponent(forgeWorkspacePanel);
+			if (patternTabs.indexOfComponent(forgeWorkspacePanel) < 0)
+			{
+				patternTabs.insertTab("Forge", null, forgeWorkspacePanel, null, 0);
+			}
+			if (PATTERNS_WORKSPACE.equals(workspaceShell.getSelectedWorkspace()))
+			{
+				patternTabs.setSelectedComponent(forgeWorkspacePanel);
+			}
+			else
+			{
+				forgeWorkspacePanel.leaveWorkspace();
+			}
+		}
+		patternTabs.revalidate();
+		patternTabs.repaint();
 	}
 
 	private void resetRogueDiscovery()
+	{
+		hideRogueBanner();
+		settingsStore.set(HapticScapeSettingKeys.ROGUE_UNLOCK_STING_PLAYED, false);
+		statusLabel.setText("Rogue discovery reset - enter the Konami code again");
+		developerStatusTimer.restart();
+	}
+
+	private void hideRogueBanner()
 	{
 		showNormalView();
 		rogueModeUnlocked = false;
 		konamiCodeDetector.reset();
 		rogueLauncher.resetLocked();
-		configManager.setConfiguration(HapticScapeConfig.GROUP, ROGUE_UNLOCKED_KEY, false);
-		configManager.setConfiguration(
-			HapticScapeConfig.GROUP,
-			ROGUE_UNLOCK_STING_PLAYED_KEY,
-			false
-		);
-		statusLabel.setText("Rogue discovery reset - enter the Konami code again");
+		settingsStore.set(HapticScapeSettingKeys.ROGUE_UNLOCKED, false);
+		statusLabel.setText("Rogue banner hidden - enter the Konami code to reveal it again");
 		developerStatusTimer.restart();
 	}
 
@@ -1282,12 +1467,10 @@ public final class HapticScapePanel extends PluginPanel
 	{
 		developerControlsRow.revalidate();
 		java.awt.Container parent = developerControlsRow.getParent();
-		if (parent instanceof JPanel)
+		if (parent != null)
 		{
-			JPanel settingsPanel = (JPanel) parent;
-			Dimension preferredSize = settingsPanel.getPreferredSize();
-			settingsPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, preferredSize.height));
-			settingsPanel.revalidate();
+			parent.revalidate();
+			parent.repaint();
 		}
 	}
 
@@ -1318,6 +1501,8 @@ public final class HapticScapePanel extends PluginPanel
 		developerUnlockClickCount = 0;
 		developerControlsUnlocked = !developerControlsUnlocked;
 		developerControlsRow.setVisible(developerControlsUnlocked);
+		hideRogueBannerButton.setVisible(developerControlsUnlocked);
+		clearSettingsLockButton.setVisible(developerControlsUnlocked);
 		refreshDeveloperControlsLayout();
 		revalidate();
 		repaint();
@@ -1391,8 +1576,8 @@ public final class HapticScapePanel extends PluginPanel
 		RemoteSessionSnapshot current = remoteSessionManager.getSnapshot();
 		if (current.isParticipantControlled() || isSubjectWorkspaceActive(current))
 		{
-			SidebarViewportAnchor viewportAnchor = SidebarViewportAnchor.capture(
-				getScrollPane()
+			ViewportAnchor viewportAnchor = ViewportAnchor.capture(
+				pageScrollPane
 			);
 			viewportAnchor.holdThroughLayout(() ->
 			{
@@ -1458,13 +1643,15 @@ public final class HapticScapePanel extends PluginPanel
 				settings.getHapticSkillSelection(),
 				settings.getClickSkillSelection()
 			);
+			xpClickSettingsPanel.applyDisplayedSettings(settings.getClickerXpSettings());
 			profilesPanel.applyDisplayedSettings(
 				settings.getSkillFeedbackProfiles(),
+				settings.getSkillClickProfiles(),
 				displayedPatterns
 			);
 			alertsPanel.applyDisplayedSettings(
 				settings.getNotificationFeedbackSettings(),
-				settings.isGenericNotificationClickEnabled(),
+				settings.getGenericNotificationClickSequence(),
 				settings.getAlertProfiles(),
 				settings.getAlertTriggerSettings(),
 				settings.getClickerAlertSettings(),
@@ -1472,10 +1659,10 @@ public final class HapticScapePanel extends PluginPanel
 			);
 			customPatternsPanel.applyDisplayedLibrary(displayedPatterns);
 			musicPanel.applyDisplayedSettings(settings.getMusicSyncSettings());
-			clickerPanel.applyDisplayedSettings(
-				settings.getClickerSettings(),
-				settings.getClickerXpSettings(),
-				settings.getClickerPhraseRules()
+			phraseRulesPanel.applyDisplayedRules(settings.getClickerPhraseRules());
+			applicationStartupPanel.apply(
+				settings.isStartWithWindows(),
+				settings.isStartMinimized()
 			);
 		}
 		finally
@@ -1508,9 +1695,10 @@ public final class HapticScapePanel extends PluginPanel
 		skillsPanel.setRemoteReadOnly(feedbackReadOnly);
 		profilesPanel.setRemoteReadOnly(feedbackReadOnly);
 		alertsPanel.setRemoteReadOnly(feedbackReadOnly);
+		xpClickSettingsPanel.setRemoteReadOnly(feedbackReadOnly);
+		phraseRulesPanel.setRemoteReadOnly(feedbackReadOnly);
 		customPatternsPanel.setRemoteReadOnly(forgeAndMusicReadOnly);
 		musicPanel.setRemoteReadOnly(forgeAndMusicReadOnly);
-		clickerPanel.setRemoteReadOnly(feedbackReadOnly);
 		// Tabs, navigation selectors, Casino/Rogue, Updates, Intiface connection,
 		// Remote Control controls, and Emergency Off intentionally remain usable.
 	}
@@ -1599,6 +1787,7 @@ public final class HapticScapePanel extends PluginPanel
 		}
 
 		subjectWorkspaceSelected = subject;
+		setControllerWorkspaceTab(subject);
 		if (subject)
 		{
 			RemoteSettingsSnapshot subjectSettings =
@@ -1638,8 +1827,8 @@ public final class HapticScapePanel extends PluginPanel
 			appliedRemoteSessionSnapshot,
 			snapshot
 		);
-		SidebarViewportAnchor viewportAnchor = SidebarViewportAnchor.capture(
-			getScrollPane()
+		ViewportAnchor viewportAnchor = ViewportAnchor.capture(
+			pageScrollPane
 		);
 		if (preserveControllerViewport)
 		{
@@ -1657,7 +1846,7 @@ public final class HapticScapePanel extends PluginPanel
 		boolean workspaceVisible = controllerSession
 			&& snapshot.getState() != RemoteSessionState.DISCONNECTED;
 		boolean subjectAvailable = isControllerSubjectAvailable(snapshot);
-		stopButton.setText(participantControlled ? "Emergency Off" : "Stop now");
+		stopButton.setText(participantControlled ? "EMERGENCY OFF" : "STOP ALL");
 		boolean workspaceWasVisible = controllerWorkspaceTabs.isVisible();
 		boolean subjectBecameAvailable = subjectAvailable && !controllerSubjectAvailable;
 		controllerSubjectAvailable = subjectAvailable;
@@ -1696,7 +1885,6 @@ public final class HapticScapePanel extends PluginPanel
 		// Keep the normal HapticScape UI visible during Remote Control. The
 		// participant can navigate it and watch remote values change, but cannot
 		// mutate remotely authoritative feedback settings.
-		feedbackLayout.show(feedbackHost, LOCAL_FEEDBACK_CARD);
 		if (!participantControlled
 			&& !(controllerSession && subjectWorkspaceSelected && subjectAvailable))
 		{
@@ -1719,7 +1907,7 @@ public final class HapticScapePanel extends PluginPanel
 		profilesPanel.setPreviewAllowed(!previewBlocked);
 		alertsPanel.setPreviewAllowed(!previewBlocked);
 		customPatternsPanel.setPreviewAllowed(!previewBlocked);
-		clickerPanel.setPreviewAllowed(!previewBlocked);
+		clickOutputPanel.setPreviewAllowed(!previewBlocked);
 		boolean emergencyPaused = snapshot.getState() == RemoteSessionState.EMERGENCY_PAUSED;
 		stopButton.setEnabled(participantControlled ? !emergencyPaused : connected);
 		testButton.setEnabled(!previewBlocked && connected);
@@ -1786,6 +1974,7 @@ public final class HapticScapePanel extends PluginPanel
 		unlockSettingsButton.setVisible(locked && localWorkspace);
 		unlockSettingsButton.setEnabled(locked && localWorkspace);
 		clearSettingsLockButton.setEnabled(locked);
+		applicationStartupPanel.refreshLockState();
 		refreshSettingsAccessMode();
 		revalidate();
 		repaint();
@@ -1819,6 +2008,10 @@ public final class HapticScapePanel extends PluginPanel
 		{
 			statusLabel.setText(snapshot.getMessage());
 		}
+		statusLabel.setToolTipText(snapshot.getMessage());
+		connectionIndicator.setForeground(connectionColor(snapshot.getState()));
+		deviceSummaryLabel.setText(deviceSummary(snapshot));
+		deviceSummaryLabel.setToolTipText(deviceSummaryLabel.getText());
 
 		deviceModel.clear();
 		for (DeviceInfo device : snapshot.getDevices())
@@ -1837,6 +2030,32 @@ public final class HapticScapePanel extends PluginPanel
 		customPatternsPanel.setConnected(connected);
 		stopButton.setEnabled(connected);
 		applyRemoteSessionState(remoteSessionManager.getSnapshot());
+	}
+
+	private static java.awt.Color connectionColor(ConnectionState state)
+	{
+		if (state == ConnectionState.CONNECTED)
+		{
+			return HapticScapeTheme.SUCCESS;
+		}
+		if (state == ConnectionState.CONNECTING || state == ConnectionState.DISCONNECTING)
+		{
+			return HapticScapeTheme.ACCENT;
+		}
+		return HapticScapeTheme.MUTED_TEXT;
+	}
+
+	private static String deviceSummary(ConnectionSnapshot snapshot)
+	{
+		if (snapshot.getDevices().isEmpty())
+		{
+			return "No device connected";
+		}
+		if (snapshot.getDevices().size() == 1)
+		{
+			return snapshot.getDevices().get(0).getName();
+		}
+		return snapshot.getDevices().size() + " devices";
 	}
 
 	private static int clamp(int value, int minimum, int maximum)

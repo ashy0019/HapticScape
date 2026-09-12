@@ -1,7 +1,8 @@
 package com.ashy0019.hapticscape.rogue.ui;
 
-import com.ashy0019.hapticscape.HapticScapeConfig;
+import com.ashy0019.hapticscape.HapticScapeSettingKeys;
 import com.ashy0019.hapticscape.rogue.RogueFeedbackEvent;
+import com.ashy0019.hapticscape.remote.SettingsStore;
 import com.ashy0019.hapticscape.rogue.blackjack.BlackjackEngine;
 import com.ashy0019.hapticscape.rogue.blackjack.BlackjackResult;
 import com.ashy0019.hapticscape.rogue.blackjack.BlackjackState;
@@ -14,30 +15,29 @@ import java.util.List;
 import java.util.function.Consumer;
 import javax.swing.BorderFactory;
 import javax.swing.JPanel;
-import net.runelite.client.config.ConfigManager;
 
 /**
  * Full-canvas Rogue Mode blackjack panel. Controls, chips, table art, future
  * multiplayer seats, and the event log all live inside CasinoScenePanel so the
- * entire RuneLite sidebar becomes the game rather than framing a tiny scene.
+ * entire host panel becomes the game rather than framing a tiny scene.
  */
 public final class RoguePanel extends JPanel
 {
-	public static final String ROGUE_COINS_KEY = "rogueCoins";
+	public static final String ROGUE_COINS_KEY = HapticScapeSettingKeys.ROGUE_COINS;
 	private static final long REFILL_COINS = BlackjackEngine.DEFAULT_STARTING_COINS;
 	private static final long MINIMUM_BET = 10L;
 	private static final int MAX_EVENT_LINES = 12;
 
-	private final ConfigManager configManager;
+	private final SettingsStore settingsStore;
 	private final Consumer<RogueFeedbackEvent> feedbackAction;
 	private final Deque<String> eventLog = new ArrayDeque<>();
 	private final CasinoScenePanel scene;
 	private BlackjackEngine engine;
 	private BlackjackState state;
 
-	public RoguePanel(ConfigManager configManager, Consumer<RogueFeedbackEvent> feedbackAction)
+	public RoguePanel(SettingsStore settingsStore, Consumer<RogueFeedbackEvent> feedbackAction)
 	{
-		this.configManager = configManager;
+		this.settingsStore = settingsStore;
 		this.feedbackAction = feedbackAction;
 		engine = new BlackjackEngine(loadCoins());
 		state = engine.snapshot();
@@ -250,7 +250,7 @@ public final class RoguePanel extends JPanel
 
 	private long loadCoins()
 	{
-		String value = configManager.getConfiguration(HapticScapeConfig.GROUP, ROGUE_COINS_KEY);
+		String value = settingsStore.get(ROGUE_COINS_KEY);
 		if (value == null || value.trim().isEmpty())
 		{
 			return REFILL_COINS;
@@ -267,7 +267,7 @@ public final class RoguePanel extends JPanel
 
 	private void persistCoins(long coins)
 	{
-		configManager.setConfiguration(HapticScapeConfig.GROUP, ROGUE_COINS_KEY, coins);
+		settingsStore.set(ROGUE_COINS_KEY, coins);
 	}
 
 	private static String cardLabel(Card card)

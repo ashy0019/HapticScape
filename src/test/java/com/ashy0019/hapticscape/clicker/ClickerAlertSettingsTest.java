@@ -16,46 +16,48 @@ public class ClickerAlertSettingsTest
 
 		for (AlertCategory category : AlertCategory.values())
 		{
-			assertFalse(category.name(), settings.isEnabled(category));
+			assertEquals(category.name(), ClickSequence.NONE, settings.getSequence(category));
 		}
 	}
 
 	@Test
-	public void selectionsRoundTripInStableCategoryOrder()
+	public void boundedSequencesRoundTripInStableCategoryOrder()
 	{
 		ClickerAlertSettings settings = ClickerAlertSettings.noneEnabled()
-			.withEnabled(AlertCategory.PLAYER_DEATH, true)
-			.withEnabled(AlertCategory.DIRECT_MESSAGE, true);
+			.withSequence(AlertCategory.PLAYER_DEATH, ClickSequence.THREE)
+			.withSequence(AlertCategory.DIRECT_MESSAGE, ClickSequence.TWO);
 
 		String configured = settings.toConfigValue();
 		ClickerAlertSettings restored = ClickerAlertSettings.fromConfigValue(configured);
 
-		assertEquals("DIRECT_MESSAGE,PLAYER_DEATH", configured);
-		assertTrue(restored.isEnabled(AlertCategory.DIRECT_MESSAGE));
-		assertTrue(restored.isEnabled(AlertCategory.PLAYER_DEATH));
-		assertFalse(restored.isEnabled(AlertCategory.TRADE_REQUEST));
+		assertEquals("v2;DIRECT_MESSAGE=TWO;PLAYER_DEATH=THREE", configured);
+		assertEquals(ClickSequence.TWO, restored.getSequence(AlertCategory.DIRECT_MESSAGE));
+		assertEquals(ClickSequence.THREE, restored.getSequence(AlertCategory.PLAYER_DEATH));
+		assertEquals(ClickSequence.NONE, restored.getSequence(AlertCategory.TRADE_REQUEST));
 	}
 
 	@Test
-	public void categoriesCanBeDisabledAgain()
+	public void legacyEnabledCategoriesMigrateToOneClick()
+	{
+		String legacy = "DIRECT_MESSAGE,NOT_A_REAL_ALERT,,TRADE_REQUEST";
+		ClickerAlertSettings settings = ClickerAlertSettings.fromConfigValue(legacy);
+
+		assertTrue(ClickerAlertSettings.requiresMigration(legacy));
+		assertEquals(ClickSequence.ONE, settings.getSequence(AlertCategory.DIRECT_MESSAGE));
+		assertEquals(ClickSequence.ONE, settings.getSequence(AlertCategory.TRADE_REQUEST));
+		assertEquals("v2;DIRECT_MESSAGE=ONE;TRADE_REQUEST=ONE", settings.toConfigValue());
+	}
+
+	@Test
+	public void checkboxCompatibilityMapsToOneOrNone()
 	{
 		ClickerAlertSettings settings = ClickerAlertSettings.noneEnabled()
-			.withEnabled(AlertCategory.LOW_HITPOINTS, true)
-			.withEnabled(AlertCategory.LOW_HITPOINTS, false);
+			.withEnabled(AlertCategory.LOW_HITPOINTS, true);
 
+		assertTrue(settings.isEnabled(AlertCategory.LOW_HITPOINTS));
+		assertEquals(ClickSequence.ONE, settings.getSequence(AlertCategory.LOW_HITPOINTS));
+		settings = settings.withEnabled(AlertCategory.LOW_HITPOINTS, false);
 		assertFalse(settings.isEnabled(AlertCategory.LOW_HITPOINTS));
 		assertEquals("", settings.toConfigValue());
-	}
-
-	@Test
-	public void malformedAndFutureCategoriesAreIgnored()
-	{
-		ClickerAlertSettings settings = ClickerAlertSettings.fromConfigValue(
-			"DIRECT_MESSAGE,NOT_A_REAL_ALERT,,TRADE_REQUEST"
-		);
-
-		assertTrue(settings.isEnabled(AlertCategory.DIRECT_MESSAGE));
-		assertTrue(settings.isEnabled(AlertCategory.TRADE_REQUEST));
-		assertEquals("DIRECT_MESSAGE,TRADE_REQUEST", settings.toConfigValue());
 	}
 }

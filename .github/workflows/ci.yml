@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build:
-    name: Test and verify client
+    name: Test and verify standalone
     runs-on: ubuntu-latest
 
     steps:
@@ -39,13 +39,23 @@ jobs:
             --no-daemon \
             clean \
             test \
-            shadowJar \
-            verifyClientJar \
-            collectRuntimeLicenses
+            verifyStandaloneArtifact \
+            collectRuntimeLicenses \
+            :runelite-bridge-client:test \
+            :runelite-bridge-client:verifyBridgeClientJar \
+            :runelite-bridge-client:collectRuntimeLicenses
 
-      - name: Upload client JAR
+      - name: Upload standalone desktop JAR
         uses: actions/upload-artifact@v4
         with:
-          name: hapticscape-client-${{ github.sha }}
-          path: build/libs/hapticscape-client.jar
+          name: hapticscape-desktop-${{ github.sha }}
+          path: build/libs/hapticscape-desktop.jar
+          retention-days: 14
+
+
+      - name: Upload LumBridge JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: lumbridge-${{ github.sha }}
+          path: runelite-bridge-client/build/libs/lumbridge.jar
           retention-days: 14

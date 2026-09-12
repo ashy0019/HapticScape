@@ -4,23 +4,61 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import com.ashy0019.hapticscape.host.GlobalUiHooks;
 import com.ashy0019.hapticscape.remote.RemotePermissions;
 import com.ashy0019.hapticscape.remote.RemoteRole;
 import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteSessionState;
+import java.awt.CardLayout;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.event.MouseEvent;
+import java.util.function.Consumer;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.AbstractButton;
 import javax.swing.JComponent;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
 import org.junit.Test;
 
 public class RemoteLiveForgePanelTest
 {
+	@Test
+	public void sessionUpdatesDoNotOverrideTheForgeCardSelection() throws Exception
+	{
+		RemoteLiveForgePanel panel = onEdt(() -> new RemoteLiveForgePanel(
+			new RecordingDispatcher()
+		));
+		try
+		{
+			onEdt(() ->
+			{
+				CardLayout cards = new CardLayout();
+				JPanel host = new JPanel(cards);
+				host.add(new JPanel(), "compose");
+				host.add(panel, "live");
+				cards.show(host, "compose");
+				assertFalse(panel.isVisible());
+
+				panel.apply(activeController(), livePermissions(60));
+
+				assertFalse("A session update exposed the hidden Live card", panel.isVisible());
+				return null;
+			});
+		}
+		finally
+		{
+			onEdt(() ->
+			{
+				panel.close();
+				return null;
+			});
+		}
+	}
+
 	@Test
 	public void gestureIsCappedSampledAndReleasedWithoutStatusChurn() throws Exception
 	{
@@ -32,6 +70,7 @@ public class RemoteLiveForgePanelTest
 			onEdt(() ->
 			{
 				panel.apply(activeController(), permissions);
+				panel.setWorkspaceActive(true);
 				JComponent canvas = component(panel, "remoteLiveCanvas", JComponent.class);
 				canvas.setSize(188, 180);
 				canvas.dispatchEvent(mouse(canvas, MouseEvent.MOUSE_PRESSED, 90, 10));
@@ -71,10 +110,6 @@ public class RemoteLiveForgePanelTest
 				);
 				return null;
 			});
-			assertTrue(
-				"Preferred width was " + panel.getPreferredSize().width,
-				panel.getPreferredSize().width <= 202
-			);
 		}
 		finally
 		{
@@ -96,6 +131,7 @@ public class RemoteLiveForgePanelTest
 			onEdt(() ->
 			{
 				panel.apply(activeController(), RemotePermissions.defaults());
+				panel.setWorkspaceActive(true);
 				return null;
 			});
 			assertFalse(component(panel, "remoteLiveCanvas", JComponent.class).isEnabled());
@@ -128,6 +164,84 @@ public class RemoteLiveForgePanelTest
 				return null;
 			});
 		}
+	}
+
+	@Test
+	public void globalGestureEndHookReleasesStreaming() throws Exception
+	{
+		RecordingDispatcher dispatcher = new RecordingDispatcher();
+		RecordingGlobalUiHooks hooks = new RecordingGlobalUiHooks();
+		RemoteLiveForgePanel panel = onEdt(() -> new RemoteLiveForgePanel(dispatcher, hooks));
+		try
+		{
+			onEdt(() ->
+			{
+				panel.apply(activeController(), livePermissions(60));
+				panel.setWorkspaceActive(true);
+				JComponent canvas = component(panel, "remoteLiveCanvas", JComponent.class);
+				canvas.setSize(188, 180);
+				canvas.dispatchEvent(mouse(canvas, MouseEvent.MOUSE_PRESSED, 90, 10));
+				return null;
+			});
+			assertEquals(1, dispatcher.beginCount);
+
+			onEdt(() ->
+			{
+				hooks.fireGestureEnd();
+				return null;
+			});
+			assertEquals(1, dispatcher.endCount);
+		}
+		finally
+		{
+			onEdt(() ->
+			{
+				panel.close();
+				return null;
+			});
+		}
+		assertTrue(hooks.closed);
+	}
+
+	@Test
+	public void leavingForgeModeReleasesStreaming() throws Exception
+	{
+		RecordingDispatcher dispatcher = new RecordingDispatcher();
+		RemoteLiveForgePanel panel = onEdt(() -> new RemoteLiveForgePanel(dispatcher));
+		try
+		{
+			onEdt(() ->
+			{
+				panel.apply(activeController(), livePermissions(60));
+				panel.setWorkspaceActive(true);
+				JComponent canvas = component(panel, "remoteLiveCanvas", JComponent.class);
+				canvas.setSize(188, 180);
+				canvas.dispatchEvent(mouse(canvas, MouseEvent.MOUSE_PRESSED, 90, 10));
+				assertTrue(panel.isSampling());
+				panel.endGestureForNavigation();
+				panel.setWorkspaceActive(false);
+				return null;
+			});
+			assertEquals(1, dispatcher.beginCount);
+			assertEquals(1, dispatcher.endCount);
+			assertFalse(onEdt(panel::isSampling));
+		}
+		finally
+		{
+			onEdt(() ->
+			{
+				panel.close();
+				return null;
+			});
+		}
+	}
+
+	@Test
+	public void liveLayoutUsesTheAvailableStandaloneWidth()
+	{
+		assertEquals(1, RemoteLiveForgePanel.layoutModeForWidth(500));
+		assertEquals(1, RemoteLiveForgePanel.layoutModeForWidth(799));
+		assertEquals(2, RemoteLiveForgePanel.layoutModeForWidth(800));
 	}
 
 	private static RemotePermissions livePermissions(int maximumIntensity)
@@ -237,6 +351,36 @@ public class RemoteLiveForgePanelTest
 			throw failure.get();
 		}
 		return result.get();
+	}
+
+	private static final class RecordingGlobalUiHooks implements GlobalUiHooks
+	{
+		private Runnable gestureEnd = () -> { };
+		private boolean closed;
+
+		@Override
+		public Registration installPageScrollRouting(JScrollPane pageScrollPane, Component eventRoot)
+		{
+			return () -> { };
+		}
+
+		@Override
+		public Registration onGestureEnd(Runnable listener)
+		{
+			gestureEnd = listener;
+			return () -> closed = true;
+		}
+
+		@Override
+		public Registration onScopedKeyPress(Component scope, Consumer<ScopedKeyPress> listener)
+		{
+			return () -> { };
+		}
+
+		private void fireGestureEnd()
+		{
+			gestureEnd.run();
+		}
 	}
 
 	private static final class RecordingDispatcher

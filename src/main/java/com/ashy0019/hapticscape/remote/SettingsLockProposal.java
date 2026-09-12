@@ -123,7 +123,7 @@ public final class SettingsLockProposal
 	public Set<SettingsLockTarget> getTargets()
 	{
 		return isLegacyFullLock()
-			? SettingsLockCatalog.allTargets()
+			? SettingsLockCatalog.legacyTargets()
 			: SettingsLockCatalog.resolve(targets);
 	}
 

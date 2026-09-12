@@ -1,6 +1,11 @@
 package com.ashy0019.hapticscape;
 
+import com.ashy0019.hapticscape.clicker.ClickSequence;
+import com.ashy0019.hapticscape.clicker.ClickerSettings;
 import com.ashy0019.hapticscape.clicker.ClickerService;
+import com.ashy0019.hapticscape.event.XpEvent;
+import com.ashy0019.hapticscape.host.DesktopNotificationService;
+import com.ashy0019.hapticscape.host.SourceMessageService;
 import com.ashy0019.hapticscape.device.GatedIntifaceService;
 import com.ashy0019.hapticscape.device.HapticEventType;
 import com.ashy0019.hapticscape.device.HapticPattern;
@@ -13,19 +18,11 @@ import com.ashy0019.hapticscape.remote.RemoteSessionState;
 import com.ashy0019.hapticscape.remote.RemoteSettingsSnapshot;
 import com.ashy0019.hapticscape.rogue.RogueFeedbackEvent;
 import com.ashy0019.hapticscape.rogue.feedback.CasinoFeedbackMapper;
-import java.awt.TrayIcon;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.ChatMessageType;
-import net.runelite.api.Skill;
-import net.runelite.client.Notifier;
-import net.runelite.client.chat.ChatMessageManager;
-import net.runelite.client.chat.QueuedMessage;
-import net.runelite.client.config.Notification;
-import net.runelite.client.config.RuneLiteConfig;
 
 /** Resolves settings into local click, haptic, music, and remote feedback output. */
 @Slf4j
@@ -37,10 +34,10 @@ final class FeedbackCoordinator implements GameplayEventCoordinator.FeedbackSink
 	private final ClickerService clicks;
 	private final MusicSyncService music;
 	private final Supplier<RemoteSettingsSnapshot> settingsSupplier;
-	private final BiConsumer<Skill, Boolean> level99Starter;
-	private final Notifier notifier;
-	private final RuneLiteConfig runeLiteConfig;
-	private final ChatMessageManager chatMessageManager;
+	private final Supplier<ClickerSettings> localClickerSettingsSupplier;
+	private final BiConsumer<String, Boolean> level99Starter;
+	private final DesktopNotificationService desktopNotifications;
+	private final SourceMessageService sourceMessages;
 	private volatile boolean outputPaused;
 
 	FeedbackCoordinator(
@@ -48,27 +45,30 @@ final class FeedbackCoordinator implements GameplayEventCoordinator.FeedbackSink
 		ClickerService clicks,
 		MusicSyncService music,
 		Supplier<RemoteSettingsSnapshot> settingsSupplier,
-		BiConsumer<Skill, Boolean> level99Starter,
-		Notifier notifier,
-		RuneLiteConfig runeLiteConfig,
-		ChatMessageManager chatMessageManager)
+		Supplier<ClickerSettings> localClickerSettingsSupplier,
+		BiConsumer<String, Boolean> level99Starter,
+		DesktopNotificationService desktopNotifications,
+		SourceMessageService sourceMessages)
 	{
 		this.haptics = Objects.requireNonNull(haptics, "haptics");
 		this.clicks = Objects.requireNonNull(clicks, "clicks");
 		this.music = Objects.requireNonNull(music, "music");
 		this.settingsSupplier = Objects.requireNonNull(settingsSupplier, "settingsSupplier");
-		this.level99Starter = Objects.requireNonNull(level99Starter, "level99Starter");
-		this.notifier = Objects.requireNonNull(notifier, "notifier");
-		this.runeLiteConfig = Objects.requireNonNull(runeLiteConfig, "runeLiteConfig");
-		this.chatMessageManager = Objects.requireNonNull(
-			chatMessageManager,
-			"chatMessageManager"
+		this.localClickerSettingsSupplier = Objects.requireNonNull(
+			localClickerSettingsSupplier,
+			"localClickerSettingsSupplier"
 		);
+		this.level99Starter = Objects.requireNonNull(level99Starter, "level99Starter");
+		this.desktopNotifications = Objects.requireNonNull(
+			desktopNotifications,
+			"desktopNotifications"
+		);
+		this.sourceMessages = Objects.requireNonNull(sourceMessages, "sourceMessages");
 	}
 
 	@Override
 	public void handleXp(
-		XpChange change,
+		XpEvent event,
 		XpOutputDecision decision,
 		RemoteSettingsSnapshot settings,
 		XpFeedbackSettings skillSettings)
@@ -82,11 +82,11 @@ final class FeedbackCoordinator implements GameplayEventCoordinator.FeedbackSink
 			}
 			log.debug(
 				"Level 99 ceremony for {}: level {} -> {}",
-				change.getSkill(),
-				change.getPreviousLevel(),
-				change.getCurrentLevel()
+				event.getSkillId(),
+				event.getPreviousLevel(),
+				event.getCurrentLevel()
 			);
-			level99Starter.accept(change.getSkill(), true);
+			level99Starter.accept(event.getSkillId(), true);
 			return;
 		}
 
@@ -111,10 +111,10 @@ final class FeedbackCoordinator implements GameplayEventCoordinator.FeedbackSink
 		log.debug(
 			"{} feedback for {}: {} XP, level {} -> {}",
 			trigger,
-			change.getSkill(),
-			change.getGainedXp(),
-			change.getPreviousLevel(),
-			change.getCurrentLevel()
+			event.getSkillId(),
+			event.getGainedXp(),
+			event.getPreviousLevel(),
+			event.getCurrentLevel()
 		);
 		if (trigger == XpFeedbackTrigger.XP_GAIN)
 		{
@@ -142,10 +142,11 @@ final class FeedbackCoordinator implements GameplayEventCoordinator.FeedbackSink
 	public void dispatchSpecificAlert(AlertCategory category, boolean allowClick)
 	{
 		RemoteSettingsSnapshot effective = settingsSupplier.get();
-		if (allowClick && effective.isAlertClickEnabled(category))
+		ClickSequence clickSequence = effective.getAlertClickSequence(category);
+		if (allowClick && clickSequence.isEnabled())
 		{
-			log.debug("{} click requested", category);
-			clicks.click();
+			log.debug("{} click sequence requested: {}", category, clickSequence);
+			clicks.click(clickSequence);
 		}
 		effective.getAlertProfiles()
 			.resolve(category, effective.getNotificationFeedbackSettings())
@@ -167,10 +168,11 @@ final class FeedbackCoordinator implements GameplayEventCoordinator.FeedbackSink
 	{
 		RemoteSettingsSnapshot effective = settingsSupplier.get();
 		NotificationFeedbackSettings settings = effective.getNotificationFeedbackSettings();
-		if (effective.isGenericNotificationClickEnabled())
+		ClickSequence clickSequence = effective.getGenericNotificationClickSequence();
+		if (clickSequence.isEnabled())
 		{
-			log.debug("Generic notification click requested");
-			clicks.click();
+			log.debug("Generic notification click sequence requested: {}", clickSequence);
+			clicks.click(clickSequence);
 		}
 		if (!settings.isEnabled())
 		{
@@ -187,9 +189,9 @@ final class FeedbackCoordinator implements GameplayEventCoordinator.FeedbackSink
 	}
 
 	@Override
-	public void playClick()
+	public void playClick(ClickSequence sequence)
 	{
-		clicks.click();
+		clicks.click(sequence);
 	}
 
 	void sendConfiguredPattern(
@@ -306,32 +308,14 @@ final class FeedbackCoordinator implements GameplayEventCoordinator.FeedbackSink
 				boolean desktopNotification,
 				boolean localChatboxMessage)
 			{
+				String formattedMessage = "HapticScape Remote: " + message;
 				if (desktopNotification)
 				{
-					Notification notification = new Notification(
-						true,
-						true,
-						true,
-						runeLiteConfig.enableTrayNotifications(),
-						TrayIcon.MessageType.NONE,
-						runeLiteConfig.notificationRequestFocus(),
-						runeLiteConfig.notificationSound(),
-						null,
-						runeLiteConfig.notificationVolume(),
-						runeLiteConfig.notificationTimeout(),
-						false,
-						runeLiteConfig.flashNotification(),
-						runeLiteConfig.notificationFlashColor(),
-						runeLiteConfig.sendNotificationsWhenFocused()
-					);
-					notifier.notify(notification, "HapticScape Remote: " + message);
+					desktopNotifications.notify(formattedMessage);
 				}
 				if (localChatboxMessage)
 				{
-					chatMessageManager.queue(QueuedMessage.builder()
-						.type(ChatMessageType.CONSOLE)
-						.value("HapticScape Remote: " + message)
-						.build());
+					sourceMessages.post(formattedMessage);
 				}
 			}
 
@@ -352,7 +336,7 @@ final class FeedbackCoordinator implements GameplayEventCoordinator.FeedbackSink
 		clicks.setPaused(pauseOutput);
 		if (!pauseOutput)
 		{
-			clicks.updateSettings(settingsSupplier.get().getClickerSettings());
+			clicks.updateSettings(localClickerSettingsSupplier.get());
 		}
 		if (pauseOutput)
 		{
@@ -372,7 +356,8 @@ final class FeedbackCoordinator implements GameplayEventCoordinator.FeedbackSink
 		{
 			return;
 		}
-		clicks.updateSettings(settings.getClickerSettings());
+		// Click enablement and volume are participant-local authority and are
+		// updated directly by the local settings UI, never by Remote Settings.
 		if (!isRemoteOutputPaused(session))
 		{
 			music.updateSettings(settings.getMusicSyncSettings());

@@ -1,8 +1,10 @@
 package com.ashy0019.hapticscape.remote;
 
+import com.ashy0019.hapticscape.HapticScapeSettingKeys;
+import com.ashy0019.hapticscape.TestHapticScapeSettings;
+
 import com.ashy0019.hapticscape.CustomPattern;
 import com.ashy0019.hapticscape.CustomPatternLibrary;
-import com.ashy0019.hapticscape.HapticScapeConfig;
 import com.google.gson.Gson;
 import java.time.Clock;
 import java.util.ArrayList;
@@ -82,7 +84,7 @@ public class RemoteSessionManagerTest
 			int controllerSessionEventsAfterSeed = controllerSessionEvents.get();
 
 			assertTrue(controller.updateControllerSetting(
-				HapticScapeConfig.INTENSITY_PERCENT_KEY,
+				HapticScapeSettingKeys.INTENSITY_PERCENT,
 				68
 			));
 			relay.dropNextFrom(RemoteRole.PARTICIPANT);
@@ -113,7 +115,7 @@ public class RemoteSessionManagerTest
 				.withPattern(2, new CustomPattern(0, 60, 100, 0), 700, 3);
 			String persistedPatterns = subjectPatterns.toConfigValue();
 			assertTrue(controller.updateControllerSetting(
-				HapticScapeConfig.CUSTOM_PATTERNS_KEY,
+				HapticScapeSettingKeys.CUSTOM_PATTERNS,
 				persistedPatterns
 			));
 			await(() -> participantConfig.customPatterns().equals(persistedPatterns));
@@ -146,7 +148,7 @@ public class RemoteSessionManagerTest
 			new TestRelay()))
 		{
 			assertFalse(manager.updateControllerSetting(
-				HapticScapeConfig.INTENSITY_PERCENT_KEY,
+				HapticScapeSettingKeys.INTENSITY_PERCENT,
 				80
 			));
 			assertEquals(35, config.intensityPercent());
@@ -245,22 +247,22 @@ public class RemoteSessionManagerTest
 			controller.proposeSettingsLock(
 				password,
 				Collections.singleton(SettingsLockCatalog.skillClicks(
-					net.runelite.api.Skill.FISHING
+					"fishing"
 				))
 			);
 
 			assertEquals(
 				Collections.singleton(SettingsLockCatalog.skillClicks(
-					net.runelite.api.Skill.FISHING
+					"fishing"
 				)),
 				participant.getLockSnapshot().getTargets()
 			);
 			participant.acceptPendingSettingsLock();
 			assertTrue(participantLock.isLocked(
-				SettingsLockCatalog.skillClicks(net.runelite.api.Skill.FISHING)
+				SettingsLockCatalog.skillClicks("fishing")
 			));
 			assertFalse(participantLock.isLocked(
-				SettingsLockCatalog.skillHaptics(net.runelite.api.Skill.FISHING)
+				SettingsLockCatalog.skillHaptics("fishing")
 			));
 			assertTrue(participantLock.unlock(password));
 		}
@@ -419,7 +421,7 @@ public class RemoteSessionManagerTest
 		}
 	}
 
-	private static final class MutableConfig implements HapticScapeConfig
+	private static final class MutableConfig extends TestHapticScapeSettings
 	{
 		private volatile int intensity;
 		private volatile String customPatterns =

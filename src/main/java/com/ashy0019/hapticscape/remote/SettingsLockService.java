@@ -1,6 +1,7 @@
 package com.ashy0019.hapticscape.remote;
 
-import com.ashy0019.hapticscape.HapticScapeConfig;
+import com.ashy0019.hapticscape.HapticScapeSettingKeys;
+import com.ashy0019.hapticscape.storage.HapticScapeStoragePaths;
 import com.google.gson.Gson;
 import java.nio.file.Path;
 import java.security.SecureRandom;
@@ -13,7 +14,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
-import net.runelite.client.RuneLite;
 
 /** Owns the persistent local settings lock. Safety controls do not consult it. */
 public final class SettingsLockService
@@ -29,13 +29,11 @@ public final class SettingsLockService
 		new CopyOnWriteArrayList<>();
 	private volatile List<SettingsLockProposal> locks;
 
-	public SettingsLockService(Gson gson)
+	public SettingsLockService(Gson gson, HapticScapeStoragePaths storagePaths)
 	{
 		this(
 			gson,
-			RuneLite.RUNELITE_DIR.toPath()
-				.resolve("hapticscape")
-				.resolve("settings-lock.json")
+			Objects.requireNonNull(storagePaths, "storagePaths").getSettingsLockPath()
 		);
 	}
 
@@ -74,24 +72,36 @@ public final class SettingsLockService
 
 	/**
 	 * Returns whether a local configuration write is allowed by the persistent
-	 * lock. Pattern creation and music controls deliberately remain local safety
-	 * exceptions; an active remote session still applies its own authority rules.
+	 * lock. Local click output, pattern creation, and music controls deliberately
+	 * remain local exceptions; an active remote session still applies its own
+	 * authority rules.
 	 */
 	public boolean canEditLocally(String configKey)
 	{
 		return !getSnapshot().isLegacyFullLock()
-			|| HapticScapeConfig.CUSTOM_PATTERNS_KEY.equals(configKey)
-			|| HapticScapeConfig.MUSIC_SYNC_ENABLED_KEY.equals(configKey)
-			|| HapticScapeConfig.MUSIC_RESPONSE_KEY.equals(configKey)
-			|| HapticScapeConfig.MUSIC_SENSITIVITY_PERCENT_KEY.equals(configKey)
-			|| HapticScapeConfig.MUSIC_MINIMUM_INTENSITY_PERCENT_KEY.equals(configKey)
-			|| HapticScapeConfig.MUSIC_MAXIMUM_INTENSITY_PERCENT_KEY.equals(configKey);
+			|| isLocalClickOutputKey(configKey)
+			|| HapticScapeSettingKeys.CUSTOM_PATTERNS.equals(configKey)
+			|| HapticScapeSettingKeys.MUSIC_SYNC_ENABLED.equals(configKey)
+			|| HapticScapeSettingKeys.MUSIC_RESPONSE.equals(configKey)
+			|| HapticScapeSettingKeys.MUSIC_SENSITIVITY_PERCENT.equals(configKey)
+			|| HapticScapeSettingKeys.MUSIC_MINIMUM_INTENSITY_PERCENT.equals(configKey)
+			|| HapticScapeSettingKeys.MUSIC_MAXIMUM_INTENSITY_PERCENT.equals(configKey);
 	}
 
 	public boolean canEditLocally(SettingsLockTarget target, String configKey)
 	{
+		if (isLocalClickOutputKey(configKey))
+		{
+			return true;
+		}
 		return canEditLocally(configKey)
 			&& (target == null || !isLocked(target));
+	}
+
+	private static boolean isLocalClickOutputKey(String configKey)
+	{
+		return HapticScapeSettingKeys.CLICKER_ENABLED.equals(configKey)
+			|| HapticScapeSettingKeys.CLICKER_VOLUME_PERCENT.equals(configKey);
 	}
 
 	/**
@@ -260,6 +270,34 @@ public final class SettingsLockService
 			locks = Collections.unmodifiableList(updated);
 			publish();
 			return true;
+		}
+		finally
+		{
+			Arrays.fill(copy, '\0');
+		}
+	}
+
+	/** Verifies a lock password for one protected action without removing the lock. */
+	public synchronized boolean authorizes(
+		SettingsLockTarget target,
+		char[] password)
+	{
+		SettingsLockTarget requiredTarget = Objects.requireNonNull(target, "target");
+		char[] copy = Arrays.copyOf(
+			Objects.requireNonNull(password, "password"),
+			password.length
+		);
+		try
+		{
+			for (SettingsLockProposal lock : locks)
+			{
+				if (SettingsLockCatalog.isCoveredBy(lock.getTargets(), requiredTarget)
+					&& lock.verifies(copy))
+				{
+					return true;
+				}
+			}
+			return false;
 		}
 		finally
 		{

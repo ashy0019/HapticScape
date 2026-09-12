@@ -1,6 +1,9 @@
 package com.ashy0019.hapticscape.ui;
 
-import com.ashy0019.hapticscape.HapticScapeConfig;
+import com.ashy0019.hapticscape.HapticScapeSettingKeys;
+import com.ashy0019.hapticscape.HapticScapeSettingsSource;
+import com.ashy0019.hapticscape.host.ExternalLinkOpener;
+import com.ashy0019.hapticscape.host.TextClipboard;
 import com.ashy0019.hapticscape.remote.DiscordLinkListener;
 import com.ashy0019.hapticscape.remote.DiscordLinkSnapshot;
 import com.ashy0019.hapticscape.remote.DiscordLinkState;
@@ -13,15 +16,10 @@ import com.ashy0019.hapticscape.remote.RemoteRole;
 import com.ashy0019.hapticscape.remote.RemoteSessionManager;
 import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteSessionState;
+import com.ashy0019.hapticscape.remote.SettingsStore;
 import java.awt.BorderLayout;
-import java.awt.Desktop;
 import java.awt.Dimension;
 import java.awt.GridLayout;
-import java.awt.Toolkit;
-import java.awt.datatransfer.DataFlavor;
-import java.awt.datatransfer.StringSelection;
-import java.io.IOException;
-import java.net.URI;
 import java.util.Objects;
 import java.util.function.Consumer;
 import javax.swing.BorderFactory;
@@ -33,18 +31,18 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
-import net.runelite.client.config.ConfigManager;
 
 /** Owns invitation abstraction, temporary pairing codes, and direct-code fallback UI. */
 final class RemotePairingPanel extends JPanel
 {
-	private final HapticScapeConfig config;
-	private final ConfigManager configManager;
+	private final HapticScapeSettingsSource config;
+	private final SettingsStore settingsStore;
+	private final ExternalLinkOpener externalLinkOpener;
+	private final TextClipboard clipboard;
 	private final RemoteSessionManager sessionManager;
 	private final RemotePairingService pairingService;
 	private final DiscordPairingBridge discordPairingBridge;
 	private final DiscordLinkListener discordLinkListener;
-	private final Consumer<String> statusSink;
 	private final Consumer<String> errorSink;
 	private final JTextField relayUrlField = new JTextField();
 	private final JPanel relaySettingsPanel = new JPanel(new BorderLayout(8, 0));
@@ -55,14 +53,25 @@ final class RemotePairingPanel extends JPanel
 	private final JButton copyButton = new JButton("Copy again");
 	private final JButton pasteButton = new JButton("Paste & join");
 	private final JButton joinButton = new JButton("Join entered code");
+	private final JButton cancelWaitingButton = new JButton("Cancel");
 	private final JPanel controllerPanel = new JPanel();
 	private final JPanel participantPanel = new JPanel();
 	private final JPanel discordPanel = new JPanel();
+	private final JPanel discordLinkSetup = new JPanel();
 	private final JLabel discordStatus = new JLabel("Discord is not linked");
+	private final WrappedTextLabel connectionStatus = new WrappedTextLabel(
+		"Ready to connect"
+	);
+	private final WrappedTextLabel waitingStatus = new WrappedTextLabel(
+		"Creating secure connection code..."
+	);
 	private final JTextField discordLinkCode = new JTextField();
 	private final JButton installDiscordButton = new JButton("Install Discord app");
 	private final JButton linkDiscordButton = new JButton("Link Discord");
 	private final JButton unlinkDiscordButton = new JButton("Unlink");
+	private final JPanel viewHost = new JPanel(new BorderLayout());
+	private final JPanel connectView = new JPanel();
+	private final JPanel waitingView = new JPanel();
 
 	private boolean wasLocal = true;
 	private boolean currentSessionLocal = true;
@@ -71,18 +80,22 @@ final class RemotePairingPanel extends JPanel
 	private long pairingAttempt;
 	private RemotePairingCode activePairingCode;
 	private String activePairingRelayUrl;
+	private PairingView displayedView;
 
 	RemotePairingPanel(
-		HapticScapeConfig config,
-		ConfigManager configManager,
+		HapticScapeSettingsSource config,
+		SettingsStore settingsStore,
+		ExternalLinkOpener externalLinkOpener,
+		TextClipboard clipboard,
 		RemoteSessionManager sessionManager,
 		RemotePairingService pairingService,
 		DiscordPairingBridge discordPairingBridge,
-		Consumer<String> statusSink,
 		Consumer<String> errorSink)
 	{
 		this.config = Objects.requireNonNull(config, "config");
-		this.configManager = Objects.requireNonNull(configManager, "configManager");
+		this.settingsStore = Objects.requireNonNull(settingsStore, "settingsStore");
+		this.externalLinkOpener = Objects.requireNonNull(externalLinkOpener, "externalLinkOpener");
+		this.clipboard = Objects.requireNonNull(clipboard, "clipboard");
 		this.sessionManager = Objects.requireNonNull(sessionManager, "sessionManager");
 		this.pairingService = Objects.requireNonNull(pairingService, "pairingService");
 		this.discordPairingBridge = Objects.requireNonNull(
@@ -92,21 +105,20 @@ final class RemotePairingPanel extends JPanel
 		this.discordLinkListener = snapshot -> SwingUtilities.invokeLater(
 			() -> applyDiscordSnapshot(snapshot)
 		);
-		this.statusSink = Objects.requireNonNull(statusSink, "statusSink");
 		this.errorSink = Objects.requireNonNull(errorSink, "errorSink");
-		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
+		setName("remotePairingWorkspace");
+		setLayout(new BorderLayout());
 		setBorder(BorderFactory.createEmptyBorder());
 
 		configureRelaySettings();
 		configureControllerPanel();
 		configureParticipantPanel();
 		configureDiscordPanel();
+		configureConnectView();
+		configureWaitingView();
 
-		PanelUi.addVerticalComponent(this, controllerPanel);
-		PanelUi.addVerticalComponent(this, participantPanel);
-		PanelUi.addVerticalComponent(this, discordPanel);
-		PanelUi.addVerticalComponent(this, relaySettingsPanel);
-		PanelUi.addVerticalComponent(this, connectionSettingsButton);
+		viewHost.setName("remotePairingViewHost");
+		add(viewHost, BorderLayout.CENTER);
 		refreshRelaySettingsVisibility(false);
 
 		createButton.addActionListener(event -> createConnectionCode());
@@ -122,14 +134,16 @@ final class RemotePairingPanel extends JPanel
 		linkDiscordButton.addActionListener(event -> linkDiscord());
 		installDiscordButton.addActionListener(event -> installDiscord());
 		unlinkDiscordButton.addActionListener(event -> unlinkDiscord());
+		cancelWaitingButton.addActionListener(event -> cancelWaiting());
 		discordPairingBridge.addListener(discordLinkListener);
+		apply(sessionManager.getSnapshot());
 	}
 
 	void apply(RemoteSessionSnapshot snapshot)
 	{
 		boolean local = snapshot.getState() == RemoteSessionState.LOCAL;
 		currentSessionLocal = local;
-		boolean controller = snapshot.getRole() == RemoteRole.CONTROLLER && !local;
+		PairingView view = viewFor(snapshot);
 		if (local && !wasLocal)
 		{
 			pairingAttempt++;
@@ -137,17 +151,18 @@ final class RemotePairingPanel extends JPanel
 			cancelActivePairing();
 			connectionCodeOutput.setText("");
 			connectionCodeInput.setText("");
+			setStatus("Ready to connect");
 		}
 		wasLocal = local;
 
 		refreshConnectionControls();
-		controllerPanel.setVisible(local || controller
-			&& (snapshot.getState() == RemoteSessionState.CONNECTING
-				|| snapshot.getState() == RemoteSessionState.WAITING_FOR_PEER));
-		participantPanel.setVisible(local);
-		discordPanel.setVisible(local);
+		setVisible(view != PairingView.HIDDEN);
+		showView(view);
+		if (view == PairingView.WAITING)
+		{
+			waitingStatus.setPlainText(snapshot.getMessage());
+		}
 		applyDiscordSnapshot(discordPairingBridge.getSnapshot());
-		connectionSettingsButton.setVisible(local);
 		refreshRelaySettingsVisibility(false);
 		revalidate();
 		repaint();
@@ -176,14 +191,14 @@ final class RemotePairingPanel extends JPanel
 
 	private void configureRelaySettings()
 	{
-		String configuredRelay = HapticScapeConfig.resolveRemoteRelayUrl(
+		String configuredRelay = HapticScapeSettingsSource.resolveRemoteRelayUrl(
 			config.remoteRelayUrl()
 		);
 		relayUrlField.setText(configuredRelay);
 		relayUrlField.setToolTipText(
 			"Hosted HapticScape relay by default; replace this URL to use a self-hosted relay"
 		);
-		connectionSettingsExpanded = !HapticScapeConfig.DEFAULT_REMOTE_RELAY_URL.equals(
+		connectionSettingsExpanded = !HapticScapeSettingsSource.DEFAULT_REMOTE_RELAY_URL.equals(
 			configuredRelay
 		);
 		configureCompactButton(connectionSettingsButton);
@@ -194,91 +209,154 @@ final class RemotePairingPanel extends JPanel
 
 	private void configureControllerPanel()
 	{
+		controllerPanel.setName("remoteControlPartner");
 		controllerPanel.setLayout(new BoxLayout(controllerPanel, BoxLayout.Y_AXIS));
-		controllerPanel.setBorder(BorderFactory.createTitledBorder("Control a partner"));
-		PanelUi.addVerticalComponent(controllerPanel, new SidebarTextLabel(
+		controllerPanel.setBorder(PanelUi.createSectionBorder("Control a partner"));
+		PanelUi.addPreferredHeightComponent(controllerPanel, new WrappedTextLabel(
 			"Create a temporary encrypted connection code and send it privately to your partner."
 		));
-		JPanel createRow = new JPanel(new GridLayout(0, 1, 0, 4));
+		JPanel createRow = new JPanel(new GridLayout(1, 1));
 		allowHorizontalShrink(createRow);
 		configureCompactButton(createButton);
-		configureCompactButton(copyButton);
 		createRow.add(createButton);
-		createRow.add(copyButton);
-		PanelUi.addVerticalComponent(controllerPanel, createRow);
-		connectionCodeOutput.setEditable(false);
-		connectionCodeOutput.setToolTipText(
-			"The code expires after five minutes and can be redeemed only once"
-		);
-		allowHorizontalShrink(connectionCodeOutput);
-		PanelUi.addVerticalComponent(controllerPanel, connectionCodeOutput);
+		createRow.setBorder(BorderFactory.createEmptyBorder(6, 0, 0, 0));
+		PanelUi.addPreferredHeightComponent(controllerPanel, createRow);
 		allowHorizontalShrink(controllerPanel);
 	}
 
 	private void configureParticipantPanel()
 	{
+		participantPanel.setName("remoteJoinPartner");
 		participantPanel.setLayout(new BoxLayout(participantPanel, BoxLayout.Y_AXIS));
-		participantPanel.setBorder(BorderFactory.createTitledBorder("Let a partner control you"));
-		PanelUi.addVerticalComponent(participantPanel, new SidebarTextLabel(
+		participantPanel.setBorder(PanelUi.createSectionBorder("Let a partner control you"));
+		PanelUi.addPreferredHeightComponent(participantPanel, new WrappedTextLabel(
 			"Paste the temporary connection code your partner sent you."
 		));
 		connectionCodeInput.setToolTipText(
 			"Compact HSP1 connection codes and legacy HSR1 invitations are accepted"
 		);
 		allowHorizontalShrink(connectionCodeInput);
-		PanelUi.addVerticalComponent(participantPanel, connectionCodeInput);
-		JPanel joinRow = new JPanel(new GridLayout(0, 1, 0, 4));
+		PanelUi.addPreferredHeightComponent(participantPanel, connectionCodeInput);
+		JPanel joinRow = new JPanel(new GridLayout(1, 2, 4, 0));
 		allowHorizontalShrink(joinRow);
 		configureCompactButton(pasteButton);
 		configureCompactButton(joinButton);
 		joinRow.add(pasteButton);
 		joinRow.add(joinButton);
-		PanelUi.addVerticalComponent(participantPanel, joinRow);
+		PanelUi.addPreferredHeightComponent(participantPanel, joinRow);
 		allowHorizontalShrink(participantPanel);
 	}
 
 	private void configureDiscordPanel()
 	{
+		discordPanel.setName("remoteDiscordLink");
 		discordPanel.setLayout(new BoxLayout(discordPanel, BoxLayout.Y_AXIS));
-		discordPanel.setBorder(BorderFactory.createTitledBorder("Discord"));
-		PanelUi.addVerticalComponent(discordPanel, new SidebarTextLabel(
-			"Install the Discord app and link this client once. Accepted DM requests open here for local approval."
-		));
+		discordPanel.setBorder(PanelUi.createSectionBorder("Discord"));
+		JPanel statusRow = new JPanel(new BorderLayout(8, 0));
+		statusRow.add(discordStatus, BorderLayout.CENTER);
+		configureCompactButton(unlinkDiscordButton);
+		statusRow.add(unlinkDiscordButton, BorderLayout.EAST);
+		allowHorizontalShrink(statusRow);
+		PanelUi.addPreferredHeightComponent(discordPanel, statusRow);
+
+		discordLinkSetup.setName("remoteDiscordLinkSetup");
+		discordLinkSetup.setLayout(new BoxLayout(discordLinkSetup, BoxLayout.Y_AXIS));
+		WrappedTextLabel explanation = new WrappedTextLabel(
+			"Link this client once to receive consent-gated requests from Discord."
+		);
+		explanation.setBorder(BorderFactory.createEmptyBorder(5, 0, 4, 0));
+		PanelUi.addPreferredHeightComponent(discordLinkSetup, explanation);
 		Dimension statusSize = new Dimension(180, discordStatus.getPreferredSize().height);
 		discordStatus.setPreferredSize(statusSize);
 		discordStatus.setMinimumSize(new Dimension(0, statusSize.height));
-		PanelUi.addVerticalComponent(discordPanel, discordStatus);
+		discordLinkCode.setName("remoteDiscordLinkCode");
 		discordLinkCode.setToolTipText(
 			"Paste the private HSL1 link code generated by /hapticscape link"
 		);
 		allowHorizontalShrink(discordLinkCode);
-		PanelUi.addVerticalComponent(discordPanel, discordLinkCode);
-		JPanel buttons = new JPanel(new GridLayout(0, 1, 0, 4));
+		PanelUi.addPreferredHeightComponent(discordLinkSetup, discordLinkCode);
+		JPanel buttons = new JPanel(new GridLayout(1, 2, 4, 0));
 		configureCompactButton(installDiscordButton);
 		configureCompactButton(linkDiscordButton);
-		configureCompactButton(unlinkDiscordButton);
 		buttons.add(installDiscordButton);
 		buttons.add(linkDiscordButton);
-		buttons.add(unlinkDiscordButton);
 		allowHorizontalShrink(buttons);
-		PanelUi.addVerticalComponent(discordPanel, buttons);
+		buttons.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
+		PanelUi.addPreferredHeightComponent(discordLinkSetup, buttons);
+		PanelUi.addFlexibleVerticalComponent(discordPanel, discordLinkSetup);
 		allowHorizontalShrink(discordPanel);
+	}
+
+	private void configureConnectView()
+	{
+		connectView.setName("remoteConnectView");
+		connectView.setLayout(new BoxLayout(connectView, BoxLayout.Y_AXIS));
+		connectionStatus.setName("remoteConnectionStatus");
+		connectionStatus.setBorder(PanelUi.createSectionBorder("Remote Play"));
+		PanelUi.addPreferredHeightComponent(connectView, connectionStatus);
+		WrappedTextLabel heading = new WrappedTextLabel(
+			"Start a private session with a temporary code, or accept a linked Discord request."
+		);
+		heading.setBorder(BorderFactory.createEmptyBorder(2, 2, 7, 2));
+		PanelUi.addPreferredHeightComponent(connectView, heading);
+
+		ResponsiveColumnsPanel connectionChoices = new ResponsiveColumnsPanel(
+			controllerPanel,
+			participantPanel
+		);
+		connectionChoices.setName("remoteConnectionChoices");
+		PanelUi.addFlexibleVerticalComponent(connectView, connectionChoices);
+		PanelUi.addPreferredHeightComponent(connectView, discordPanel);
+
+		JPanel advanced = new JPanel();
+		advanced.setLayout(new BoxLayout(advanced, BoxLayout.Y_AXIS));
+		PanelUi.addPreferredHeightComponent(advanced, relaySettingsPanel);
+		PanelUi.addPreferredHeightComponent(advanced, connectionSettingsButton);
+		PanelUi.addFlexibleVerticalComponent(connectView, advanced);
+	}
+
+	private void configureWaitingView()
+	{
+		waitingView.setName("remoteWaitingView");
+		waitingView.setLayout(new BoxLayout(waitingView, BoxLayout.Y_AXIS));
+		waitingView.setBorder(PanelUi.createSectionBorder("Waiting for your partner"));
+		waitingStatus.setName("remoteWaitingStatus");
+		waitingStatus.setBorder(BorderFactory.createEmptyBorder(0, 1, 7, 1));
+		PanelUi.addPreferredHeightComponent(waitingView, waitingStatus);
+
+		connectionCodeOutput.setName("remoteConnectionCodeOutput");
+		connectionCodeOutput.setEditable(false);
+		connectionCodeOutput.setToolTipText(
+			"The code expires after five minutes and can be redeemed only once"
+		);
+		allowHorizontalShrink(connectionCodeOutput);
+		PanelUi.addPreferredHeightComponent(waitingView, connectionCodeOutput);
+
+		configureCompactButton(copyButton);
+		configureCompactButton(cancelWaitingButton);
+		JPanel waitingButtons = new JPanel(new GridLayout(1, 2, 4, 0));
+		waitingButtons.setBorder(BorderFactory.createEmptyBorder(5, 0, 0, 0));
+		waitingButtons.add(copyButton);
+		waitingButtons.add(cancelWaitingButton);
+		allowHorizontalShrink(waitingButtons);
+		PanelUi.addPreferredHeightComponent(waitingView, waitingButtons);
+
+		WrappedTextLabel hint = new WrappedTextLabel(
+			"Keep this window open while your partner joins. The code is temporary and single-use."
+		);
+		hint.setBorder(BorderFactory.createEmptyBorder(7, 1, 0, 1));
+		PanelUi.addPreferredHeightComponent(waitingView, hint);
 	}
 
 	private void installDiscord()
 	{
 		try
 		{
-			if (!Desktop.isDesktopSupported()
-				|| !Desktop.getDesktop().isSupported(Desktop.Action.BROWSE))
-			{
-				throw new IllegalStateException("This computer cannot open web links");
-			}
-			Desktop.getDesktop().browse(URI.create(
+			externalLinkOpener.open(
 				RemotePairingService.discordInstallEndpoint(relayUrlField.getText().trim())
-			));
+			);
 		}
-		catch (IOException | RuntimeException exception)
+		catch (RuntimeException exception)
 		{
 			errorSink.accept("Could not open the Discord installation page.");
 		}
@@ -342,6 +420,8 @@ final class RemotePairingPanel extends JPanel
 		boolean linking = snapshot.getState() == DiscordLinkState.CONNECTING;
 		boolean linked = snapshot.isLinked();
 		boolean available = snapshot.getState() != DiscordLinkState.UNAVAILABLE;
+		discordLinkSetup.setVisible(showsDiscordSetup(snapshot.getState()));
+		unlinkDiscordButton.setVisible(showsDiscordUnlink(snapshot.getState()));
 		installDiscordButton.setEnabled(currentSessionLocal && available);
 		discordLinkCode.setEnabled(currentSessionLocal && available && !linked && !linking);
 		linkDiscordButton.setEnabled(
@@ -349,6 +429,7 @@ final class RemotePairingPanel extends JPanel
 		);
 		unlinkDiscordButton.setEnabled(currentSessionLocal && linked);
 		discordStatus.setToolTipText(snapshot.getMessage());
+		discordPanel.revalidate();
 		discordPanel.repaint();
 	}
 
@@ -362,14 +443,10 @@ final class RemotePairingPanel extends JPanel
 		}
 		try
 		{
-			configManager.setConfiguration(
-				HapticScapeConfig.GROUP,
-				HapticScapeConfig.REMOTE_RELAY_URL_KEY,
-				relayUrl
-			);
+			settingsStore.set(HapticScapeSettingKeys.REMOTE_RELAY_URL, relayUrl);
 			pairingBusy = true;
 			long attempt = ++pairingAttempt;
-			statusSink.accept("Creating secure connection code...");
+			setStatus("Creating secure connection code...");
 			RemoteInvitation invitation = sessionManager.startController(relayUrl);
 			pairingService.publish(invitation).whenComplete((code, error) ->
 				SwingUtilities.invokeLater(() -> finishPublishingCode(
@@ -384,6 +461,7 @@ final class RemotePairingPanel extends JPanel
 		catch (RuntimeException exception)
 		{
 			pairingBusy = false;
+			setStatus("Ready to connect");
 			errorSink.accept(exception.getMessage());
 		}
 	}
@@ -410,7 +488,7 @@ final class RemotePairingPanel extends JPanel
 			activePairingCode = code;
 			activePairingRelayUrl = relayUrl;
 			showOutput(code.encode());
-			statusSink.accept(copyToClipboard(code.encode())
+			setStatus(copyToClipboard(code.encode())
 				? "Connection code copied. Waiting for your partner..."
 				: "Connection code ready. Copy it and send it to your partner."
 			);
@@ -419,7 +497,7 @@ final class RemotePairingPanel extends JPanel
 		{
 			String directCode = invitation.encode();
 			showOutput(directCode);
-			statusSink.accept(copyToClipboard(directCode)
+			setStatus(copyToClipboard(directCode)
 				? "Pairing service unavailable. A direct connection code was copied."
 				: "Pairing service unavailable. Copy the direct connection code manually."
 			);
@@ -472,15 +550,11 @@ final class RemotePairingPanel extends JPanel
 			{
 				return;
 			}
-			configManager.setConfiguration(
-				HapticScapeConfig.GROUP,
-				HapticScapeConfig.REMOTE_RELAY_URL_KEY,
-				relayUrl
-			);
+			settingsStore.set(HapticScapeSettingKeys.REMOTE_RELAY_URL, relayUrl);
 			pairingBusy = true;
 			long attempt = ++pairingAttempt;
 			refreshConnectionControls();
-			statusSink.accept("Retrieving secure connection...");
+			setStatus("Retrieving secure connection...");
 			pairingService.redeem(relayUrl, encoded).whenComplete((invitation, error) ->
 				SwingUtilities.invokeLater(() -> finishRedeemingCode(
 					attempt,
@@ -493,6 +567,7 @@ final class RemotePairingPanel extends JPanel
 		{
 			pairingBusy = false;
 			refreshConnectionControls();
+			setStatus("Ready to connect");
 			errorSink.accept(exception.getMessage());
 		}
 	}
@@ -510,6 +585,7 @@ final class RemotePairingPanel extends JPanel
 		if (error != null)
 		{
 			refreshConnectionControls();
+			setStatus("Ready to connect");
 			errorSink.accept(rootMessage(error));
 			return;
 		}
@@ -520,6 +596,7 @@ final class RemotePairingPanel extends JPanel
 		catch (RuntimeException exception)
 		{
 			refreshConnectionControls();
+			setStatus("Ready to connect");
 			errorSink.accept(exception.getMessage());
 		}
 	}
@@ -604,24 +681,31 @@ final class RemotePairingPanel extends JPanel
 		String code = connectionCodeOutput.getText().trim();
 		if (!code.isEmpty() && copyToClipboard(code))
 		{
-			statusSink.accept("Connection code copied");
+			setStatus("Connection code copied. Waiting for your partner...");
 		}
+	}
+
+	private void cancelWaiting()
+	{
+		pairingAttempt++;
+		pairingBusy = false;
+		cancelActivePairing();
+		sessionManager.endSession();
 	}
 
 	private void pasteAndJoinConnection()
 	{
 		try
 		{
-			Object value = Toolkit.getDefaultToolkit().getSystemClipboard()
-				.getData(DataFlavor.stringFlavor);
-			if (value instanceof String)
+			String value = clipboard.readText();
+			if (value != null)
 			{
-				connectionCodeInput.setText(((String) value).trim());
+				connectionCodeInput.setText(value.trim());
 				connectionCodeInput.setCaretPosition(0);
 				joinConnection();
 			}
 		}
-		catch (Exception exception)
+		catch (RuntimeException exception)
 		{
 			errorSink.accept("Could not paste a connection code from the clipboard.");
 		}
@@ -637,10 +721,7 @@ final class RemotePairingPanel extends JPanel
 	{
 		try
 		{
-			Toolkit.getDefaultToolkit().getSystemClipboard().setContents(
-				new StringSelection(value),
-				null
-			);
+			clipboard.copyText(value);
 			return true;
 		}
 		catch (RuntimeException exception)
@@ -648,6 +729,32 @@ final class RemotePairingPanel extends JPanel
 			errorSink.accept("Could not copy the connection code to the clipboard.");
 			return false;
 		}
+	}
+
+	private void setStatus(String message)
+	{
+		connectionStatus.setPlainText(message);
+		waitingStatus.setPlainText(message);
+	}
+
+	private void showView(PairingView view)
+	{
+		if (view == displayedView)
+		{
+			return;
+		}
+		displayedView = view;
+		viewHost.removeAll();
+		if (view == PairingView.CONNECT)
+		{
+			viewHost.add(connectView, BorderLayout.CENTER);
+		}
+		else if (view == PairingView.WAITING)
+		{
+			viewHost.add(waitingView, BorderLayout.CENTER);
+		}
+		viewHost.revalidate();
+		viewHost.repaint();
 	}
 
 	private void cancelActivePairing()
@@ -672,6 +779,38 @@ final class RemotePairingPanel extends JPanel
 		return current.getMessage() == null
 			? "Remote pairing failed"
 			: current.getMessage();
+	}
+
+	static PairingView viewFor(RemoteSessionSnapshot snapshot)
+	{
+		if (snapshot.getState() == RemoteSessionState.LOCAL)
+		{
+			return PairingView.CONNECT;
+		}
+		if (snapshot.getRole() == RemoteRole.CONTROLLER
+			&& (snapshot.getState() == RemoteSessionState.CONNECTING
+				|| snapshot.getState() == RemoteSessionState.WAITING_FOR_PEER))
+		{
+			return PairingView.WAITING;
+		}
+		return PairingView.HIDDEN;
+	}
+
+	static boolean showsDiscordSetup(DiscordLinkState state)
+	{
+		return state == DiscordLinkState.UNLINKED;
+	}
+
+	static boolean showsDiscordUnlink(DiscordLinkState state)
+	{
+		return state == DiscordLinkState.LINKED || state == DiscordLinkState.OFFLINE;
+	}
+
+	enum PairingView
+	{
+		CONNECT,
+		WAITING,
+		HIDDEN
 	}
 
 	private static void configureCompactButton(JButton button)

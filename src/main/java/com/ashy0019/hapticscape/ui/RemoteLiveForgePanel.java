@@ -1,12 +1,12 @@
 package com.ashy0019.hapticscape.ui;
 
+import com.ashy0019.hapticscape.host.GlobalUiHooks;
 import com.ashy0019.hapticscape.remote.RemotePermissions;
 import com.ashy0019.hapticscape.remote.RemoteRole;
 import com.ashy0019.hapticscape.remote.RemoteSessionManager;
 import com.ashy0019.hapticscape.remote.RemoteSessionSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteSessionState;
 import java.awt.BasicStroke;
-import java.awt.AWTEvent;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
@@ -14,13 +14,15 @@ import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
 import java.awt.Polygon;
 import java.awt.RenderingHints;
-import java.awt.Toolkit;
-import java.awt.event.AWTEventListener;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.event.WindowEvent;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Objects;
@@ -38,7 +40,8 @@ final class RemoteLiveForgePanel extends JPanel
 {
 	static final int SAMPLE_INTERVAL_MILLIS = 50;
 	static final int RELEASE_DECAY_MILLIS = 300;
-	private static final int WARNING_HEIGHT = 34;
+	private static final int WIDE_BREAKPOINT = 800;
+	private static final int WARNING_HEIGHT = 44;
 
 	private final LiveDispatcher dispatcher;
 	private final JLabel permissionLabel = new JLabel("Not allowed", SwingConstants.RIGHT);
@@ -46,34 +49,21 @@ final class RemoteLiveForgePanel extends JPanel
 	private final JLabel limitLabel = new JLabel();
 	private final JProgressBar limitBar = new JProgressBar(0, 100);
 	private final JButton stopButton = new JButton("Stop Output");
-	private final SidebarTextLabel warning = new SidebarTextLabel("");
+	private final WrappedTextLabel warning = new WrappedTextLabel("");
 	private final Timer sampleTimer = new Timer(SAMPLE_INTERVAL_MILLIS, event -> sample());
+	private final JPanel layoutPanel = new JPanel(new GridBagLayout());
 
 	private RemoteSessionSnapshot session = RemoteSessionSnapshot.local();
 	private RemotePermissions permissions = RemotePermissions.defaults();
 	private boolean streaming;
+	private boolean workspaceActive;
 	private int requestedIntensity;
 	private long gestureStartedAtMillis;
+	private int layoutMode = -1;
 
-	private final AWTEventListener gestureSafetyListener = event ->
-	{
-		if (!streaming)
-		{
-			return;
-		}
-		if (event instanceof MouseEvent
-			&& event.getID() == MouseEvent.MOUSE_RELEASED)
-		{
-			endGesture();
-		}
-		else if (event instanceof WindowEvent
-			&& event.getID() == WindowEvent.WINDOW_LOST_FOCUS)
-		{
-			endGesture();
-		}
-	};
+	private final GlobalUiHooks.Registration gestureSafetyHook;
 
-	RemoteLiveForgePanel(RemoteSessionManager sessionManager)
+	RemoteLiveForgePanel(RemoteSessionManager sessionManager, GlobalUiHooks globalUiHooks)
 	{
 		this(new LiveDispatcher()
 		{
@@ -100,38 +90,55 @@ final class RemoteLiveForgePanel extends JPanel
 			{
 				sessionManager.stopRemoteOutput();
 			}
-		});
+		}, globalUiHooks);
 		apply(sessionManager.getSnapshot(), sessionManager.getPeerPermissions());
 	}
 
 	RemoteLiveForgePanel(LiveDispatcher dispatcher)
 	{
-		this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
-		setName("remoteLiveForgePanel");
-		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
-		setBorder(BorderFactory.createTitledBorder("Live Forge"));
+		this(dispatcher, GlobalUiHooks.noop());
+	}
 
+	RemoteLiveForgePanel(LiveDispatcher dispatcher, GlobalUiHooks globalUiHooks)
+	{
+		this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
+		Objects.requireNonNull(globalUiHooks, "globalUiHooks");
+		setName("remoteLiveForgePanel");
+		setLayout(new BorderLayout());
+		setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+
+		JPanel sessionPanel = new JPanel();
+		sessionPanel.setName("remoteLiveSession");
+		sessionPanel.setLayout(new BoxLayout(sessionPanel, BoxLayout.Y_AXIS));
+		sessionPanel.setBorder(PanelUi.createSectionBorder("Session limits"));
 		JPanel heading = new JPanel(new BorderLayout(6, 0));
-		heading.add(new JLabel("Temporal control"), BorderLayout.WEST);
+		heading.add(new JLabel("Permission"), BorderLayout.WEST);
 		permissionLabel.setName("remoteLivePermission");
-		permissionLabel.setPreferredSize(new Dimension(70, permissionLabel.getPreferredSize().height));
+		permissionLabel.setPreferredSize(new Dimension(82, permissionLabel.getPreferredSize().height));
 		heading.add(permissionLabel, BorderLayout.EAST);
 		allowHorizontalShrink(heading);
-		PanelUi.addVerticalComponent(this, heading);
+		PanelUi.addPreferredHeightComponent(sessionPanel, heading);
 
-		SidebarTextLabel explanation = new SidebarTextLabel(
+		JPanel controlPanel = new JPanel(new BorderLayout(0, 5));
+		controlPanel.setName("remoteLiveControl");
+		controlPanel.setBorder(PanelUi.createSectionBorder("Live control"));
+		WrappedTextLabel explanation = new WrappedTextLabel(
 			"Hold and move inside the graph. Height controls intensity while time moves continuously."
 		);
-		explanation.setBorder(BorderFactory.createEmptyBorder(2, 0, 5, 0));
-		PanelUi.addVerticalComponent(this, explanation);
+		explanation.setBorder(BorderFactory.createEmptyBorder(0, 0, 2, 0));
+		controlPanel.add(explanation, BorderLayout.NORTH);
 
 		canvas.setName("remoteLiveCanvas");
-		canvas.setPreferredSize(new Dimension(0, 180));
-		canvas.setMinimumSize(new Dimension(100, 150));
-		canvas.setMaximumSize(new Dimension(Integer.MAX_VALUE, 180));
-		canvas.setAlignmentX(Component.LEFT_ALIGNMENT);
+		canvas.setPreferredSize(new Dimension(680, 300));
+		canvas.setMinimumSize(new Dimension(180, 180));
 		canvas.setBorder(BorderFactory.createLineBorder(new Color(91, 74, 49)));
-		PanelUi.addVerticalComponent(this, canvas);
+		controlPanel.add(canvas, BorderLayout.CENTER);
+
+		WrappedTextLabel releaseHelp = new WrappedTextLabel(
+			"Release to fade smoothly to zero. Leaving Live ends the gesture."
+		);
+		releaseHelp.setBorder(BorderFactory.createEmptyBorder(2, 0, 0, 0));
+		controlPanel.add(releaseHelp, BorderLayout.SOUTH);
 
 		JPanel limitPanel = new JPanel(new BorderLayout(0, 4));
 		limitPanel.setName("remoteLiveLimitPanel");
@@ -147,25 +154,34 @@ final class RemoteLiveForgePanel extends JPanel
 		limitPanel.setPreferredSize(new Dimension(0, limitPanelHeight));
 		limitPanel.setMinimumSize(new Dimension(0, limitPanelHeight));
 		limitPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, limitPanelHeight));
-		PanelUi.addVerticalComponent(this, limitPanel);
+		PanelUi.addPreferredHeightComponent(sessionPanel, limitPanel);
 
 		stopButton.setName("remoteLiveStop");
+		stopButton.setText("Stop output");
 		stopButton.setToolTipText("Stop all remote haptic output immediately");
 		stopButton.setAlignmentX(Component.LEFT_ALIGNMENT);
 		stopButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, stopButton.getPreferredSize().height));
-		PanelUi.addVerticalComponent(this, stopButton);
-
-		SidebarTextLabel releaseHelp = new SidebarTextLabel(
-			"Release to fade smoothly to zero. Emergency Off and disconnect stop immediately."
-		);
-		releaseHelp.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
-		PanelUi.addVerticalComponent(this, releaseHelp);
+		PanelUi.addPreferredHeightComponent(sessionPanel, stopButton);
 
 		warning.setName("remoteLiveWarning");
+		warning.setBorder(BorderFactory.createEmptyBorder(5, 0, 0, 0));
 		warning.setPreferredSize(new Dimension(180, WARNING_HEIGHT));
 		warning.setMinimumSize(new Dimension(0, WARNING_HEIGHT));
 		warning.setMaximumSize(new Dimension(Integer.MAX_VALUE, WARNING_HEIGHT));
-		PanelUi.addVerticalComponent(this, warning);
+		PanelUi.addPreferredHeightComponent(sessionPanel, warning);
+
+		JPanel controlHost = host(controlPanel, 620);
+		JPanel sessionHost = host(sessionPanel, 270);
+		add(layoutPanel, BorderLayout.NORTH);
+		addComponentListener(new ComponentAdapter()
+		{
+			@Override
+			public void componentResized(ComponentEvent event)
+			{
+				reflow(controlHost, sessionHost);
+			}
+		});
+		reflow(controlHost, sessionHost);
 
 		MouseAdapter drawing = new MouseAdapter()
 		{
@@ -195,10 +211,7 @@ final class RemoteLiveForgePanel extends JPanel
 		canvas.addMouseMotionListener(drawing);
 		stopButton.addActionListener(event -> stopImmediately());
 		sampleTimer.setCoalesce(true);
-		Toolkit.getDefaultToolkit().addAWTEventListener(
-			gestureSafetyListener,
-			AWTEvent.MOUSE_EVENT_MASK | AWTEvent.WINDOW_FOCUS_EVENT_MASK
-		);
+		gestureSafetyHook = globalUiHooks.onGestureEnd(this::endGesture);
 		apply(RemoteSessionSnapshot.local(), RemotePermissions.defaults());
 	}
 
@@ -210,15 +223,13 @@ final class RemoteLiveForgePanel extends JPanel
 			&& session.getState() != RemoteSessionState.LOCAL;
 		boolean connected = session.getState() == RemoteSessionState.ACTIVE
 			|| session.getState() == RemoteSessionState.PEER_EMERGENCY_PAUSED;
-		setVisible(controller && connected);
-
 		boolean allowed = permissions.isLiveHapticsAllowed()
 			&& permissions.getMaximumIntensityPercent() > 0;
 		boolean active = controller
 			&& session.getState() == RemoteSessionState.ACTIVE
 			&& allowed;
 		permissionLabel.setText(allowed ? "Allowed" : "Not allowed");
-		canvas.setInputEnabled(active);
+		canvas.setInputEnabled(active && workspaceActive);
 		stopButton.setEnabled(controller && connected);
 		limitBar.setValue(permissions.getMaximumIntensityPercent());
 		limitLabel.setText(
@@ -230,6 +241,8 @@ final class RemoteLiveForgePanel extends JPanel
 		if (!active)
 		{
 			endGesture();
+			sampleTimer.stop();
+			canvas.stopImmediately();
 		}
 		if (session.getState() == RemoteSessionState.PEER_EMERGENCY_PAUSED)
 		{
@@ -248,11 +261,7 @@ final class RemoteLiveForgePanel extends JPanel
 			setWarning("");
 		}
 
-		if (isVisible() && !sampleTimer.isRunning())
-		{
-			sampleTimer.start();
-		}
-		else if (!isVisible())
+		if (!controller || !connected || !workspaceActive)
 		{
 			sampleTimer.stop();
 			canvas.clear();
@@ -263,17 +272,30 @@ final class RemoteLiveForgePanel extends JPanel
 
 	void close()
 	{
-		endGesture();
-		sampleTimer.stop();
-		Toolkit.getDefaultToolkit().removeAWTEventListener(gestureSafetyListener);
-		canvas.clear();
+		setWorkspaceActive(false);
+		gestureSafetyHook.close();
 	}
 
-	@Override
-	public Dimension getPreferredSize()
+	void endGestureForNavigation()
 	{
-		Dimension preferred = super.getPreferredSize();
-		return new Dimension(Math.min(194, preferred.width), preferred.height);
+		endGesture();
+	}
+
+	void setWorkspaceActive(boolean active)
+	{
+		workspaceActive = active;
+		boolean inputAvailable = active
+			&& session.getRole() == RemoteRole.CONTROLLER
+			&& session.getState() == RemoteSessionState.ACTIVE
+			&& permissions.isLiveHapticsAllowed()
+			&& permissions.getMaximumIntensityPercent() > 0;
+		canvas.setInputEnabled(inputAvailable);
+		if (!active)
+		{
+			endGesture();
+			sampleTimer.stop();
+			canvas.clear();
+		}
 	}
 
 	private void beginGesture(MouseEvent event)
@@ -289,6 +311,10 @@ final class RemoteLiveForgePanel extends JPanel
 			streaming = true;
 			gestureStartedAtMillis = System.currentTimeMillis();
 			canvas.setHeldIntensity(requestedIntensity);
+			if (!sampleTimer.isRunning())
+			{
+				sampleTimer.start();
+			}
 			setWarning("");
 		}
 		catch (RuntimeException failure)
@@ -323,6 +349,10 @@ final class RemoteLiveForgePanel extends JPanel
 			}
 		}
 		canvas.advance(now);
+		if (!streaming && !canvas.needsAnimation())
+		{
+			sampleTimer.stop();
+		}
 	}
 
 	private void endGesture()
@@ -346,6 +376,7 @@ final class RemoteLiveForgePanel extends JPanel
 	private void stopImmediately()
 	{
 		streaming = false;
+		sampleTimer.stop();
 		canvas.stopImmediately();
 		try
 		{
@@ -359,6 +390,11 @@ final class RemoteLiveForgePanel extends JPanel
 		{
 			setWarning(messageFor(failure));
 		}
+	}
+
+	boolean isSampling()
+	{
+		return sampleTimer.isRunning();
 	}
 
 	private int intensityFrom(MouseEvent event)
@@ -398,6 +434,78 @@ final class RemoteLiveForgePanel extends JPanel
 	{
 		Dimension preferred = component.getPreferredSize();
 		component.setMinimumSize(new Dimension(0, preferred.height));
+	}
+
+	private void reflow(Component control, Component sessionControls)
+	{
+		int desired = layoutModeForWidth(getWidth());
+		if (desired == layoutMode)
+		{
+			return;
+		}
+		layoutMode = desired;
+		layoutPanel.removeAll();
+		if (layoutMode == 2)
+		{
+			addSection(control, 0, 0, 1.0, 1.0, GridBagConstraints.BOTH);
+			addSection(sessionControls, 1, 0, 0.0, 0.0, GridBagConstraints.HORIZONTAL);
+		}
+		else
+		{
+			addSection(control, 0, 0, 1.0, 1.0, GridBagConstraints.BOTH);
+			addSection(sessionControls, 0, 1, 1.0, 0.0, GridBagConstraints.HORIZONTAL);
+		}
+		layoutPanel.revalidate();
+		layoutPanel.repaint();
+	}
+
+	static int layoutModeForWidth(int width)
+	{
+		return width >= WIDE_BREAKPOINT ? 2 : 1;
+	}
+
+	private void addSection(
+		Component component,
+		int x,
+		int y,
+		double weightX,
+		double weightY,
+		int fill)
+	{
+		GridBagConstraints constraints = new GridBagConstraints();
+		constraints.gridx = x;
+		constraints.gridy = y;
+		constraints.weightx = weightX;
+		constraints.weighty = weightY;
+		constraints.fill = fill;
+		constraints.anchor = GridBagConstraints.NORTHWEST;
+		constraints.insets = new Insets(0, 0, 7, 7);
+		layoutPanel.add(component, constraints);
+	}
+
+	private static JPanel host(Component component, int preferredWidth)
+	{
+		JPanel host = new WidthHintPanel(preferredWidth);
+		host.add(component, BorderLayout.CENTER);
+		return host;
+	}
+
+	private static final class WidthHintPanel extends JPanel
+	{
+		private final int preferredWidth;
+
+		private WidthHintPanel(int preferredWidth)
+		{
+			super(new BorderLayout());
+			this.preferredWidth = preferredWidth;
+		}
+
+		@Override
+		public Dimension getPreferredSize()
+		{
+			Dimension preferred = super.getPreferredSize();
+			return new Dimension(Math.max(preferredWidth, preferred.width), preferred.height);
+		}
 	}
 
 	interface LiveDispatcher
@@ -496,6 +604,15 @@ final class RemoteLiveForgePanel extends JPanel
 			repaint();
 		}
 
+		private boolean needsAnimation()
+		{
+			// Keep sampling the released gesture while its history is visible. The
+			// zero-valued samples draw the same flat baseline the original plugin
+			// showed after the controller let go, instead of stopping immediately
+			// when the haptic decay reaches zero.
+			return held || displayedIntensity > 0 || !samples.isEmpty();
+		}
+
 		private void clear()
 		{
 			samples.clear();
@@ -577,7 +694,7 @@ final class RemoteLiveForgePanel extends JPanel
 			graphics.fill(new Polygon(x, y, x.length));
 			graphics.setColor(CURVE);
 			graphics.setStroke(new BasicStroke(2.5f));
-			for (int point = 1; point < count; point++)
+			for (int point = 1; point <= count; point++)
 			{
 				graphics.drawLine(x[point], y[point], x[point + 1], y[point + 1]);
 			}

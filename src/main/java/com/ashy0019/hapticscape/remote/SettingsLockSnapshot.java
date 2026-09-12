@@ -43,7 +43,10 @@ public final class SettingsLockSnapshot
 
 	public boolean isLocked(SettingsLockTarget target)
 	{
-		return legacyFullLock || SettingsLockCatalog.isCoveredBy(targets, target);
+		return (legacyFullLock
+			&& !SettingsLockCatalog.PROTECTED_EXIT.equals(target)
+			&& !SettingsLockCatalog.STARTUP_BEHAVIOR.equals(target))
+			|| SettingsLockCatalog.isCoveredBy(targets, target);
 	}
 
 	public boolean containsLock(String lockId)
