@@ -1,4 +1,6 @@
 using System;
+using System.IO;
+using System.Threading;
 
 internal static class HapticScapeDeepLink
 {
@@ -94,5 +96,49 @@ internal static class HapticScapeDeepLink
 			}
 		}
 		return true;
+	}
+}
+
+internal static class DeepLinkInstanceHandoff
+{
+	internal static bool WaitForTakeover(
+		Mutex instance,
+		string requestPath,
+		int timeoutMilliseconds)
+	{
+		if (instance == null)
+		{
+			throw new ArgumentNullException("instance");
+		}
+		if (requestPath == null)
+		{
+			throw new ArgumentNullException("requestPath");
+		}
+		if (timeoutMilliseconds < 0)
+		{
+			throw new ArgumentOutOfRangeException("timeoutMilliseconds");
+		}
+
+		DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMilliseconds);
+		while (File.Exists(requestPath))
+		{
+			int remaining = (int)Math.Ceiling((deadline - DateTime.UtcNow).TotalMilliseconds);
+			if (remaining <= 0)
+			{
+				return false;
+			}
+			try
+			{
+				if (instance.WaitOne(Math.Min(100, remaining)))
+				{
+					return true;
+				}
+			}
+			catch (AbandonedMutexException)
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 }

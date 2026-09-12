@@ -161,6 +161,8 @@ public final class HapticScapePanel extends JPanel
 	private final RemoteSessionManager remoteSessionManager;
 	private final SettingsLockService settingsLockService;
 	private final SettingsLockDraft settingsLockDraft = new SettingsLockDraft();
+	private final Runnable settingsLockDraftViewportListener =
+		this::preserveSubjectLockDraftViewport;
 	private final LockableCheckBoxBinding levelUpLockBinding;
 	private final LockableCheckBoxBinding milestoneLockBinding;
 	private final LockableCheckBoxBinding level99LockBinding;
@@ -242,6 +244,10 @@ public final class HapticScapePanel extends JPanel
 			"pageScrollPane"
 		);
 		workspaceShell = new WorkspaceShell(this.pageScrollPane);
+		// Register before the lockable controls and Remote Play panel so the
+		// current viewport is anchored before their synchronous draft listeners
+		// can trigger a CardLayout/preferred-size reflow.
+		settingsLockDraft.addListener(settingsLockDraftViewportListener);
 		setLayout(new BorderLayout());
 		setBorder(BorderFactory.createEmptyBorder());
 
@@ -1202,6 +1208,7 @@ public final class HapticScapePanel extends JPanel
 	public void close()
 	{
 		pageScrollRouting.close();
+		settingsLockDraft.removeListener(settingsLockDraftViewportListener);
 		remoteSessionManager.removeListener(this);
 		settingsLockService.removeListener(this);
 		remoteControlPanel.close();
@@ -1733,6 +1740,21 @@ public final class HapticScapePanel extends JPanel
 		return remoteSessionManager.getPeerPermissions().isSettingsAllowed()
 			&& (lockState == RemoteLockState.INACTIVE
 				|| lockState == RemoteLockState.DECLINED);
+	}
+
+	private void preserveSubjectLockDraftViewport()
+	{
+		if (!SwingUtilities.isEventDispatchThread()
+			|| !GAMEPLAY_WORKSPACE.equals(workspaceShell.getSelectedWorkspace())
+			|| !isSubjectWorkspaceActive())
+		{
+			return;
+		}
+
+		ViewportAnchor viewportAnchor = ViewportAnchor.capture(pageScrollPane);
+		viewportAnchor.holdThroughLayout(() ->
+			GAMEPLAY_WORKSPACE.equals(workspaceShell.getSelectedWorkspace())
+				&& isSubjectWorkspaceActive());
 	}
 
 	private boolean isGlobalFeedbackReadOnly()

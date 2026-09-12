@@ -517,12 +517,11 @@ public final class RemoteSessionManager implements AutoCloseable
 	public synchronized void validateParticipantJoin()
 	{
 		requireOpen();
-		if (settingsLockService.isLocked())
-		{
-			throw new IllegalStateException(
-				"Unlock local feedback settings before joining another Remote Control session"
-			);
-		}
+	}
+
+	public boolean isClosed()
+	{
+		return closed;
 	}
 
 	public synchronized void emergencyPause()

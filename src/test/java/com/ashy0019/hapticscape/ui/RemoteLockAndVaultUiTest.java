@@ -1,6 +1,14 @@
 package com.ashy0019.hapticscape.ui;
 
+import com.ashy0019.hapticscape.remote.RemoteLockSnapshot;
 import com.ashy0019.hapticscape.remote.RemoteLockState;
+import java.awt.Component;
+import java.awt.Container;
+import java.awt.event.ContainerAdapter;
+import java.awt.event.ContainerEvent;
+import java.util.concurrent.atomic.AtomicInteger;
+import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -50,6 +58,43 @@ public class RemoteLockAndVaultUiTest
 	}
 
 	@Test
+	public void lockPreparationDoesNotRebuildActionsForCountOnlyChanges() throws Exception
+	{
+		SwingUtilities.invokeAndWait(() ->
+		{
+			RemoteLockPreparationPanel panel = new RemoteLockPreparationPanel(
+				() -> { },
+				() -> { },
+				() -> { },
+				() -> { },
+				() -> { }
+			);
+			RemoteLockSnapshot snapshot = RemoteLockSnapshot.inactive();
+			panel.apply(snapshot, 1, true, true, false, false, true, true, "");
+
+			JPanel actions = (JPanel) findByName(panel, "remoteLockActions");
+			AtomicInteger structuralChanges = new AtomicInteger();
+			actions.addContainerListener(new ContainerAdapter()
+			{
+				@Override
+				public void componentAdded(ContainerEvent event)
+				{
+					structuralChanges.incrementAndGet();
+				}
+
+				@Override
+				public void componentRemoved(ContainerEvent event)
+				{
+					structuralChanges.incrementAndGet();
+				}
+			});
+
+			panel.apply(snapshot, 2, true, true, false, false, true, true, "");
+			assertEquals(0, structuralChanges.get());
+		});
+	}
+
+	@Test
 	public void vaultSummaryDistinguishesUnavailableEmptyAndManageableStates()
 	{
 		SavedUnlockKeyVaultState unavailable = SavedUnlockKeyVaultState.from(
@@ -81,5 +126,25 @@ public class RemoteLockAndVaultUiTest
 	{
 		assertEquals(1, SavedUnlockKeyVaultWorkspacePanel.layoutModeForWidth(759));
 		assertEquals(2, SavedUnlockKeyVaultWorkspacePanel.layoutModeForWidth(760));
+	}
+
+	private static Component findByName(Container root, String name)
+	{
+		for (Component component : root.getComponents())
+		{
+			if (name.equals(component.getName()))
+			{
+				return component;
+			}
+			if (component instanceof Container)
+			{
+				Component nested = findByName((Container) component, name);
+				if (nested != null)
+				{
+					return nested;
+				}
+			}
+		}
+		return null;
 	}
 }

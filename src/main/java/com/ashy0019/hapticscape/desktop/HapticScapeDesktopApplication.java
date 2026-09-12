@@ -272,7 +272,7 @@ public final class HapticScapeDesktopApplication implements AutoCloseable
 		}
 		if (deepLinkInbox != null)
 		{
-			deepLinkInbox.setHandler(null);
+			deepLinkInbox.close();
 			deepLinkInbox = null;
 		}
 		HapticScapeDesktopWindow currentWindow = window;

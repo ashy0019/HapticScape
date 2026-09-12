@@ -54,7 +54,6 @@ public final class DiscordPairingBridge implements AutoCloseable, RemoteSessionL
 	private volatile boolean manualSocketClose;
 	private volatile int reconnectAttempt;
 	private volatile DiscordJoinConsentHandler joinConsentHandler;
-	private volatile DiscordDeepLinkRequest pendingDeepLink;
 	private RemotePairingCode activePairingCode;
 	private String activePairingRelayUrl;
 	private String activePairingRequestId;
@@ -118,30 +117,37 @@ public final class DiscordPairingBridge implements AutoCloseable, RemoteSessionL
 		joinConsentHandler = handler;
 	}
 
-	public synchronized void acceptDeepLink(DiscordDeepLinkRequest deepLink)
+	public synchronized boolean acceptDeepLink(DiscordDeepLinkRequest deepLink)
 	{
-		ensureOpen();
 		Objects.requireNonNull(deepLink, "deepLink");
+		if (closed || sessionManager.isClosed())
+		{
+			return false;
+		}
+		DiscordDeviceCredential current = credential;
+		if (current == null)
+		{
+			DiscordJoinConsentHandler handler = joinConsentHandler;
+			if (handler != null)
+			{
+				handler.onDeepLinkOpened();
+			}
+			showJoinError("Link this Discord account in HapticScape, then select Accept again.");
+			return true;
+		}
+		if (snapshot.getState() != DiscordLinkState.LINKED)
+		{
+			return false;
+		}
 		DiscordJoinConsentHandler handler = joinConsentHandler;
 		if (handler != null)
 		{
 			handler.onDeepLinkOpened();
 		}
-		DiscordDeviceCredential current = credential;
-		if (current == null)
-		{
-			showJoinError("Link this Discord account in HapticScape, then select Accept again.");
-			return;
-		}
-		if (snapshot.getState() != DiscordLinkState.LINKED)
-		{
-			pendingDeepLink = deepLink;
-			return;
-		}
-		submitDeepLink(deepLink, current);
+		return submitDeepLink(deepLink, current);
 	}
 
-	private void submitDeepLink(
+	private boolean submitDeepLink(
 		DiscordDeepLinkRequest deepLink,
 		DiscordDeviceCredential current)
 	{
@@ -151,8 +157,12 @@ public final class DiscordPairingBridge implements AutoCloseable, RemoteSessionL
 		}
 		catch (RuntimeException exception)
 		{
+			if (sessionManager.isClosed())
+			{
+				return false;
+			}
 			showJoinError(exception.getMessage());
-			return;
+			return true;
 		}
 		KeyPair participantKeyPair;
 		try
@@ -162,14 +172,14 @@ public final class DiscordPairingBridge implements AutoCloseable, RemoteSessionL
 		catch (RuntimeException exception)
 		{
 			showJoinError(rootMessage(exception));
-			return;
+			return true;
 		}
 		String joinKeyId = joinKeyId(deepLink.getControllerId(), deepLink.getRequestId());
 		PrivateKey privateKey = participantKeyPair.getPrivate();
 		if (pendingJoinKeys.putIfAbsent(joinKeyId, privateKey) != null)
 		{
 			showJoinError("This Discord connection request is already being opened.");
-			return;
+			return true;
 		}
 		scheduler.schedule(
 			() -> pendingJoinKeys.remove(joinKeyId, privateKey),
@@ -226,6 +236,7 @@ public final class DiscordPairingBridge implements AutoCloseable, RemoteSessionL
 				}
 			}
 		});
+		return true;
 	}
 
 	public CompletableFuture<DiscordLinkSnapshot> link(
@@ -319,7 +330,6 @@ public final class DiscordPairingBridge implements AutoCloseable, RemoteSessionL
 		credentialStore.clear();
 		closeSocket();
 		credential = null;
-		pendingDeepLink = null;
 		pendingJoinKeys.clear();
 		reconnectAttempt = 0;
 		cancelActivePairing();
@@ -386,7 +396,6 @@ public final class DiscordPairingBridge implements AutoCloseable, RemoteSessionL
 			return;
 		}
 		closed = true;
-		pendingDeepLink = null;
 		pendingJoinKeys.clear();
 		sessionManager.removeListener(this);
 		closeSocket();
@@ -929,16 +938,6 @@ public final class DiscordPairingBridge implements AutoCloseable, RemoteSessionL
 					current.getDisplayName(),
 					"Discord linked as " + current.getDisplayName()
 				));
-				DiscordDeepLinkRequest waiting;
-				synchronized (DiscordPairingBridge.this)
-				{
-					waiting = pendingDeepLink;
-					pendingDeepLink = null;
-				}
-				if (waiting != null)
-				{
-					submitDeepLink(waiting, current);
-				}
 			}
 		}
 

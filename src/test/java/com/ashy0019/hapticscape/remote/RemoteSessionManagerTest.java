@@ -156,7 +156,7 @@ public class RemoteSessionManagerTest
 	}
 
 	@Test
-	public void participantApprovalPersistsLockAfterSession()
+	public void participantApprovalPersistsLockAndAllowsFreshSession()
 	{
 		Gson gson = new Gson();
 		TestRelay relay = new TestRelay();
@@ -196,16 +196,14 @@ public class RemoteSessionManagerTest
 			assertTrue(participantLock.isLocked());
 			participant.endSession();
 			assertTrue(participantLock.isLocked());
-			boolean rejoinRejected = false;
-			try
-			{
-				participant.joinParticipant(invitation.encode());
-			}
-			catch (IllegalStateException expected)
-			{
-				rejoinRejected = true;
-			}
-			assertTrue(rejoinRejected);
+
+			RemoteInvitation reconnect = controller.startController(
+				"wss://relay.example/relay"
+			);
+			participant.joinParticipant(reconnect.encode());
+			assertTrue(participantLock.isLocked());
+			participant.endSession();
+
 			assertFalse(participantLock.unlock("wrong password".toCharArray()));
 			assertTrue(participantLock.isLocked());
 			assertTrue(participantLock.unlock(password));

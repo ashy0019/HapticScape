@@ -48,6 +48,7 @@ final class RemoteLockPreparationPanel extends JPanel
 		cancelButton.setName("remoteLockCancel");
 		protectedExit.setName("remoteLockProtectedExit");
 		startupBehavior.setName("remoteLockStartupBehavior");
+		actions.setName("remoteLockActions");
 		protectedExit.setToolTipText(
 			"The participant must explicitly allow and approve protected exit"
 		);
@@ -111,14 +112,23 @@ final class RemoteLockPreparationPanel extends JPanel
 		requestButton.setToolTipText(vaultAvailable ? null : vaultMessage);
 		cancelButton.setText(view.getCancelLabel());
 		cancelButton.setEnabled(controllerActive && view.showsCancel());
-		showActions(view);
+		boolean actionsChanged = showActions(view);
+		boolean visibilityChanged = isVisible() != controllerActive;
 		setVisible(controllerActive);
-		revalidate();
+		if (actionsChanged || visibilityChanged)
+		{
+			revalidate();
+		}
 		repaint();
 	}
 
-	private void showActions(LockView view)
+	private boolean showActions(LockView view)
 	{
+		if (actionsMatch(view))
+		{
+			return false;
+		}
+
 		actions.removeAll();
 		if (view.showsOpenSubject())
 		{
@@ -132,6 +142,37 @@ final class RemoteLockPreparationPanel extends JPanel
 		{
 			actions.add(cancelButton);
 		}
+		return true;
+	}
+
+	private boolean actionsMatch(LockView view)
+	{
+		int index = 0;
+		if (view.showsOpenSubject())
+		{
+			if (actions.getComponentCount() <= index
+				|| actions.getComponent(index++) != openSubjectButton)
+			{
+				return false;
+			}
+		}
+		if (view.showsRequest())
+		{
+			if (actions.getComponentCount() <= index
+				|| actions.getComponent(index++) != requestButton)
+			{
+				return false;
+			}
+		}
+		if (view.showsCancel())
+		{
+			if (actions.getComponentCount() <= index
+				|| actions.getComponent(index++) != cancelButton)
+			{
+				return false;
+			}
+		}
+		return actions.getComponentCount() == index;
 	}
 
 	private static String detailFor(RemoteLockSnapshot snapshot, int count)
