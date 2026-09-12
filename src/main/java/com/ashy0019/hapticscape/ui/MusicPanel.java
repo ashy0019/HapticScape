@@ -34,7 +34,6 @@ final class MusicPanel extends JPanel
 	private final JLabel maximumValue = new JLabel();
 	private final JLabel rangeValue = new JLabel();
 	private final JLabel responseHint = new JLabel();
-	private final JLabel captureStateLabel = new JLabel("Off");
 	private final JLabel statusLabel = new JLabel("Music sync is off");
 	private final JProgressBar outputMeter = new JProgressBar(0, 100);
 	private boolean updating;
@@ -70,7 +69,6 @@ final class MusicPanel extends JPanel
 			minimumSlider.setValue(maximumSlider.getValue());
 		}
 
-		captureStateLabel.setName("musicCaptureState");
 		statusLabel.setName("musicCaptureDetail");
 		outputMeter.setName("musicOutputMeter");
 		outputMeter.setStringPainted(true);
@@ -148,7 +146,6 @@ final class MusicPanel extends JPanel
 		if (snapshot.getState() != displayedState)
 		{
 			displayedState = snapshot.getState();
-			captureStateLabel.setText(stateText(displayedState));
 			refreshEnabledState();
 		}
 		if (!snapshot.getMessage().equals(displayedMessage))
@@ -168,11 +165,6 @@ final class MusicPanel extends JPanel
 	private JPanel capturePanel()
 	{
 		JPanel panel = verticalSection("Capture", "musicCaptureSection");
-		PanelUi.addPreferredHeightComponent(panel, row("State", captureStateLabel));
-		JPanel sourceRow = row("Source", new JLabel("Default system output"));
-		sourceRow.setToolTipText("Captures the Windows default output device");
-		PanelUi.addPreferredHeightComponent(panel, sourceRow);
-		panel.add(Box.createVerticalStrut(6));
 		PanelUi.addPreferredHeightComponent(panel, outputMeter);
 
 		statusLabel.setBorder(BorderFactory.createEmptyBorder(5, 1, 5, 1));
@@ -376,22 +368,6 @@ final class MusicPanel extends JPanel
 		row.add(new JLabel(name), BorderLayout.CENTER);
 		row.add(control, BorderLayout.EAST);
 		return row;
-	}
-
-	private static String stateText(MusicSyncSnapshot.State state)
-	{
-		switch (state)
-		{
-			case STARTING:
-				return "Starting";
-			case RUNNING:
-				return "Listening";
-			case ERROR:
-				return "Needs attention";
-			case DISABLED:
-			default:
-				return "Off";
-		}
 	}
 
 	private static MusicResponse parseResponse(String value)
