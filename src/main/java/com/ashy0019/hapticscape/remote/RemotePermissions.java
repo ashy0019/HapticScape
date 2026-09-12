@@ -26,6 +26,7 @@ public final class RemotePermissions
 	private final boolean desktopNotificationsAllowed;
 	private final boolean localChatboxMessagesAllowed;
 	private final boolean protectedExitAllowed;
+	private final boolean activitySharingAllowed;
 	private final int maximumIntensityPercent;
 	private final int maximumDurationMillis;
 	private final int maximumLiveDurationMillis;
@@ -46,6 +47,7 @@ public final class RemotePermissions
 			clicksAllowed,
 			desktopNotificationsAllowed,
 			localChatboxMessagesAllowed,
+			false,
 			false,
 			maximumIntensityPercent,
 			maximumDurationMillis,
@@ -72,6 +74,7 @@ public final class RemotePermissions
 			desktopNotificationsAllowed,
 			localChatboxMessagesAllowed,
 			false,
+			false,
 			maximumIntensityPercent,
 			maximumDurationMillis,
 			maximumLiveDurationMillis
@@ -91,6 +94,34 @@ public final class RemotePermissions
 		int maximumLiveDurationMillis)
 	{
 		this(
+			settingsAllowed,
+			hapticsAllowed,
+			liveHapticsAllowed,
+			clicksAllowed,
+			desktopNotificationsAllowed,
+			localChatboxMessagesAllowed,
+			protectedExitAllowed,
+			false,
+			maximumIntensityPercent,
+			maximumDurationMillis,
+			maximumLiveDurationMillis
+		);
+	}
+
+	public RemotePermissions(
+		boolean settingsAllowed,
+		boolean hapticsAllowed,
+		boolean liveHapticsAllowed,
+		boolean clicksAllowed,
+		boolean desktopNotificationsAllowed,
+		boolean localChatboxMessagesAllowed,
+		boolean protectedExitAllowed,
+		boolean activitySharingAllowed,
+		int maximumIntensityPercent,
+		int maximumDurationMillis,
+		int maximumLiveDurationMillis)
+	{
+		this(
 			SCHEMA_VERSION,
 			settingsAllowed,
 			hapticsAllowed,
@@ -99,6 +130,25 @@ public final class RemotePermissions
 			desktopNotificationsAllowed,
 			localChatboxMessagesAllowed,
 			protectedExitAllowed,
+			activitySharingAllowed,
+			maximumIntensityPercent,
+			maximumDurationMillis,
+			maximumLiveDurationMillis
+		);
+	}
+
+	public RemotePermissions withActivitySharingAllowed(boolean allowed)
+	{
+		return new RemotePermissions(
+			schemaVersion,
+			settingsAllowed,
+			hapticsAllowed,
+			liveHapticsAllowed,
+			clicksAllowed,
+			desktopNotificationsAllowed,
+			localChatboxMessagesAllowed,
+			protectedExitAllowed,
+			allowed,
 			maximumIntensityPercent,
 			maximumDurationMillis,
 			maximumLiveDurationMillis
@@ -114,6 +164,7 @@ public final class RemotePermissions
 		boolean desktopNotificationsAllowed,
 		boolean localChatboxMessagesAllowed,
 		boolean protectedExitAllowed,
+		boolean activitySharingAllowed,
 		int maximumIntensityPercent,
 		int maximumDurationMillis,
 		int maximumLiveDurationMillis)
@@ -126,6 +177,7 @@ public final class RemotePermissions
 		this.desktopNotificationsAllowed = desktopNotificationsAllowed;
 		this.localChatboxMessagesAllowed = localChatboxMessagesAllowed;
 		this.protectedExitAllowed = protectedExitAllowed;
+		this.activitySharingAllowed = activitySharingAllowed;
 		this.maximumIntensityPercent = maximumIntensityPercent;
 		this.maximumDurationMillis = maximumDurationMillis;
 		this.maximumLiveDurationMillis = maximumLiveDurationMillis;
@@ -135,7 +187,7 @@ public final class RemotePermissions
 	public static RemotePermissions defaults()
 	{
 		return new RemotePermissions(
-			true, true, false, true, true, false, false,
+			true, true, false, true, true, false, false, false,
 			60, 3_000, DEFAULT_LIVE_DURATION_MILLIS
 		);
 	}
@@ -143,7 +195,7 @@ public final class RemotePermissions
 	static RemotePermissions none()
 	{
 		return new RemotePermissions(
-			false, false, false, false, false, false, false,
+			false, false, false, false, false, false, false, false,
 			0, 50, 0
 		);
 	}
@@ -159,6 +211,7 @@ public final class RemotePermissions
 			config.remoteDesktopNotificationsAllowed(),
 			config.remoteLocalChatboxMessagesAllowed(),
 			config.remoteProtectedExitAllowed(),
+			config.remoteActivitySharingAllowed(),
 			clamp(config.remoteMaximumIntensityPercent(), 0, 100),
 			clamp(
 				config.remoteMaximumDurationMillis(),
@@ -235,6 +288,11 @@ public final class RemotePermissions
 		return protectedExitAllowed;
 	}
 
+	public boolean isActivitySharingAllowed()
+	{
+		return activitySharingAllowed;
+	}
+
 	public int getMaximumIntensityPercent()
 	{
 		return maximumIntensityPercent;
@@ -266,6 +324,7 @@ public final class RemotePermissions
 			&& desktopNotificationsAllowed == that.desktopNotificationsAllowed
 			&& localChatboxMessagesAllowed == that.localChatboxMessagesAllowed
 			&& protectedExitAllowed == that.protectedExitAllowed
+			&& activitySharingAllowed == that.activitySharingAllowed
 			&& maximumIntensityPercent == that.maximumIntensityPercent
 			&& maximumDurationMillis == that.maximumDurationMillis
 			&& maximumLiveDurationMillis == that.maximumLiveDurationMillis;
@@ -283,6 +342,7 @@ public final class RemotePermissions
 			desktopNotificationsAllowed,
 			localChatboxMessagesAllowed,
 			protectedExitAllowed,
+			activitySharingAllowed,
 			maximumIntensityPercent,
 			maximumDurationMillis,
 			maximumLiveDurationMillis

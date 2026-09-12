@@ -8,6 +8,7 @@ import com.ashy0019.hapticscape.host.ExternalLinkOpener;
 import com.ashy0019.hapticscape.host.GlobalUiHooks;
 import com.ashy0019.hapticscape.host.TextClipboard;
 import com.ashy0019.hapticscape.remote.RemoteActionAcknowledgement;
+import com.ashy0019.hapticscape.remote.RemoteActivityEvent;
 import com.ashy0019.hapticscape.remote.DiscordPairingBridge;
 import com.ashy0019.hapticscape.remote.DiscordJoinRequest;
 import com.ashy0019.hapticscape.remote.RemoteLockSnapshot;
@@ -62,6 +63,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 	private final RemoteControllerDashboardPanel controllerDashboard;
 	private final RemotePermissionSummaryPanel permissionSummary =
 		new RemotePermissionSummaryPanel();
+	private final RemoteActivityFeedPanel activityFeed = new RemoteActivityFeedPanel();
 	private final RemoteLockPreparationPanel lockPreparationPanel;
 	private final RemotePairingPanel pairingPanel;
 	private final SavedUnlockKeysPanel savedUnlockKeysPanel;
@@ -148,6 +150,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 
 		controllerSide.setName("remoteControllerSubjectWorkspace");
 		controllerSide.setLayout(new BoxLayout(controllerSide, BoxLayout.Y_AXIS));
+		PanelUi.addFlexibleVerticalComponent(controllerSide, activityFeed);
 		PanelUi.addFlexibleVerticalComponent(controllerSide, permissionSummary);
 		PanelUi.addPreferredHeightComponent(controllerSide, controllerTools);
 		PanelUi.addFlexibleVerticalComponent(controllerSide, lockPreparationPanel);
@@ -203,6 +206,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		{
 			permissionsPanel.apply(permissions);
 			permissionSummary.apply(permissions);
+			activityFeed.apply(sessionManager.getSnapshot(), permissions);
 			refreshControllerTools(sessionManager.getSnapshot(), permissions);
 			refreshLockPreparation(sessionManager.getLockSnapshot());
 			actionsPanel.apply(
@@ -227,6 +231,12 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 	public void onRemoteActionAcknowledged(RemoteActionAcknowledgement acknowledgement)
 	{
 		SwingUtilities.invokeLater(() -> actionsPanel.showAcknowledgement(acknowledgement));
+	}
+
+	@Override
+	public void onRemoteActivity(RemoteActivityEvent event)
+	{
+		SwingUtilities.invokeLater(() -> activityFeed.addActivity(event));
 	}
 
 	@Override
@@ -366,6 +376,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		controllerDashboard.setVisible(view.showsControllerDashboard());
 		permissionsPanel.setVisible(view.showsParticipantPermissions());
 		permissionSummary.apply(sessionManager.getPeerPermissions());
+		activityFeed.apply(snapshot, sessionManager.getPeerPermissions());
 		actionsPanel.apply(
 			snapshot,
 			sessionManager.getPeerPermissions(),

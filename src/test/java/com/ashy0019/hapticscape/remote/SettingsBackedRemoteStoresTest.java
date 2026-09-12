@@ -72,11 +72,12 @@ public class SettingsBackedRemoteStoresTest
 			42,
 			900,
 			30_000
-		);
+		).withActivitySharingAllowed(true);
 
 		assertEquals(requested, store.save(requested));
-		assertEquals(10, writes.size());
+		assertEquals(11, writes.size());
 		assertTrue(writes.contains("remoteProtectedExitAllowed"));
+		assertTrue(writes.contains("remoteActivitySharingAllowed"));
 		assertTrue(writes.contains("remoteMaximumIntensityPercent"));
 	}
 
@@ -154,6 +155,7 @@ public class SettingsBackedRemoteStoresTest
 		values.put("remoteDesktopNotificationsAllowed", true);
 		values.put("remoteLocalChatboxMessagesAllowed", false);
 		values.put("remoteProtectedExitAllowed", false);
+		values.put("remoteActivitySharingAllowed", false);
 		values.put("remoteMaximumIntensityPercent", 60);
 		values.put("remoteMaximumDurationMillis", 3_000);
 		values.put("remoteMaximumLiveDurationMillis", 30_000);

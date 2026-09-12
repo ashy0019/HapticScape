@@ -10,6 +10,7 @@ public interface RemotePermissionsSource
 	boolean remoteDesktopNotificationsAllowed();
 	boolean remoteLocalChatboxMessagesAllowed();
 	boolean remoteProtectedExitAllowed();
+	boolean remoteActivitySharingAllowed();
 	int remoteMaximumIntensityPercent();
 	int remoteMaximumDurationMillis();
 	int remoteMaximumLiveDurationMillis();

@@ -350,6 +350,12 @@ public final class SettingsBackedHapticScapeSettings implements HapticScapeSetti
     }
 
     @Override
+    public boolean remoteActivitySharingAllowed()
+    {
+        return booleanValue(HapticScapeSettingKeys.REMOTE_ACTIVITY_SHARING_ALLOWED, false);
+    }
+
+    @Override
     public int remoteMaximumIntensityPercent()
     {
         return intValue(HapticScapeSettingKeys.REMOTE_MAXIMUM_INTENSITY_PERCENT, 60, 0, 100);

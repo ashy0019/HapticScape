@@ -24,6 +24,10 @@ public interface RemoteSessionListener
 	{
 	}
 
+	default void onRemoteActivity(RemoteActivityEvent event)
+	{
+	}
+
 	default void onUnauthorizedEnd(String reason)
 	{
 	}

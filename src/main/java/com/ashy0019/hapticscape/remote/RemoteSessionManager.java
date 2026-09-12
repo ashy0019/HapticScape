@@ -35,6 +35,7 @@ public final class RemoteSessionManager implements AutoCloseable
 	private final EffectiveSettingsService effectiveSettings;
 	private final SettingsLockService settingsLockService;
 	private final RemoteActionCoordinator actionCoordinator;
+	private final RemoteActivityCoordinator activityCoordinator;
 	private final RemoteLockCoordinator lockCoordinator;
 	private final RemotePermissionsCoordinator permissionsCoordinator;
 	private final RemoteSettingsCoordinator settingsCoordinator;
@@ -182,6 +183,11 @@ public final class RemoteSessionManager implements AutoCloseable
 			this::send,
 			this::publishActionAcknowledgement
 		);
+		this.activityCoordinator = new RemoteActivityCoordinator(
+			gson,
+			this::send,
+			this::publishActivity
+		);
 		this.permissionsCoordinator = new RemotePermissionsCoordinator(
 			gson,
 			requiredPermissionsStore,
@@ -212,6 +218,7 @@ public final class RemoteSessionManager implements AutoCloseable
 			permissionsCoordinator,
 			lockCoordinator,
 			actionCoordinator,
+			activityCoordinator,
 			new LifecycleMessages()
 		);
 		this.settingsLockService.addListener(settingsLockListener);
@@ -308,6 +315,17 @@ public final class RemoteSessionManager implements AutoCloseable
 	public synchronized String stopRemoteOutput()
 	{
 		return actionCoordinator.stop(role, snapshot.getState());
+	}
+
+	/** Publishes one sanitized local gameplay fact when the participant allows it. */
+	public synchronized boolean publishGameplayActivity(RemoteActivityEvent event)
+	{
+		return activityCoordinator.publish(
+			role,
+			snapshot.getState(),
+			permissionsCoordinator.getLocal(),
+			event
+		);
 	}
 
 	/** Reports an end which was not authorized by the protected-exit password. */
@@ -866,6 +884,14 @@ public final class RemoteSessionManager implements AutoCloseable
 		for (RemoteSessionListener listener : listeners)
 		{
 			listener.onRemoteActionAcknowledged(acknowledgement);
+		}
+	}
+
+	private void publishActivity(RemoteActivityEvent event)
+	{
+		for (RemoteSessionListener listener : listeners)
+		{
+			listener.onRemoteActivity(event);
 		}
 	}
 

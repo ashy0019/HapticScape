@@ -48,6 +48,10 @@ public final class SettingsBackedRemotePermissionsStore implements RemotePermiss
 			requested.isProtectedExitAllowed()
 		);
 		settingsWriter.set(
+			HapticScapeSettingKeys.REMOTE_ACTIVITY_SHARING_ALLOWED,
+			requested.isActivitySharingAllowed()
+		);
+		settingsWriter.set(
 			HapticScapeSettingKeys.REMOTE_MAXIMUM_INTENSITY_PERCENT,
 			requested.getMaximumIntensityPercent()
 		);
