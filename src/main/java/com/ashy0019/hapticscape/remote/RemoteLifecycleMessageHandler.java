@@ -13,7 +13,13 @@ interface RemoteLifecycleMessageHandler
 
 	void handlePeerEnd();
 
+	void handleHeartbeat();
+
+	void handleHeartbeatAcknowledgement();
+
 	void handleUnauthorizedEnd(String reason);
+
+	void handleUnauthorizedEndAcknowledgement(String eventId);
 
 	void publishStatus(String message);
 }

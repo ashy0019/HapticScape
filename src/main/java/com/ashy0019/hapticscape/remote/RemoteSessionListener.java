@@ -36,4 +36,8 @@ public interface RemoteSessionListener
 	default void onUnauthorizedEnd(String reason)
 	{
 	}
+
+	default void onUnauthorizedEndAcknowledged(String eventId)
+	{
+	}
 }

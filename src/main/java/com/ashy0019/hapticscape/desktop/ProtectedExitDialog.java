@@ -47,7 +47,7 @@ final class ProtectedExitDialog extends JDialog
 		JPanel content = new JPanel(new BorderLayout(0, 10));
 		content.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
 		content.add(new JLabel(
-			"Application exit is protected. Enter the controller password to exit normally."
+			"Application exit is protected. The controller password releases this lock profile."
 		), BorderLayout.NORTH);
 
 		JPanel passwordRow = new JPanel(new BorderLayout(8, 0));
@@ -60,7 +60,7 @@ final class ProtectedExitDialog extends JDialog
 		JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
 		JButton cancel = new JButton("Cancel");
 		JButton emergency = new JButton("Emergency Off");
-		JButton authorized = new JButton("Exit with password");
+		JButton authorized = new JButton("Unlock settings and exit");
 		buttons.add(emergency);
 		buttons.add(cancel);
 		buttons.add(bypass);
@@ -95,12 +95,17 @@ final class ProtectedExitDialog extends JDialog
 		char[] entered = password.getPassword();
 		try
 		{
-			if (lockService.authorizes(SettingsLockCatalog.PROTECTED_EXIT, entered))
+			if (lockService.unlock(SettingsLockCatalog.PROTECTED_EXIT, entered))
 			{
 				finish(authorizedExit);
 				return;
 			}
 			status.setText("Password not accepted.");
+			password.selectAll();
+		}
+		catch (RuntimeException failure)
+		{
+			status.setText("Could not release the settings lock.");
 			password.selectAll();
 		}
 		finally
@@ -114,8 +119,8 @@ final class ProtectedExitDialog extends JDialog
 		int remaining = remainingSeconds(System.currentTimeMillis() - openedAtMillis);
 		bypass.setEnabled(remaining == 0);
 		bypass.setText(remaining == 0
-			? "Exit without password"
-			: "Exit without password (" + remaining + "s)");
+			? "Exit without unlocking"
+			: "Exit without unlocking (" + remaining + "s)");
 	}
 
 	private void finish(Runnable action)

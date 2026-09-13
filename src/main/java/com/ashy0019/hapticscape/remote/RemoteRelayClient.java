@@ -17,6 +17,7 @@ final class RemoteRelayClient implements RemoteTransport
 	private final RemoteTransport.Listener listener;
 	private final AtomicBoolean manualClose = new AtomicBoolean();
 	private final AtomicBoolean open = new AtomicBoolean();
+	private final AtomicBoolean terminalNotificationSent = new AtomicBoolean();
 	private volatile WebSocket socket;
 
 	RemoteRelayClient(OkHttpClient httpClient, RemoteTransport.Listener listener)
@@ -26,7 +27,11 @@ final class RemoteRelayClient implements RemoteTransport
 	}
 
 	@Override
-	public synchronized void connect(String relayUrl, String roomId, RemoteRole role)
+	public synchronized void connect(
+		String relayUrl,
+		String roomId,
+		RemoteRole role,
+		String reconnectSlot)
 	{
 		if (socket != null)
 		{
@@ -36,9 +41,11 @@ final class RemoteRelayClient implements RemoteTransport
 		String separator = base.contains("?") ? "&" : "?";
 		String url = base
 			+ separator + "room=" + encode(roomId)
-			+ "&role=" + encode(role.name().toLowerCase());
+			+ "&role=" + encode(role.name().toLowerCase())
+			+ "&slot=" + encode(reconnectSlot);
 
 		manualClose.set(false);
+		terminalNotificationSent.set(false);
 		Request request = new Request.Builder().url(url).build();
 		socket = httpClient.newWebSocket(request, new SocketListener());
 	}
@@ -136,14 +143,21 @@ final class RemoteRelayClient implements RemoteTransport
 		}
 
 		@Override
+		public void onClosing(WebSocket webSocket, int code, String reason)
+		{
+			open.set(false);
+			// OkHttp 3 requires the application to answer a peer close before
+			// onClosed is guaranteed. Publish the lifecycle transition now, once.
+			webSocket.close(1000, null);
+			notifyClosed(reason);
+		}
+
+		@Override
 		public void onClosed(WebSocket webSocket, int code, String reason)
 		{
 			open.set(false);
 			socket = null;
-			if (!manualClose.get())
-			{
-				listener.onClosed(reason == null ? "Remote relay closed" : reason);
-			}
+			notifyClosed(reason);
 		}
 
 		@Override
@@ -151,12 +165,22 @@ final class RemoteRelayClient implements RemoteTransport
 		{
 			open.set(false);
 			socket = null;
-			if (!manualClose.get())
+			if (!manualClose.get() && terminalNotificationSent.compareAndSet(false, true))
 			{
 				String message = error == null || error.getMessage() == null
 					? "Remote relay connection failed"
 					: error.getMessage();
 				listener.onFailure(message, error);
+			}
+		}
+
+		private void notifyClosed(String reason)
+		{
+			if (!manualClose.get() && terminalNotificationSent.compareAndSet(false, true))
+			{
+				listener.onClosed(reason == null || reason.trim().isEmpty()
+					? "Remote relay closed"
+					: reason);
 			}
 		}
 	}

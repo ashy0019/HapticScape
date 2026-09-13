@@ -510,7 +510,7 @@ public final class DiscordPairingBridge implements AutoCloseable, RemoteSessionL
 		}
 
 		RemoteSessionSnapshot session = sessionManager.getSnapshot();
-		if (session.getState() != RemoteSessionState.LOCAL)
+		if (!canReplaceSession(session.getState()))
 		{
 			pairingInProgress.set(false);
 			sendError(request.requestId, "End the current Remote Play session first");
@@ -542,6 +542,12 @@ public final class DiscordPairingBridge implements AutoCloseable, RemoteSessionL
 			pairingInProgress.set(false);
 			sendError(request.requestId, rootMessage(exception));
 		}
+	}
+
+	static boolean canReplaceSession(RemoteSessionState state)
+	{
+		return state == RemoteSessionState.LOCAL
+			|| state == RemoteSessionState.DISCONNECTED;
 	}
 
 	private void finishPairingRequest(

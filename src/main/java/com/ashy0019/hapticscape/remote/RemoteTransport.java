@@ -17,7 +17,7 @@ interface RemoteTransport extends AutoCloseable
 		void onFailure(String message, Throwable error);
 	}
 
-	void connect(String relayUrl, String roomId, RemoteRole role);
+	void connect(String relayUrl, String roomId, RemoteRole role, String reconnectSlot);
 
 	boolean send(String message);
 

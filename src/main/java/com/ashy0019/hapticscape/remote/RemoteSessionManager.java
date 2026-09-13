@@ -4,8 +4,11 @@ import com.google.gson.Gson;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.util.Base64;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
@@ -30,7 +33,11 @@ public final class RemoteSessionManager implements AutoCloseable
 	private static final long SETTINGS_DEBOUNCE_MILLIS = 40;
 	private static final long SETTINGS_RECONCILE_INTERVAL_MILLIS = 5_000;
 	private static final long HELLO_INTERVAL_MILLIS = 1_000;
+	static final long HEARTBEAT_INTERVAL_MILLIS = 1_000;
+	static final long PEER_LIVENESS_TIMEOUT_MILLIS = 3_500;
+	private static final long CONNECTION_ATTEMPT_TIMEOUT_MILLIS = 10_000;
 	private static final Base64.Encoder ENCODER = Base64.getUrlEncoder().withoutPadding();
+	private static final int UNAUTHORIZED_END_DEDUPE_LIMIT = 256;
 
 	private final Gson gson;
 	private final EffectiveSettingsService effectiveSettings;
@@ -49,6 +56,7 @@ public final class RemoteSessionManager implements AutoCloseable
 	private final ScheduledExecutorService scheduler;
 	private final CopyOnWriteArrayList<RemoteSessionListener> listeners =
 		new CopyOnWriteArrayList<>();
+	private final Set<String> receivedUnauthorizedEndIds = new LinkedHashSet<>();
 
 	private volatile RemoteSessionSnapshot snapshot = RemoteSessionSnapshot.local();
 	private volatile RemoteTransport relayClient;
@@ -57,6 +65,11 @@ public final class RemoteSessionManager implements AutoCloseable
 	private volatile RemoteInvitation invitation;
 	private volatile String peerClientId;
 	private volatile long lastHelloNanos;
+	private volatile long lastHeartbeatNanos;
+	private volatile long lastPeerActivityNanos;
+	private volatile long connectionAttemptStartedNanos;
+	private volatile long connectionGeneration;
+	private volatile boolean reconnectAttemptInFlight;
 	private ScheduledFuture<?> pendingSettingsSync;
 	private volatile boolean closed;
 
@@ -390,16 +403,45 @@ public final class RemoteSessionManager implements AutoCloseable
 	/** Reports an end which was not authorized by the protected-exit password. */
 	public synchronized boolean reportUnauthorizedEnd(String reason)
 	{
-		if (role != RemoteRole.PARTICIPANT
-			|| snapshot.getState() == RemoteSessionState.LOCAL
-			|| snapshot.getState() == RemoteSessionState.DISCONNECTED)
+		if (peerClientId == null)
 		{
 			return false;
 		}
-		String message = reason == null || reason.trim().isEmpty()
-			? "UNAUTHORIZED_END"
-			: reason.trim();
-		return send(RemoteMessageType.UNAUTHORIZED_END, 0, message);
+		return reportUnauthorizedEnd(
+			UUID.randomUUID().toString(),
+			peerClientId,
+			clock.millis(),
+			reason
+		);
+	}
+
+	/** Queues a durable audit event only for the controller which owns it. */
+	public synchronized boolean reportUnauthorizedEnd(
+		String eventId,
+		String controllerId,
+		long occurredAtMillis,
+		String reason)
+	{
+		if (role != RemoteRole.PARTICIPANT
+			|| snapshot.getState() == RemoteSessionState.LOCAL
+			|| snapshot.getState() == RemoteSessionState.DISCONNECTED
+			|| peerClientId == null
+			|| !peerClientId.equals(controllerId))
+		{
+			return false;
+		}
+		UnauthorizedEndNotice notice = new UnauthorizedEndNotice(
+			eventId,
+			controllerId,
+			occurredAtMillis,
+			reason
+		);
+		return send(RemoteMessageType.UNAUTHORIZED_END, 0, gson.toJson(notice));
+	}
+
+	public Optional<String> getPeerClientId()
+	{
+		return Optional.ofNullable(peerClientId);
 	}
 
 	public synchronized void beginRemoteLiveHaptic(int intensityPercent)
@@ -634,6 +676,49 @@ public final class RemoteSessionManager implements AutoCloseable
 		);
 	}
 
+	/** Recreates the relay transport while retaining this session's invitation and keys. */
+	public synchronized boolean reconnect()
+	{
+		requireOpen();
+		if (!canReconnect())
+		{
+			return false;
+		}
+		RemoteTransport current = relayClient;
+		relayClient = null;
+		connectionGeneration++;
+		reconnectAttemptInFlight = false;
+		connectionAttemptStartedNanos = 0;
+		if (current != null)
+		{
+			current.close();
+		}
+		publish(
+			snapshot.getState(),
+			role == RemoteRole.PARTICIPANT
+				? "Reconnecting to relay. Emergency Off remains active."
+				: "Reconnecting to relay..."
+		);
+		connectRetainedSession(true);
+		return true;
+	}
+
+	/** Whether the current retained session can be manually retried. */
+	public synchronized boolean canReconnect()
+	{
+		if (closed || role == RemoteRole.NONE || invitation == null)
+		{
+			return false;
+		}
+		RemoteTransport relay = relayClient;
+		boolean disconnectedState = role == RemoteRole.CONTROLLER
+			? snapshot.getState() == RemoteSessionState.DISCONNECTED
+			: snapshot.getState() == RemoteSessionState.EMERGENCY_PAUSED;
+		return disconnectedState
+			&& !reconnectAttemptInFlight
+			&& (relay == null || !relay.isOpen());
+	}
+
 	public synchronized void endSession()
 	{
 		endSessionInternal(true, "Remote session ended locally");
@@ -647,7 +732,7 @@ public final class RemoteSessionManager implements AutoCloseable
 			return;
 		}
 		closed = true;
-		endSessionInternal(false, "Remote service closed");
+		endSessionInternal(true, "Remote service closed");
 		scheduler.shutdownNow();
 		listeners.clear();
 		settingsLockService.removeListener(settingsLockListener);
@@ -661,6 +746,10 @@ public final class RemoteSessionManager implements AutoCloseable
 		invitation = nextInvitation;
 		crypto = new RemoteCrypto(nextInvitation.getKey());
 		lastHelloNanos = 0;
+		lastHeartbeatNanos = 0;
+		lastPeerActivityNanos = 0;
+		connectionAttemptStartedNanos = 0;
+		reconnectAttemptInFlight = false;
 		settingsCoordinator.reset();
 		lockCoordinator.reset();
 		if (nextRole == RemoteRole.PARTICIPANT)
@@ -669,10 +758,35 @@ public final class RemoteSessionManager implements AutoCloseable
 		}
 		publish(RemoteSessionState.CONNECTING, "Connecting to remote relay");
 		publishPermissions(visiblePermissions());
+		connectRetainedSession(false);
+	}
 
-		RemoteTransport client = transportFactory.create(new RelayListener());
-		relayClient = client;
-		client.connect(nextInvitation.getRelayUrl(), nextInvitation.getRoomId(), nextRole);
+	private void connectRetainedSession(boolean recovery)
+	{
+		if (closed || role == RemoteRole.NONE || invitation == null)
+		{
+			return;
+		}
+		long generation = ++connectionGeneration;
+		reconnectAttemptInFlight = true;
+		connectionAttemptStartedNanos = System.nanoTime();
+		RemoteTransport client;
+		try
+		{
+			client = transportFactory.create(new RelayListener(generation, recovery));
+			relayClient = client;
+			client.connect(
+				invitation.getRelayUrl(),
+				invitation.getRoomId(),
+				role,
+				RemoteReconnectSlot.derive(invitation.getKey(), role)
+			);
+		}
+		catch (RuntimeException failure)
+		{
+			handleConnectionLost(generation, "Unable to connect to remote relay", failure);
+			throw failure;
+		}
 	}
 
 	private void tickSafely()
@@ -689,6 +803,7 @@ public final class RemoteSessionManager implements AutoCloseable
 
 	private synchronized void tick()
 	{
+		long now = System.nanoTime();
 		boolean activeTransport = !closed
 			&& role != RemoteRole.NONE
 			&& relayClient != null
@@ -701,13 +816,43 @@ public final class RemoteSessionManager implements AutoCloseable
 		);
 		if (!activeTransport)
 		{
+			if (reconnectAttemptInFlight
+				&& connectionAttemptStartedNanos > 0
+				&& now - connectionAttemptStartedNanos >= TimeUnit.MILLISECONDS.toNanos(
+					CONNECTION_ATTEMPT_TIMEOUT_MILLIS
+				))
+			{
+				handleConnectionLost(
+					connectionGeneration,
+					"Remote relay connection timed out",
+					null
+				);
+			}
 			return;
 		}
-
-		long now = System.nanoTime();
+		if (peerClientId != null && lastPeerActivityNanos > 0
+			&& now - lastPeerActivityNanos
+				>= TimeUnit.MILLISECONDS.toNanos(PEER_LIVENESS_TIMEOUT_MILLIS))
+		{
+			handleConnectionLost(
+				connectionGeneration,
+				"Remote peer stopped responding",
+				null
+			);
+			return;
+		}
+		if (role == RemoteRole.CONTROLLER && peerClientId != null
+			&& now - lastHeartbeatNanos
+				>= TimeUnit.MILLISECONDS.toNanos(HEARTBEAT_INTERVAL_MILLIS))
+		{
+			lastHeartbeatNanos = now;
+			send(RemoteMessageType.HEARTBEAT, 0, "");
+		}
 		if (now - lastHelloNanos >= TimeUnit.MILLISECONDS.toNanos(HELLO_INTERVAL_MILLIS)
 			&& (snapshot.getState() == RemoteSessionState.WAITING_FOR_PEER
-				|| snapshot.getState() == RemoteSessionState.WAITING_FOR_SETTINGS))
+				|| snapshot.getState() == RemoteSessionState.WAITING_FOR_SETTINGS
+				|| snapshot.getState() == RemoteSessionState.DISCONNECTED
+				|| snapshot.getState() == RemoteSessionState.EMERGENCY_PAUSED))
 		{
 			lastHelloNanos = now;
 			retryHandshake();
@@ -738,15 +883,38 @@ public final class RemoteSessionManager implements AutoCloseable
 	{
 		send(RemoteMessageType.HELLO, 0, gson.toJson(new RemoteHello(role, localClientId)));
 		if (role == RemoteRole.CONTROLLER
-			&& snapshot.getState() == RemoteSessionState.WAITING_FOR_SETTINGS)
+			&& (snapshot.getState() == RemoteSessionState.WAITING_FOR_SETTINGS
+				|| snapshot.getState() == RemoteSessionState.DISCONNECTED))
 		{
 			send(RemoteMessageType.SETTINGS_SEED_REQUEST, 0, "");
 		}
 		else if (role == RemoteRole.PARTICIPANT
-			&& snapshot.getState() == RemoteSessionState.WAITING_FOR_SETTINGS)
+			&& (snapshot.getState() == RemoteSessionState.WAITING_FOR_SETTINGS
+				|| snapshot.getState() == RemoteSessionState.EMERGENCY_PAUSED))
 		{
-			sendPermissions();
-			sendSettingsSeed();
+			sendParticipantHandshakeState();
+		}
+	}
+
+	private void sendParticipantHandshakeState()
+	{
+		sendPermissions();
+		sendSettingsSeed();
+		if (snapshot.getState() == RemoteSessionState.EMERGENCY_PAUSED)
+		{
+			send(
+				RemoteMessageType.EMERGENCY_PAUSED,
+				settingsCoordinator.getLastReceivedVersion(),
+				""
+			);
+		}
+		else if (snapshot.getState() == RemoteSessionState.ACTIVE)
+		{
+			send(
+				RemoteMessageType.SESSION_RESUMED,
+				settingsCoordinator.getLastReceivedVersion(),
+				""
+			);
 		}
 	}
 
@@ -799,22 +967,58 @@ public final class RemoteSessionManager implements AutoCloseable
 		);
 	}
 
-	private synchronized void handleOpen()
+	private synchronized void handleOpen(long generation, boolean recovery)
 	{
+		if (generation != connectionGeneration || closed || role == RemoteRole.NONE)
+		{
+			return;
+		}
+		reconnectAttemptInFlight = false;
+		connectionAttemptStartedNanos = 0;
 		if (role == RemoteRole.CONTROLLER)
 		{
-			publish(RemoteSessionState.WAITING_FOR_PEER, "Waiting for participant");
+			if (recovery)
+			{
+				publish(
+					RemoteSessionState.DISCONNECTED,
+					"Reconnected to relay. Waiting for participant..."
+				);
+			}
+			else
+			{
+				publish(RemoteSessionState.WAITING_FOR_PEER, "Waiting for participant");
+			}
 		}
 		else if (role == RemoteRole.PARTICIPANT)
 		{
-			publish(RemoteSessionState.WAITING_FOR_SETTINGS, "Sending local settings to controller");
+			if (recovery || snapshot.getState() == RemoteSessionState.EMERGENCY_PAUSED)
+			{
+				publish(
+					RemoteSessionState.EMERGENCY_PAUSED,
+					"Reconnected. Emergency Off remains active until you resume."
+				);
+			}
+			else
+			{
+				publish(
+					RemoteSessionState.WAITING_FOR_SETTINGS,
+					"Sending local settings to controller"
+				);
+			}
 		}
+		long now = System.nanoTime();
 		lastHelloNanos = 0;
+		lastHeartbeatNanos = now;
+		lastPeerActivityNanos = 0;
 		retryHandshake();
 	}
 
-	private synchronized void handleEncryptedMessage(String encrypted)
+	private synchronized void handleEncryptedMessage(long generation, String encrypted)
 	{
+		if (generation != connectionGeneration)
+		{
+			return;
+		}
 		RemoteCrypto currentCrypto = crypto;
 		if (currentCrypto == null)
 		{
@@ -836,6 +1040,7 @@ public final class RemoteSessionManager implements AutoCloseable
 			LOG.log(Level.FINE, "Ignoring invalid remote session message", e);
 			return;
 		}
+		lastPeerActivityNanos = System.nanoTime();
 
 		messageRouter.route(role, snapshot.getState(), message);
 	}
@@ -875,12 +1080,16 @@ public final class RemoteSessionManager implements AutoCloseable
 		}
 	}
 
-	private synchronized void handleConnectionLost(String reason, Throwable error)
+	private synchronized void handleConnectionLost(
+		long generation,
+		String reason,
+		Throwable error)
 	{
-		if (closed || role == RemoteRole.NONE)
+		if (generation != connectionGeneration || closed || role == RemoteRole.NONE)
 		{
 			return;
 		}
+		connectionGeneration++;
 		if (error != null)
 		{
 			LOG.log(Level.WARNING, "Remote relay connection lost: " + reason, error);
@@ -895,15 +1104,28 @@ public final class RemoteSessionManager implements AutoCloseable
 			actionCoordinator.stopParticipantOutput();
 			publish(
 				RemoteSessionState.EMERGENCY_PAUSED,
-				"Remote connection lost. Emergency Off active."
+				"Remote connection lost. Emergency Off active. Reconnect when ready."
 			);
 		}
 		else
 		{
 			actionCoordinator.clearControllerLiveStream();
 			lockCoordinator.handleControllerConnectionLost();
-			publish(RemoteSessionState.DISCONNECTED, "Remote connection lost");
+			publish(
+				RemoteSessionState.DISCONNECTED,
+				"Remote connection lost. Reconnect when ready."
+			);
 		}
+		RemoteTransport current = relayClient;
+		relayClient = null;
+		reconnectAttemptInFlight = false;
+		connectionAttemptStartedNanos = 0;
+		if (current != null)
+		{
+			current.close();
+		}
+		lastHeartbeatNanos = 0;
+		lastPeerActivityNanos = 0;
 	}
 
 	private void publish(RemoteSessionState state, String message)
@@ -997,6 +1219,9 @@ public final class RemoteSessionManager implements AutoCloseable
 		}
 		RemoteTransport current = relayClient;
 		relayClient = null;
+		connectionGeneration++;
+		reconnectAttemptInFlight = false;
+		connectionAttemptStartedNanos = 0;
 		if (current != null)
 		{
 			current.close();
@@ -1014,6 +1239,8 @@ public final class RemoteSessionManager implements AutoCloseable
 		settingsCoordinator.reset();
 		permissionsCoordinator.endSession();
 		lastHelloNanos = 0;
+		lastHeartbeatNanos = 0;
+		lastPeerActivityNanos = 0;
 		lockCoordinator.reset();
 		snapshot = new RemoteSessionSnapshot(
 			RemoteRole.NONE,
@@ -1098,8 +1325,7 @@ public final class RemoteSessionManager implements AutoCloseable
 				{
 					send(RemoteMessageType.HELLO, 0, gson.toJson(new RemoteHello(role, localClientId)));
 				}
-				sendPermissions();
-				sendSettingsSeed();
+				sendParticipantHandshakeState();
 			}
 		}
 
@@ -1108,8 +1334,7 @@ public final class RemoteSessionManager implements AutoCloseable
 		{
 			if (role == RemoteRole.PARTICIPANT)
 			{
-				sendPermissions();
-				sendSettingsSeed();
+				sendParticipantHandshakeState();
 			}
 		}
 
@@ -1155,16 +1380,74 @@ public final class RemoteSessionManager implements AutoCloseable
 		}
 
 		@Override
+		public void handleHeartbeat()
+		{
+			send(RemoteMessageType.HEARTBEAT_ACK, 0, "");
+		}
+
+		@Override
+		public void handleHeartbeatAcknowledgement()
+		{
+			// Receipt is recorded centrally after authenticated decryption.
+		}
+
+		@Override
 		public void handleUnauthorizedEnd(String reason)
 		{
 			if (role != RemoteRole.CONTROLLER)
 			{
 				return;
 			}
+			UnauthorizedEndNotice notice;
+			try
+			{
+				notice = gson.fromJson(reason, UnauthorizedEndNotice.class);
+				notice.validate();
+			}
+			catch (RuntimeException invalidNotice)
+			{
+				// Preserve visibility for older clients which sent a plain reason.
+				publish(snapshot.getState(), "Unauthorized end flagged by participant client");
+				for (RemoteSessionListener listener : listeners)
+				{
+					listener.onUnauthorizedEnd(reason);
+				}
+				return;
+			}
+			if (!localClientId.equals(notice.getControllerId()))
+			{
+				return;
+			}
+			send(RemoteMessageType.UNAUTHORIZED_END_ACK, 0, notice.getEventId());
+			if (!rememberUnauthorizedEnd(notice.getEventId()))
+			{
+				return;
+			}
 			publish(snapshot.getState(), "Unauthorized end flagged by participant client");
 			for (RemoteSessionListener listener : listeners)
 			{
-				listener.onUnauthorizedEnd(reason);
+				listener.onUnauthorizedEnd(notice.getReason());
+			}
+		}
+
+		@Override
+		public void handleUnauthorizedEndAcknowledgement(String eventId)
+		{
+			if (role != RemoteRole.PARTICIPANT)
+			{
+				return;
+			}
+			try
+			{
+				UUID.fromString(eventId);
+			}
+			catch (RuntimeException invalidId)
+			{
+				return;
+			}
+			for (RemoteSessionListener listener : listeners)
+			{
+				listener.onUnauthorizedEndAcknowledged(eventId);
 			}
 		}
 
@@ -1175,30 +1458,53 @@ public final class RemoteSessionManager implements AutoCloseable
 		}
 	}
 
+	private boolean rememberUnauthorizedEnd(String eventId)
+	{
+		if (!receivedUnauthorizedEndIds.add(eventId))
+		{
+			return false;
+		}
+		while (receivedUnauthorizedEndIds.size() > UNAUTHORIZED_END_DEDUPE_LIMIT)
+		{
+			String oldest = receivedUnauthorizedEndIds.iterator().next();
+			receivedUnauthorizedEndIds.remove(oldest);
+		}
+		return true;
+	}
+
 	private final class RelayListener implements RemoteTransport.Listener
 	{
+		private final long generation;
+		private final boolean recovery;
+
+		private RelayListener(long generation, boolean recovery)
+		{
+			this.generation = generation;
+			this.recovery = recovery;
+		}
+
 		@Override
 		public void onOpen()
 		{
-			handleOpen();
+			handleOpen(generation, recovery);
 		}
 
 		@Override
 		public void onMessage(String message)
 		{
-			handleEncryptedMessage(message);
+			handleEncryptedMessage(generation, message);
 		}
 
 		@Override
 		public void onClosed(String reason)
 		{
-			handleConnectionLost(reason, null);
+			handleConnectionLost(generation, reason, null);
 		}
 
 		@Override
 		public void onFailure(String message, Throwable error)
 		{
-			handleConnectionLost(message, error);
+			handleConnectionLost(generation, message, error);
 		}
 	}
 }

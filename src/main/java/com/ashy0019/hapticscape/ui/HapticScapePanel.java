@@ -134,6 +134,7 @@ public final class HapticScapePanel extends JPanel
 	private final JLabel remoteBannerLabel = new JLabel();
 	private final JButton remoteEmergencyButton = new JButton("Emergency Off");
 	private final JButton remoteResumeButton = new JButton("Resume");
+	private final JButton remoteReconnectButton = new JButton("Reconnect");
 	private final JButton remoteEndButton = new JButton("End");
 	private final JCheckBox levelUpCheckBox = new JCheckBox("Level-ups");
 	private final JCheckBox milestoneCheckBox = new JCheckBox("Milestones");
@@ -523,6 +524,7 @@ public final class HapticScapePanel extends JPanel
 		JPanel remoteBannerButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 3, 0));
 		remoteBannerButtons.add(remoteEmergencyButton);
 		remoteBannerButtons.add(remoteResumeButton);
+		remoteBannerButtons.add(remoteReconnectButton);
 		remoteBannerButtons.add(remoteEndButton);
 		remoteBanner.add(remoteBannerButtons, BorderLayout.SOUTH);
 		remoteBanner.setVisible(false);
@@ -579,6 +581,7 @@ public final class HapticScapePanel extends JPanel
 		});
 		remoteEmergencyButton.addActionListener(event -> remoteSessionManager.emergencyPause());
 		remoteResumeButton.addActionListener(event -> remoteSessionManager.resumeParticipant());
+		remoteReconnectButton.addActionListener(event -> remoteSessionManager.reconnect());
 		remoteEndButton.addActionListener(event -> remoteSessionManager.endSession());
 
 		JPanel primaryButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
@@ -1431,6 +1434,20 @@ public final class HapticScapePanel extends JPanel
 					JOptionPane.ERROR_MESSAGE
 				);
 			}
+			else
+			{
+				int remaining = settingsLockService.getSnapshot().getLockCount();
+				String message = remaining == 0
+					? "Settings lock released."
+					: "Unlock key accepted. " + remaining
+						+ " other lock profile(s) remain.";
+				JOptionPane.showMessageDialog(
+					this,
+					message,
+					"Settings unlock complete",
+					JOptionPane.INFORMATION_MESSAGE
+				);
+			}
 		}
 		catch (RuntimeException e)
 		{
@@ -1946,10 +1963,13 @@ public final class HapticScapePanel extends JPanel
 				: "")
 			+ "</html>");
 		boolean participant = snapshot.getRole() == RemoteRole.PARTICIPANT && showBanner;
+		boolean reconnectAvailable = remoteSessionManager.canReconnect();
 		remoteEmergencyButton.setEnabled(participant && !emergencyPaused);
-		remoteResumeButton.setEnabled(participant && emergencyPaused);
+		remoteResumeButton.setEnabled(participant && emergencyPaused && !reconnectAvailable);
+		remoteReconnectButton.setEnabled(reconnectAvailable);
 		remoteEmergencyButton.setVisible(participant && !emergencyPaused);
 		remoteResumeButton.setVisible(participant && emergencyPaused);
+		remoteReconnectButton.setVisible(reconnectAvailable);
 		remoteEndButton.setEnabled(showBanner);
 		if (snapshot.getState() == RemoteSessionState.LOCAL)
 		{

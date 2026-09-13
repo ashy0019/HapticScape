@@ -105,6 +105,38 @@ public class SettingsLockServiceTest
 	}
 
 	@Test
+	public void generatedUnlockKeysAcceptHumanFriendlyFormatting()
+	{
+		SettingsLockService service = new SettingsLockService(
+			new Gson(),
+			temporaryFolder.getRoot().toPath().resolve("formatted-key-lock.json")
+		);
+		char[] generated = service.generateUnlockKey();
+		try
+		{
+			service.arm(service.createProposal(generated));
+			String entered = new String(generated).toLowerCase().replace('-', ' ');
+			assertTrue(service.unlock(entered.toCharArray()));
+		}
+		finally
+		{
+			Arrays.fill(generated, '\0');
+		}
+	}
+
+	@Test
+	public void customPasswordsRemainCaseSensitive()
+	{
+		SettingsLockService service = new SettingsLockService(
+			new Gson(),
+			temporaryFolder.getRoot().toPath().resolve("case-sensitive-lock.json")
+		);
+		service.arm(service.createProposal("My custom Password".toCharArray()));
+		assertFalse(service.unlock("my custom password".toCharArray()));
+		assertTrue(service.unlock("My custom Password".toCharArray()));
+	}
+
+	@Test
 	public void lockLeavesForgeAndEveryMusicControlEditable()
 	{
 		SettingsLockService service = new SettingsLockService(
@@ -232,6 +264,29 @@ public class SettingsLockServiceTest
 		));
 		assertTrue(service.authorizes(SettingsLockCatalog.PROTECTED_EXIT, password));
 		assertTrue(service.isLocked(SettingsLockCatalog.PROTECTED_EXIT));
+	}
+
+	@Test
+	public void targetedUnlockReleasesTheWholeProtectedExitProfile()
+	{
+		SettingsLockService service = new SettingsLockService(
+			new Gson(),
+			temporaryFolder.getRoot().toPath().resolve("protected-exit-profile.json")
+		);
+		char[] password = "protected exit profile password".toCharArray();
+		service.arm(service.createProposal(
+			password,
+			Arrays.asList(
+				SettingsLockCatalog.PROTECTED_EXIT,
+				SettingsLockCatalog.LEVEL_UP_HAPTICS
+			)
+		));
+
+		assertFalse(service.unlock(SettingsLockCatalog.STARTUP_BEHAVIOR, password));
+		assertTrue(service.isLocked(SettingsLockCatalog.PROTECTED_EXIT));
+		assertTrue(service.unlock(SettingsLockCatalog.PROTECTED_EXIT, password));
+		assertFalse(service.isLocked());
+		assertFalse(service.isLocked(SettingsLockCatalog.LEVEL_UP_HAPTICS));
 	}
 
 	@Test(expected = IllegalStateException.class)

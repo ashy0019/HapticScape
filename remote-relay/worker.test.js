@@ -191,9 +191,31 @@ test("session room requires a websocket upgrade and a valid role", async () => {
     headers: new Headers({ Upgrade: "websocket" }),
     url: "https://relay.example/relay?role=observer",
   });
+  const invalidSlot = await room.fetch({
+    headers: new Headers({ Upgrade: "websocket" }),
+    url: "https://relay.example/relay?role=controller&slot=short",
+  });
 
   assert.equal(ordinary.status, 426);
   assert.equal(invalidRole.status, 400);
+  assert.equal(invalidSlot.status, 400);
+});
+
+test("session room replaces only a stale socket with the same reconnect slot", () => {
+  const slot = "s".repeat(43);
+  const stale = fakeSocket({ role: "controller", slot, superseded: false });
+  const peer = fakeSocket({ role: "participant", slot: "p".repeat(43), superseded: false });
+  const room = new SessionRoom(fakeContext([stale, peer]), {});
+
+  assert.equal(room.canReplaceRoleSockets([stale], slot), true);
+  assert.equal(room.canReplaceRoleSockets([stale], "x".repeat(43)), false);
+
+  room.supersedeRoleSockets([stale]);
+  assert.deepEqual(stale.closed, [4002, "Connection replaced after reconnect"]);
+  assert.equal(stale.deserializeAttachment().superseded, true);
+
+  room.webSocketClose(stale, 4002, "Connection replaced after reconnect", true);
+  assert.equal(peer.closed, null);
 });
 
 test("session room forwards opaque text only to the other peer", () => {
@@ -217,6 +239,17 @@ test("session room closes binary and oversized messages", () => {
 
   assert.deepEqual(binarySender.closed, [1003, "Text messages only"]);
   assert.deepEqual(largeSender.closed, [1009, "Message too large"]);
+});
+
+test("session room closes the surviving peer when one side disconnects", () => {
+  const participant = fakeSocket();
+  const controller = fakeSocket();
+  const room = new SessionRoom(fakeContext([participant, controller]), {});
+
+  room.webSocketClose(participant, 1000, "Participant exited", true);
+
+  assert.equal(participant.closed, null);
+  assert.deepEqual(controller.closed, [4001, "Remote peer disconnected"]);
 });
 
 test("pairing mailbox stores and redeems an envelope only once", async () => {
@@ -308,21 +341,35 @@ test("pairing mailbox rejects malformed metadata and oversized envelopes", async
 
 function fakeContext(sockets = []) {
   return {
-    getWebSockets() {
-      return sockets;
+    getWebSockets(tag) {
+      if (tag == null) {
+        return sockets;
+      }
+      return sockets.filter((socket) => socket.deserializeAttachment?.()?.role === tag);
+    },
+    acceptWebSocket(socket, tags) {
+      socket.tags = tags;
+      sockets.push(socket);
     },
   };
 }
 
-function fakeSocket() {
+function fakeSocket(attachment = null) {
   return {
     sent: [],
     closed: null,
+    attachment,
     send(message) {
       this.sent.push(message);
     },
     close(code, reason) {
       this.closed = [code, reason];
+    },
+    serializeAttachment(value) {
+      this.attachment = value;
+    },
+    deserializeAttachment() {
+      return this.attachment;
     },
   };
 }

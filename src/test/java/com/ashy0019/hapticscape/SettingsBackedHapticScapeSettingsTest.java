@@ -30,7 +30,7 @@ public class SettingsBackedHapticScapeSettingsTest
         assertTrue(settings.remoteSettingsAllowed());
         assertFalse(settings.remoteLiveHapticsAllowed());
         assertFalse(settings.remoteProtectedExitAllowed());
-        assertFalse(settings.remoteActivitySharingAllowed());
+        assertTrue(settings.remoteActivitySharingAllowed());
         assertEquals(30_000, settings.remoteMaximumLiveDurationMillis());
     }
 
@@ -45,7 +45,7 @@ public class SettingsBackedHapticScapeSettingsTest
         store.set(HapticScapeSettingKeys.SKILL_CLICK_PROFILES, "v1|ATTACK,10,TWO,THREE,ONE");
         store.set(HapticScapeSettingKeys.REMOTE_RELAY_URL, "  wss://relay.example/relay  ");
         store.set(HapticScapeSettingKeys.REMOTE_MAXIMUM_DURATION_MILLIS, 25);
-        store.set(HapticScapeSettingKeys.REMOTE_ACTIVITY_SHARING_ALLOWED, true);
+		store.set(HapticScapeSettingKeys.REMOTE_ACTIVITY_SHARING_ALLOWED, false);
 
         SettingsBackedHapticScapeSettings settings = new SettingsBackedHapticScapeSettings(
             store,
@@ -59,7 +59,7 @@ public class SettingsBackedHapticScapeSettingsTest
         assertEquals("v1|ATTACK,10,TWO,THREE,ONE", settings.skillClickProfiles());
         assertEquals("wss://relay.example/relay", settings.remoteRelayUrl());
         assertEquals(50, settings.remoteMaximumDurationMillis());
-        assertTrue(settings.remoteActivitySharingAllowed());
+		assertFalse(settings.remoteActivitySharingAllowed());
     }
 
     @Test
