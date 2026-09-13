@@ -109,12 +109,16 @@ public final class HapticScapeDesktopApplication implements AutoCloseable
 		try
 		{
 			runtime.start();
+			boolean protectedExitActive = runtime.getSettingsLockService()
+				.isLocked(SettingsLockCatalog.PROTECTED_EXIT);
 			protectedExitAudit.beginRun(
-				runtime.getSettingsLockService().isLocked(SettingsLockCatalog.PROTECTED_EXIT)
+				protectedExitActive,
+				protectedExitOwner()
 			);
 			runtime.getSettingsLockService().addListener(snapshot ->
 				protectedExitAudit.setProtectionActive(
-					snapshot.isLocked(SettingsLockCatalog.PROTECTED_EXIT)
+					snapshot.isLocked(SettingsLockCatalog.PROTECTED_EXIT),
+					protectedExitOwner()
 				)
 			);
 			wireProtectedExitAudit();
@@ -148,13 +152,13 @@ public final class HapticScapeDesktopApplication implements AutoCloseable
 			@Override
 			public void onRemoteSessionChanged(RemoteSessionSnapshot snapshot)
 			{
-				if (protectedExitAudit.hasPendingUnauthorizedEnd()
-					&& runtime.getRemoteSessionManager().reportUnauthorizedEnd(
-						"Unauthorized end"
-					))
-				{
-					protectedExitAudit.clearPendingUnauthorizedEnd();
-				}
+				tryReportPendingUnauthorizedEnd();
+			}
+
+			@Override
+			public void onUnauthorizedEndAcknowledged(String eventId)
+			{
+				protectedExitAudit.clearPendingUnauthorizedEnd(eventId);
 			}
 
 			@Override
@@ -169,6 +173,25 @@ public final class HapticScapeDesktopApplication implements AutoCloseable
 				}
 			}
 		});
+	}
+
+	private String protectedExitOwner()
+	{
+		return runtime.getSettingsLockService()
+			.getOwnerForTarget(SettingsLockCatalog.PROTECTED_EXIT)
+			.orElse(null);
+	}
+
+	private void tryReportPendingUnauthorizedEnd()
+	{
+		protectedExitAudit.getPendingUnauthorizedEnd().ifPresent(record ->
+			runtime.getRemoteSessionManager().reportUnauthorizedEnd(
+				record.getEventId(),
+				record.getControllerId(),
+				record.getOccurredAtMillis(),
+				"Unauthorized end"
+			)
+		);
 	}
 
 	private void createWindow(
@@ -259,8 +282,14 @@ public final class HapticScapeDesktopApplication implements AutoCloseable
 
 	private void closeAndExit()
 	{
-		close();
-		System.exit(0);
+		try
+		{
+			close();
+		}
+		finally
+		{
+			System.exit(0);
+		}
 	}
 
 	@Override

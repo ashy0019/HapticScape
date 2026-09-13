@@ -352,7 +352,7 @@ public final class SettingsBackedHapticScapeSettings implements HapticScapeSetti
     @Override
     public boolean remoteActivitySharingAllowed()
     {
-        return booleanValue(HapticScapeSettingKeys.REMOTE_ACTIVITY_SHARING_ALLOWED, false);
+        return booleanValue(HapticScapeSettingKeys.REMOTE_ACTIVITY_SHARING_ALLOWED, true);
     }
 
     @Override

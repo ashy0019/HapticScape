@@ -16,8 +16,7 @@ public class RemoteActivityFeedPanelTest
 	public void feedIsBoundedAndClearsWhenPermissionIsRevoked()
 	{
 		RemoteActivityFeedPanel panel = new RemoteActivityFeedPanel();
-		RemotePermissions allowed = RemotePermissions.defaults()
-			.withActivitySharingAllowed(true);
+		RemotePermissions allowed = RemotePermissions.defaults();
 		panel.apply(
 			new RemoteSessionSnapshot(
 				RemoteRole.CONTROLLER,
@@ -46,7 +45,7 @@ public class RemoteActivityFeedPanelTest
 				"active",
 				0
 			),
-			RemotePermissions.defaults()
+			RemotePermissions.defaults().withActivitySharingAllowed(false)
 		);
 		assertEquals(0, panel.entryCount());
 	}

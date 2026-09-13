@@ -96,8 +96,17 @@ final class RemoteMessageRouter
 			case SESSION_END:
 				lifecycle.handlePeerEnd();
 				break;
+			case HEARTBEAT:
+				lifecycle.handleHeartbeat();
+				break;
+			case HEARTBEAT_ACK:
+				lifecycle.handleHeartbeatAcknowledgement();
+				break;
 			case UNAUTHORIZED_END:
 				lifecycle.handleUnauthorizedEnd(message.getPayload());
+				break;
+			case UNAUTHORIZED_END_ACK:
+				lifecycle.handleUnauthorizedEndAcknowledgement(message.getPayload());
 				break;
 			default:
 				break;

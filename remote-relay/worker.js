@@ -16,6 +16,7 @@ const MAX_PAIRING_ENVELOPE_BYTES = 4 * 1024;
 const PAIRING_TTL_MILLIS = 5 * 60 * 1000;
 const PAIRING_LOCATOR_PATTERN = /^[A-Za-z0-9_-]{12}$/;
 const PAIRING_PROOF_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+const SESSION_SLOT_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
 export class SessionRoom {
   constructor(ctx, env) {
@@ -34,7 +35,14 @@ export class SessionRoom {
       return new Response("role must be controller or participant", { status: 400 });
     }
 
-    if (this.ctx.getWebSockets(role).length > 0) {
+    const slot = url.searchParams.get("slot");
+    if (slot != null && !SESSION_SLOT_PATTERN.test(slot)) {
+      return new Response("Invalid reconnect slot", { status: 400 });
+    }
+
+    const existingRoleSockets = this.ctx.getWebSockets(role);
+    if (existingRoleSockets.length > 0
+      && (slot == null || !this.canReplaceRoleSockets(existingRoleSockets, slot))) {
       return new Response(`${role} is already connected`, { status: 409 });
     }
 
@@ -42,6 +50,10 @@ export class SessionRoom {
     const client = pair[0];
     const server = pair[1];
     this.ctx.acceptWebSocket(server, [role]);
+    server.serializeAttachment({ role, slot: slot ?? null, superseded: false });
+    if (slot != null) {
+      this.supersedeRoleSockets(existingRoleSockets);
+    }
 
     return new Response(null, {
       status: 101,
@@ -50,6 +62,9 @@ export class SessionRoom {
   }
 
   webSocketMessage(webSocket, message) {
+    if (this.isSuperseded(webSocket)) {
+      return;
+    }
     if (typeof message !== "string") {
       webSocket.close(1003, "Text messages only");
       return;
@@ -68,14 +83,65 @@ export class SessionRoom {
   }
 
   webSocketClose(webSocket, code, reason, wasClean) {
-    // The runtime has already observed the close. No server-side action is needed.
+    if (this.isSuperseded(webSocket)) {
+      return;
+    }
+    this.closePeers(webSocket, 4001, "Remote peer disconnected");
   }
 
   webSocketError(webSocket) {
+    if (this.isSuperseded(webSocket)) {
+      return;
+    }
+    this.closePeers(webSocket, 4001, "Remote peer disconnected");
     try {
       webSocket.close(1011, "Relay socket error");
     } catch (_) {
       // Socket may already be gone.
+    }
+  }
+
+  closePeers(disconnected, code, reason) {
+    for (const peer of this.ctx.getWebSockets()) {
+      if (peer === disconnected) {
+        continue;
+      }
+      try {
+        peer.close(code, reason);
+      } catch (_) {
+        // The peer may already be closing.
+      }
+    }
+  }
+
+  canReplaceRoleSockets(sockets, slot) {
+    return sockets.every((socket) => {
+      const attachment = this.attachment(socket);
+      return attachment?.slot == null || attachment.slot === slot;
+    });
+  }
+
+  supersedeRoleSockets(sockets) {
+    for (const socket of sockets) {
+      const attachment = this.attachment(socket) ?? {};
+      socket.serializeAttachment({ ...attachment, superseded: true });
+      try {
+        socket.close(4002, "Connection replaced after reconnect");
+      } catch (_) {
+        // The stale socket may already be gone.
+      }
+    }
+  }
+
+  isSuperseded(socket) {
+    return this.attachment(socket)?.superseded === true;
+  }
+
+  attachment(socket) {
+    try {
+      return socket.deserializeAttachment?.() ?? null;
+    } catch (_) {
+      return null;
     }
   }
 }

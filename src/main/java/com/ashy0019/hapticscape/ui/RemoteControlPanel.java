@@ -54,6 +54,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 	private final TextClipboard clipboard;
 	private final JButton emergencyButton = new JButton("EMERGENCY OFF");
 	private final JButton resumeButton = new JButton("Resume");
+	private final JButton reconnectButton = new JButton("Reconnect");
 	private final JButton endButton = new JButton("End session");
 	private final JButton editSubjectButton = new JButton("Edit subject settings");
 	private final JButton openLiveForgeButton = new JButton("Open Live Forge");
@@ -100,10 +101,12 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		this.sessionHeader = new RemoteSessionHeaderPanel(
 			emergencyButton,
 			resumeButton,
+			reconnectButton,
 			endButton
 		);
 		emergencyButton.setName("remoteEmergency");
 		resumeButton.setName("remoteResume");
+		reconnectButton.setName("remoteReconnect");
 		endButton.setName("remoteEndSession");
 		java.util.Objects.requireNonNull(editSubjectSettingsAction, "editSubjectSettingsAction");
 		java.util.Objects.requireNonNull(openLiveForgeAction, "openLiveForgeAction");
@@ -168,6 +171,7 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 
 		emergencyButton.addActionListener(event -> sessionManager.emergencyPause());
 		resumeButton.addActionListener(event -> sessionManager.resumeParticipant());
+		reconnectButton.addActionListener(event -> sessionManager.reconnect());
 		endButton.addActionListener(event -> sessionManager.endSession());
 		editSubjectButton.addActionListener(event -> editSubjectSettingsAction.run());
 		openLiveForgeButton.addActionListener(event -> openLiveForgeAction.run());
@@ -451,9 +455,12 @@ final class RemoteControlPanel extends JPanel implements RemoteSessionListener
 		refreshControllerTools(snapshot, sessionManager.getPeerPermissions());
 		savedUnlockKeysPanel.setLocalMode(view.isLocal());
 		emergencyButton.setEnabled(view.showsEmergency());
-		resumeButton.setEnabled(view.showsResume());
+		boolean reconnectAvailable = sessionManager.canReconnect();
+		resumeButton.setEnabled(view.showsResume() && !reconnectAvailable);
+		reconnectButton.setEnabled(reconnectAvailable);
 		emergencyButton.setVisible(view.showsEmergency());
 		resumeButton.setVisible(view.showsResume());
+		reconnectButton.setVisible(reconnectAvailable);
 		endButton.setEnabled(view.showsEnd());
 		endButton.setVisible(view.showsEnd());
 		applyLockSnapshot(sessionManager.getLockSnapshot());

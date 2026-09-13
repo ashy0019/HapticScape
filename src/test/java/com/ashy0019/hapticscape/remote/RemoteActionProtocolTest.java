@@ -12,10 +12,14 @@ import com.google.gson.Gson;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 import org.junit.Test;
 
 public class RemoteActionProtocolTest
@@ -27,6 +31,7 @@ public class RemoteActionProtocolTest
 
 	@Test
 	public void capabilitiesActionsAndAcknowledgementsCrossEncryptedSession()
+		throws Exception
 	{
 		Gson gson = new Gson();
 		TestRelay relay = new TestRelay();
@@ -34,7 +39,8 @@ public class RemoteActionProtocolTest
 		RemotePermissions participantPermissions = new RemotePermissions(
 			false, true, true, false, true, 42, 900
 		);
-		List<RemoteActionAcknowledgement> acknowledgements = new ArrayList<>();
+		List<RemoteActionAcknowledgement> acknowledgements =
+			new CopyOnWriteArrayList<>();
 
 		try (RemoteSessionManager controller = manager(
 			gson,
@@ -65,13 +71,16 @@ public class RemoteActionProtocolTest
 			RemoteInvitation invitation = controller.startController("wss://relay.example/relay");
 			participant.joinParticipant(invitation.encode());
 
-			assertEquals(participantPermissions, controller.getPeerPermissions());
+			awaitActive(controller, participant);
+			await(() -> participantPermissions.equals(controller.getPeerPermissions()));
 			assertFalse(controller.updateControllerSetting(
 				HapticScapeSettingKeys.INTENSITY_PERCENT,
 				80
 			));
 
 			String actionId = controller.sendRemoteHaptic("DOUBLE", 90, 5_000);
+			await(() -> acknowledgements.size() == 1
+				&& participantExecutor.hapticCount == 1);
 			assertEquals(RemoteSessionState.ACTIVE, participant.getSnapshot().getState());
 			assertEquals(1, acknowledgements.size());
 			assertEquals(RemoteActionResult.LIMITED, acknowledgements.get(0).getResult());
@@ -82,6 +91,8 @@ public class RemoteActionProtocolTest
 			assertEquals(actionId, acknowledgements.get(0).getActionId());
 
 			controller.sendRemoteMessage("<b>local</b>", true, true);
+			await(() -> acknowledgements.size() == 2
+				&& "local".equals(participantExecutor.message));
 			assertEquals("local", participantExecutor.message);
 			assertFalse(participantExecutor.desktop);
 			assertTrue(participantExecutor.chatbox);
@@ -100,11 +111,15 @@ public class RemoteActionProtocolTest
 
 	@Test
 	public void participantCanEnableSettingsWithoutControllerAuthority()
+		throws Exception
 	{
 		Gson gson = new Gson();
 		TestRelay relay = new TestRelay();
+		RemotePermissions initialPermissions = new RemotePermissions(
+			false, true, true, true, false, 60, 3_000
+		);
 		InMemoryRemotePermissionsStore participantStore = new InMemoryRemotePermissionsStore(
-			new RemotePermissions(false, true, true, true, false, 60, 3_000)
+			initialPermissions
 		);
 		MutableConfig participantConfig = new MutableConfig(60);
 		try (RemoteSessionManager controller = manager(
@@ -124,13 +139,15 @@ public class RemoteActionProtocolTest
 		{
 			RemoteInvitation invitation = controller.startController("wss://relay.example/relay");
 			participant.joinParticipant(invitation.encode());
+			awaitActive(controller, participant);
+			await(() -> initialPermissions.equals(controller.getPeerPermissions()));
 			assertFalse(controller.getPeerPermissions().isSettingsAllowed());
 
 			RemotePermissions enabled = new RemotePermissions(
 				true, true, true, true, false, 60, 3_000
 			);
 			participant.updateLocalPermissions(enabled);
-			assertEquals(enabled, controller.getPeerPermissions());
+			await(() -> enabled.equals(controller.getPeerPermissions()));
 			assertTrue(controller.updateControllerSetting(
 				HapticScapeSettingKeys.INTENSITY_PERCENT,
 				75
@@ -140,6 +157,7 @@ public class RemoteActionProtocolTest
 
 	@Test
 	public void liveForgeStreamsEncryptedClampedSamplesAndRelease()
+		throws Exception
 	{
 		Gson gson = new Gson();
 		TestRelay relay = new TestRelay();
@@ -168,11 +186,15 @@ public class RemoteActionProtocolTest
 				"wss://relay.example/relay"
 			);
 			participant.joinParticipant(invitation.encode());
+			awaitActive(controller, participant);
+			await(() -> participantPermissions.equals(controller.getPeerPermissions()));
 
 			controller.beginRemoteLiveHaptic(90);
 			controller.updateRemoteLiveHaptic(30);
 			controller.endRemoteLiveHaptic();
 
+			await(() -> participantExecutor.liveIntensities.size() == 2
+				&& participantExecutor.liveReleaseCount == 1);
 			assertEquals(java.util.Arrays.asList(42, 30), participantExecutor.liveIntensities);
 			assertEquals(1, participantExecutor.liveReleaseCount);
 			assertFalse(relay.containsPlaintext("REMOTE_LIVE_HAPTIC"));
@@ -182,6 +204,7 @@ public class RemoteActionProtocolTest
 
 	@Test
 	public void droppedInitialParticipantFramesAreRecoveredWithoutEmergencyPause()
+		throws Exception
 	{
 		Gson gson = new Gson();
 		TestRelay relay = new TestRelay();
@@ -205,22 +228,21 @@ public class RemoteActionProtocolTest
 			RemoteInvitation invitation = controller.startController("wss://relay.example/relay");
 			participant.joinParticipant(invitation.encode());
 
-			assertEquals(RemoteSessionState.WAITING_FOR_PEER, controller.getSnapshot().getState());
-			assertEquals(
-				RemoteSessionState.WAITING_FOR_SETTINGS,
-				participant.getSnapshot().getState()
-			);
+			await(() -> controller.getSnapshot().getState()
+					== RemoteSessionState.WAITING_FOR_PEER
+				&& participant.getSnapshot().getState()
+					== RemoteSessionState.WAITING_FOR_SETTINGS);
 
 			relay.allowMessagesFrom(RemoteRole.PARTICIPANT);
 			participant.retryHandshakeSafely();
 
-			assertEquals(RemoteSessionState.ACTIVE, controller.getSnapshot().getState());
-			assertEquals(RemoteSessionState.ACTIVE, participant.getSnapshot().getState());
+			awaitActive(controller, participant);
 		}
 	}
 
 	@Test
 	public void duplicateSeedRecoversDroppedAcknowledgement()
+		throws Exception
 	{
 		Gson gson = new Gson();
 		TestRelay relay = new TestRelay();
@@ -244,17 +266,14 @@ public class RemoteActionProtocolTest
 			RemoteInvitation invitation = controller.startController("wss://relay.example/relay");
 			participant.joinParticipant(invitation.encode());
 
-			assertEquals(RemoteSessionState.ACTIVE, controller.getSnapshot().getState());
-			assertEquals(
-				RemoteSessionState.WAITING_FOR_SETTINGS,
-				participant.getSnapshot().getState()
-			);
+			await(() -> controller.getSnapshot().getState() == RemoteSessionState.ACTIVE
+				&& participant.getSnapshot().getState()
+					== RemoteSessionState.WAITING_FOR_SETTINGS);
 
 			relay.allowMessagesFrom(RemoteRole.CONTROLLER);
 			participant.retryHandshakeSafely();
 
-			assertEquals(RemoteSessionState.ACTIVE, controller.getSnapshot().getState());
-			assertEquals(RemoteSessionState.ACTIVE, participant.getSnapshot().getState());
+			awaitActive(controller, participant);
 		}
 	}
 
@@ -299,18 +318,39 @@ public class RemoteActionProtocolTest
 		);
 	}
 
+	private static void awaitActive(
+		RemoteSessionManager controller,
+		RemoteSessionManager participant) throws Exception
+	{
+		await(() -> controller.getSnapshot().getState() == RemoteSessionState.ACTIVE
+			&& participant.getSnapshot().getState() == RemoteSessionState.ACTIVE);
+	}
+
+	private static void await(BooleanSupplier condition) throws Exception
+	{
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+		while (!condition.getAsBoolean() && System.nanoTime() < deadline)
+		{
+			Thread.sleep(10);
+		}
+		assertTrue(
+			"Timed out waiting for remote protocol state",
+			condition.getAsBoolean()
+		);
+	}
+
 	private static final class RecordingExecutor implements RemoteActionExecutor
 	{
-		private int hapticCount;
-		private String pattern;
-		private int intensity;
-		private int duration;
-		private String message;
-		private boolean desktop;
-		private boolean chatbox;
-		private int stopCount;
-		private final List<Integer> liveIntensities = new ArrayList<>();
-		private int liveReleaseCount;
+		private volatile int hapticCount;
+		private volatile String pattern;
+		private volatile int intensity;
+		private volatile int duration;
+		private volatile String message;
+		private volatile boolean desktop;
+		private volatile boolean chatbox;
+		private volatile int stopCount;
+		private final List<Integer> liveIntensities = new CopyOnWriteArrayList<>();
+		private volatile int liveReleaseCount;
 
 		@Override
 		public void playHaptic(String value, int percent, int millis)
@@ -356,7 +396,7 @@ public class RemoteActionProtocolTest
 
 	private static final class MutableConfig extends TestHapticScapeSettings
 	{
-		private int intensity;
+		private volatile int intensity;
 
 		private MutableConfig(int intensity)
 		{
@@ -398,6 +438,8 @@ public class RemoteActionProtocolTest
 		private final Map<RemoteRole, TestConnection> peers = new EnumMap<>(RemoteRole.class);
 		private final List<String> wireMessages = new ArrayList<>();
 		private final Map<RemoteRole, Boolean> droppedRoles = new EnumMap<>(RemoteRole.class);
+		private final ArrayDeque<Delivery> deliveries = new ArrayDeque<>();
+		private boolean delivering;
 
 		@Override
 		public synchronized RemoteTransport create(RemoteTransport.Listener listener)
@@ -406,29 +448,81 @@ public class RemoteActionProtocolTest
 			return new TestConnection(this, listener);
 		}
 
-		private synchronized void connect(TestConnection connection, RemoteRole role)
+		private void connect(TestConnection connection, RemoteRole role)
 		{
-			connection.role = role;
-			connection.open = true;
-			peers.put(role, connection);
+			synchronized (this)
+			{
+				connection.role = role;
+				connection.open = true;
+				peers.put(role, connection);
+			}
 			connection.listener.onOpen();
 		}
 
-		private synchronized boolean send(TestConnection sender, String message)
+		private boolean send(TestConnection sender, String message)
 		{
-			wireMessages.add(message);
-			if (Boolean.TRUE.equals(droppedRoles.get(sender.role)))
+			boolean senderOpen;
+			boolean shouldDrain;
+			synchronized (this)
 			{
-				return sender.open;
-			}
-			for (TestConnection peer : new ArrayList<>(peers.values()))
-			{
-				if (peer != sender && peer.open)
+				wireMessages.add(message);
+				senderOpen = sender.open;
+				if (Boolean.TRUE.equals(droppedRoles.get(sender.role)))
 				{
-					peer.listener.onMessage(message);
+					return senderOpen;
+				}
+				for (TestConnection peer : peers.values())
+				{
+					if (peer != sender && peer.open)
+					{
+						deliveries.addLast(new Delivery(peer, message));
+					}
+				}
+				shouldDrain = !delivering;
+				if (shouldDrain)
+				{
+					delivering = true;
 				}
 			}
-			return sender.open;
+			if (shouldDrain)
+			{
+				drainDeliveries();
+			}
+			return senderOpen;
+		}
+
+		private void drainDeliveries()
+		{
+			while (true)
+			{
+				Delivery delivery;
+				synchronized (this)
+				{
+					delivery = deliveries.pollFirst();
+					if (delivery == null)
+					{
+						delivering = false;
+						return;
+					}
+					if (!delivery.recipient.open)
+					{
+						continue;
+					}
+				}
+				try
+				{
+					delivery.recipient.listener.onMessage(delivery.message);
+				}
+				catch (RuntimeException | Error failure)
+				{
+					synchronized (this)
+					{
+						deliveries.clear();
+						delivering = false;
+					}
+					throw failure;
+				}
+			}
 		}
 
 		private synchronized void dropMessagesFrom(RemoteRole role)
@@ -450,6 +544,19 @@ public class RemoteActionProtocolTest
 		{
 			connection.open = false;
 			peers.remove(connection.role, connection);
+			deliveries.removeIf(delivery -> delivery.recipient == connection);
+		}
+
+		private static final class Delivery
+		{
+			private final TestConnection recipient;
+			private final String message;
+
+			private Delivery(TestConnection recipient, String message)
+			{
+				this.recipient = recipient;
+				this.message = message;
+			}
 		}
 	}
 
@@ -458,7 +565,7 @@ public class RemoteActionProtocolTest
 		private final TestRelay relay;
 		private final Listener listener;
 		private RemoteRole role = RemoteRole.NONE;
-		private boolean open;
+		private volatile boolean open;
 
 		private TestConnection(TestRelay relay, Listener listener)
 		{
@@ -467,7 +574,11 @@ public class RemoteActionProtocolTest
 		}
 
 		@Override
-		public void connect(String relayUrl, String roomId, RemoteRole remoteRole)
+		public void connect(
+			String relayUrl,
+			String roomId,
+			RemoteRole remoteRole,
+			String reconnectSlot)
 		{
 			relay.connect(this, remoteRole);
 		}
