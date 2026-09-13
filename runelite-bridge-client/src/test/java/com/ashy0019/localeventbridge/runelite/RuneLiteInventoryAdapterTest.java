@@ -16,11 +16,11 @@ public class RuneLiteInventoryAdapterTest
 	@Test
 	public void mapsPlayerInventoryOccupancyToNeutralState()
 	{
-		InventoryOccupancyEvent event = adapter.adapt(InventoryID.INV, 27, 28).get();
+		InventoryOccupancyEvent event = adapter.adapt(InventoryID.INV, 17).get();
 
 		assertEquals("runelite", event.getSource());
 		assertEquals(InventoryOccupancyEvent.TYPE, event.getType());
-		assertEquals(27, event.getFilledSlots());
+		assertEquals(17, event.getFilledSlots());
 		assertEquals(28, event.getCapacity());
 		assertFalse(event.isFull());
 	}
@@ -28,10 +28,11 @@ public class RuneLiteInventoryAdapterTest
 	@Test
 	public void mapsFullInventoryAndIgnoresOtherContainers()
 	{
-		InventoryOccupancyEvent full = adapter.adapt(InventoryID.INV, 28, 28).get();
-		Optional<InventoryOccupancyEvent> other = adapter.adapt(InventoryID.INV + 1, 28, 28);
+		InventoryOccupancyEvent full = adapter.adapt(InventoryID.INV, 28).get();
+		Optional<InventoryOccupancyEvent> other = adapter.adapt(InventoryID.INV + 1, 28);
 
 		assertTrue(full.isFull());
+		assertEquals(28, full.getCapacity());
 		assertFalse(other.isPresent());
 	}
 }
