@@ -40,9 +40,18 @@ internal static class HapticScapeLauncher
 				launchOptions.MutexName,
 				out ownsInstance))
 			{
+				string queuedDeepLink = null;
 				if (deepLink != null)
 				{
-					QueueDeepLink(deepLink);
+					queuedDeepLink = QueueDeepLink(deepLink);
+				}
+				if (!ownsInstance && deepLink != null)
+				{
+					ownsInstance = DeepLinkInstanceHandoff.WaitForTakeover(
+						instance,
+						queuedDeepLink,
+						4000
+					);
 				}
 				if (!ownsInstance)
 				{
@@ -310,7 +319,7 @@ internal static class HapticScapeLauncher
 		}
 	}
 
-	private static void QueueDeepLink(string deepLink)
+	private static string QueueDeepLink(string deepLink)
 	{
 		string inbox = Path.Combine(
 			Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -322,6 +331,7 @@ internal static class HapticScapeLauncher
 		string request = Path.Combine(inbox, name + ".request");
 		File.WriteAllText(temporary, deepLink, new System.Text.UTF8Encoding(false));
 		File.Move(temporary, request);
+		return request;
 	}
 
 	private static void ShowUpdateSettings(string preferencesPath, string installedVersion)

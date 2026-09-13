@@ -81,6 +81,7 @@ public class RemoteActivityPublisherTest
 
 		assertEquals(2, events.size());
 		assertEquals(RemoteActivityType.INVENTORY_FULL, events.get(0).getType());
-		assertEquals("28 / 28 slots", events.get(0).getDetail());
+		assertEquals("Inventory Full", events.get(0).getLabel());
+		assertEquals("", events.get(0).getDetail());
 	}
 }

@@ -1003,7 +1003,9 @@ final class AlertsPanel extends JPanel
 			{
 				return AlertLockState.ARMED;
 			}
-			if (remote.getTargets().contains(target) || lockDraft.contains(target))
+			if ((remote.getState() != RemoteLockState.INACTIVE
+				&& remote.getTargets().contains(target))
+				|| lockDraft.contains(target))
 			{
 				return AlertLockState.PROPOSED;
 			}
@@ -1144,6 +1146,7 @@ final class AlertsPanel extends JPanel
 	private final class AlertCategoryRenderer extends JPanel
 		implements ListCellRenderer<AlertCategory>
 	{
+		private final JPanel textPanel = new JPanel(new BorderLayout(0, 1));
 		private final JLabel title = new JLabel();
 		private final JLabel summary = new JLabel();
 		private final JLabel lockMarker = new JLabel();
@@ -1154,8 +1157,12 @@ final class AlertsPanel extends JPanel
 			setBorder(BorderFactory.createEmptyBorder(4, 6, 4, 6));
 			title.setFont(title.getFont().deriveFont(Font.BOLD));
 			summary.setFont(summary.getFont().deriveFont(10f));
-			add(title, BorderLayout.NORTH);
-			add(summary, BorderLayout.SOUTH);
+			textPanel.setOpaque(false);
+			textPanel.add(title, BorderLayout.NORTH);
+			textPanel.add(summary, BorderLayout.SOUTH);
+			lockMarker.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 2));
+			lockMarker.setHorizontalAlignment(JLabel.CENTER);
+			add(textPanel, BorderLayout.CENTER);
 			add(lockMarker, BorderLayout.EAST);
 		}
 

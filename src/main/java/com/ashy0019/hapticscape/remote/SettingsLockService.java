@@ -12,6 +12,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -163,6 +164,110 @@ public final class SettingsLockService
 		}
 	}
 
+	public synchronized Optional<SettingsLockProposal> getProfileForOwner(String ownerId)
+	{
+		String requiredOwner = Objects.requireNonNull(ownerId, "ownerId");
+		for (SettingsLockProposal lock : locks)
+		{
+			if (lock.isNamedProfile() && requiredOwner.equals(lock.getOwnerId()))
+			{
+				return Optional.of(lock);
+			}
+		}
+		return Optional.empty();
+	}
+
+	/** Returns the controller owning the named profile which covers a target. */
+	public synchronized Optional<String> getOwnerForTarget(SettingsLockTarget target)
+	{
+		SettingsLockTarget required = Objects.requireNonNull(target, "target");
+		for (SettingsLockProposal lock : locks)
+		{
+			if (lock.isNamedProfile()
+				&& SettingsLockCatalog.isCoveredBy(lock.getTargets(), required))
+			{
+				return Optional.of(lock.getOwnerId());
+			}
+		}
+		return Optional.empty();
+	}
+
+	/**
+	 * Atomically replaces the persistent profile owned by one controller.
+	 * Unowned legacy bundles are preserved unless they overlap the accepted
+	 * profile, in which case the explicit replacement migrates them away.
+	 */
+	public synchronized SettingsLockProposal replaceProfile(
+		String ownerId,
+		SettingsLockProposal proposal,
+		String profileName)
+	{
+		SettingsLockProposal validated = Objects.requireNonNull(proposal, "proposal");
+		validated.validate();
+		if (validated.isLegacyFullLock())
+		{
+			throw new IllegalArgumentException("Named profiles require explicit lock targets");
+		}
+		validateCanReplace(ownerId, validated);
+		SettingsLockProposal finalized = validated.withProfileMetadata(ownerId, profileName);
+		finalized.validate();
+
+		List<SettingsLockProposal> updated = new ArrayList<>();
+		for (SettingsLockProposal current : locks)
+		{
+			if (current.isNamedProfile())
+			{
+				if (ownerId.equals(current.getOwnerId()))
+				{
+					continue;
+				}
+				updated.add(current);
+				continue;
+			}
+			if (current.isLegacyFullLock()
+				|| firstConflict(finalized.getTargets(), current.getTargets()) != null)
+			{
+				// Explicitly accepted replacement migrates an overlapping legacy bundle.
+				continue;
+			}
+			updated.add(current);
+		}
+		updated.add(finalized);
+		store.save(updated);
+		locks = Collections.unmodifiableList(updated);
+		publish();
+		return finalized;
+	}
+
+	void validateCanReplace(String ownerId, SettingsLockProposal proposal)
+	{
+		String requiredOwner = Objects.requireNonNull(ownerId, "ownerId");
+		SettingsLockProposal validated = Objects.requireNonNull(proposal, "proposal");
+		validated.validate();
+		if (validated.isLegacyFullLock())
+		{
+			validateCanArm(validated);
+			return;
+		}
+		for (SettingsLockProposal current : locks)
+		{
+			if (!current.isNamedProfile() || requiredOwner.equals(current.getOwnerId()))
+			{
+				continue;
+			}
+			SettingsLockTarget overlap = firstConflict(
+				validated.getTargets(),
+				current.getTargets()
+			);
+			if (overlap != null)
+			{
+				throw new IllegalStateException(
+					overlap.getDisplayName() + " is already locked by another controller profile"
+				);
+			}
+		}
+	}
+
 	public synchronized void arm(SettingsLockProposal proposal)
 	{
 		SettingsLockProposal validated = Objects.requireNonNull(proposal, "proposal");
@@ -234,9 +339,17 @@ public final class SettingsLockService
 
 	public synchronized boolean unlock(char[] password)
 	{
+		return unlock(null, password);
+	}
+
+	/** Removes the lock profile covering a required target when its password matches. */
+	public synchronized boolean unlock(
+		SettingsLockTarget requiredTarget,
+		char[] password)
+	{
 		if (locks.isEmpty())
 		{
-			return true;
+			return requiredTarget == null;
 		}
 		char[] copy = Arrays.copyOf(
 			Objects.requireNonNull(password, "password"),
@@ -244,15 +357,7 @@ public final class SettingsLockService
 		);
 		try
 		{
-			int matchingIndex = -1;
-			for (int index = 0; index < locks.size(); index++)
-			{
-				if (locks.get(index).verifies(copy))
-				{
-					matchingIndex = index;
-					break;
-				}
-			}
+			int matchingIndex = matchingLockIndex(copy, requiredTarget);
 			if (matchingIndex < 0)
 			{
 				return false;
@@ -289,20 +394,110 @@ public final class SettingsLockService
 		);
 		try
 		{
-			for (SettingsLockProposal lock : locks)
-			{
-				if (SettingsLockCatalog.isCoveredBy(lock.getTargets(), requiredTarget)
-					&& lock.verifies(copy))
-				{
-					return true;
-				}
-			}
-			return false;
+			return matchingLockIndex(copy, requiredTarget) >= 0;
 		}
 		finally
 		{
 			Arrays.fill(copy, '\0');
 		}
+	}
+
+	private int matchingLockIndex(char[] password, SettingsLockTarget requiredTarget)
+	{
+		int exact = matchingLockIndexForCandidate(password, requiredTarget);
+		if (exact >= 0)
+		{
+			return exact;
+		}
+		char[] normalized = normalizeGeneratedUnlockKey(password);
+		if (normalized == null)
+		{
+			return -1;
+		}
+		try
+		{
+			return matchingLockIndexForCandidate(normalized, requiredTarget);
+		}
+		finally
+		{
+			Arrays.fill(normalized, '\0');
+		}
+	}
+
+	private int matchingLockIndexForCandidate(
+		char[] candidate,
+		SettingsLockTarget requiredTarget)
+	{
+		for (int index = 0; index < locks.size(); index++)
+		{
+			SettingsLockProposal lock = locks.get(index);
+			if ((requiredTarget == null
+				|| SettingsLockCatalog.isCoveredBy(lock.getTargets(), requiredTarget))
+				&& lock.verifies(candidate))
+			{
+				return index;
+			}
+		}
+		return -1;
+	}
+
+	/** Accepts generated recovery keys despite case, spaces, or missing dashes. */
+	private static char[] normalizeGeneratedUnlockKey(char[] value)
+	{
+		char[] compact = new char[UNLOCK_KEY_GROUPS * UNLOCK_KEY_GROUP_SIZE];
+		int count = 0;
+		for (char character : value)
+		{
+			if (character == '-' || Character.isWhitespace(character))
+			{
+				continue;
+			}
+			if (count == compact.length)
+			{
+				Arrays.fill(compact, '\0');
+				return null;
+			}
+			char upper = Character.toUpperCase(character);
+			if (!containsUnlockKeyCharacter(upper))
+			{
+				Arrays.fill(compact, '\0');
+				return null;
+			}
+			compact[count++] = upper;
+		}
+		if (count != compact.length)
+		{
+			Arrays.fill(compact, '\0');
+			return null;
+		}
+		char[] normalized = new char[compact.length + UNLOCK_KEY_GROUPS - 1];
+		int source = 0;
+		int target = 0;
+		for (int group = 0; group < UNLOCK_KEY_GROUPS; group++)
+		{
+			if (group > 0)
+			{
+				normalized[target++] = '-';
+			}
+			for (int index = 0; index < UNLOCK_KEY_GROUP_SIZE; index++)
+			{
+				normalized[target++] = compact[source++];
+			}
+		}
+		Arrays.fill(compact, '\0');
+		return normalized;
+	}
+
+	private static boolean containsUnlockKeyCharacter(char candidate)
+	{
+		for (char allowed : UNLOCK_KEY_ALPHABET)
+		{
+			if (allowed == candidate)
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	public synchronized void clearAllLocks()

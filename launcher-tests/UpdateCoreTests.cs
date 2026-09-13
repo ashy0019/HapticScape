@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.IO.Compression;
+using System.Threading;
 
 internal static class UpdateCoreTests
 {
@@ -14,6 +15,7 @@ internal static class UpdateCoreTests
 		{
 			TestVersions();
 			TestDeepLinks();
+			TestDeepLinkHandoff(root);
 			TestLaunchOptions();
 			TestPolicy();
 			TestReleaseParsing();
@@ -92,6 +94,75 @@ internal static class UpdateCoreTests
 		{
 			HapticScapeDeepLink.Read(new[] { valid.Replace("discord/", "discord:1234/") });
 		}, "explicit deep-link ports should be rejected");
+	}
+
+	private static void TestDeepLinkHandoff(string root)
+	{
+		string consumedRequest = Path.Combine(root, "deep-link-consumed.request");
+		File.WriteAllText(consumedRequest, "pending");
+		string consumedMutexName = @"Local\HapticScape.Test." + Guid.NewGuid().ToString("N");
+		using (ManualResetEvent ownerReady = new ManualResetEvent(false))
+		using (ManualResetEvent releaseOwner = new ManualResetEvent(false))
+		{
+			Thread ownerThread = new Thread(delegate()
+			{
+				bool ownerCreated;
+				using (Mutex owner = new Mutex(true, consumedMutexName, out ownerCreated))
+				{
+					ownerReady.Set();
+					releaseOwner.WaitOne();
+					owner.ReleaseMutex();
+				}
+			});
+			ownerThread.Start();
+			ownerReady.WaitOne();
+			bool contenderCreated;
+			using (Mutex contender = new Mutex(true, consumedMutexName, out contenderCreated))
+			{
+				Assert(!contenderCreated, "deep-link handoff test should start with another live instance");
+				Thread deleteThread = new Thread(delegate()
+				{
+					Thread.Sleep(100);
+					File.Delete(consumedRequest);
+				});
+				deleteThread.Start();
+				Assert(!DeepLinkInstanceHandoff.WaitForTakeover(
+					contender, consumedRequest, 1500),
+					"a request consumed by the live client should not launch a replacement");
+				deleteThread.Join();
+			}
+			releaseOwner.Set();
+			ownerThread.Join();
+		}
+
+		string takeoverRequest = Path.Combine(root, "deep-link-takeover.request");
+		File.WriteAllText(takeoverRequest, "pending");
+		string takeoverMutexName = @"Local\HapticScape.Test." + Guid.NewGuid().ToString("N");
+		using (ManualResetEvent ownerReady = new ManualResetEvent(false))
+		{
+			Thread ownerThread = new Thread(delegate()
+			{
+				bool ownerCreated;
+				using (Mutex owner = new Mutex(true, takeoverMutexName, out ownerCreated))
+				{
+					ownerReady.Set();
+					Thread.Sleep(150);
+					owner.ReleaseMutex();
+				}
+			});
+			ownerThread.Start();
+			ownerReady.WaitOne();
+			bool contenderCreated;
+			using (Mutex contender = new Mutex(true, takeoverMutexName, out contenderCreated))
+			{
+				Assert(!contenderCreated, "takeover test should start behind the exiting instance");
+				Assert(DeepLinkInstanceHandoff.WaitForTakeover(
+					contender, takeoverRequest, 1500),
+					"a pending request should take over when the exiting instance releases its mutex");
+				contender.ReleaseMutex();
+			}
+			ownerThread.Join();
+		}
 	}
 
 	private static void TestVersions()

@@ -14,6 +14,7 @@ public final class SavedUnlockKey
 	private final String id;
 	private final String label;
 	private final String lockId;
+	private final String subjectId;
 	private final long createdAtEpochMillis;
 	private final long lastUsedAtEpochMillis;
 	private final String note;
@@ -23,6 +24,7 @@ public final class SavedUnlockKey
 		String id,
 		String label,
 		String lockId,
+		String subjectId,
 		long createdAtEpochMillis,
 		long lastUsedAtEpochMillis,
 		String note,
@@ -31,6 +33,7 @@ public final class SavedUnlockKey
 		this.id = id;
 		this.label = label;
 		this.lockId = lockId;
+		this.subjectId = subjectId;
 		this.createdAtEpochMillis = createdAtEpochMillis;
 		this.lastUsedAtEpochMillis = lastUsedAtEpochMillis;
 		this.note = note;
@@ -50,6 +53,16 @@ public final class SavedUnlockKey
 	public String getLockId()
 	{
 		return lockId;
+	}
+
+	public String getSubjectId()
+	{
+		return subjectId;
+	}
+
+	public boolean isProfileKey()
+	{
+		return subjectId != null;
 	}
 
 	public Instant getCreatedAt()
@@ -80,6 +93,7 @@ public final class SavedUnlockKey
 			id,
 			normalizeLabel(nextLabel),
 			lockId,
+			subjectId,
 			createdAtEpochMillis,
 			lastUsedAtEpochMillis,
 			normalizeNote(nextNote),
@@ -93,6 +107,7 @@ public final class SavedUnlockKey
 			id,
 			label,
 			lockId,
+			subjectId,
 			createdAtEpochMillis,
 			epochMillis,
 			note,
@@ -104,6 +119,10 @@ public final class SavedUnlockKey
 	{
 		validateUuid(id, "saved-key ID");
 		validateUuid(lockId, "lock ID");
+		if (subjectId != null)
+		{
+			validateUuid(subjectId, "subject ID");
+		}
 		if (!Objects.equals(label, normalizeLabel(label)))
 		{
 			throw new IllegalArgumentException("Invalid saved-key label");

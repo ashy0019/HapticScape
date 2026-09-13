@@ -28,4 +28,14 @@ public class HapticScapeDesktopWindowSizingTest
 		assertTrue(HapticScapeDesktopWindow.UNAUTHORIZED_EXIT_FLUSH_MILLIS >= 500);
 		assertTrue(HapticScapeDesktopWindow.UNAUTHORIZED_EXIT_FLUSH_MILLIS <= 2_000);
 	}
+
+	@Test
+	public void authorizedUnlockAllowsTheCancellationFrameToFlush()
+	{
+		assertTrue(HapticScapeDesktopWindow.AUTHORIZED_UNLOCK_FLUSH_MILLIS > 0);
+		assertTrue(
+			HapticScapeDesktopWindow.AUTHORIZED_UNLOCK_FLUSH_MILLIS
+				< HapticScapeDesktopWindow.UNAUTHORIZED_EXIT_FLUSH_MILLIS
+		);
+	}
 }

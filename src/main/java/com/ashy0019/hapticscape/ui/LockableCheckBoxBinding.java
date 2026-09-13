@@ -150,7 +150,7 @@ final class LockableCheckBoxBinding
 			{
 				return State.ARMED;
 			}
-			if (remote.targets(target())
+			if ((remote.getState() != RemoteLockState.INACTIVE && remote.targets(target()))
 				|| SettingsLockCatalog.isCoveredBy(draft.snapshot(), target()))
 			{
 				return State.PROPOSED;

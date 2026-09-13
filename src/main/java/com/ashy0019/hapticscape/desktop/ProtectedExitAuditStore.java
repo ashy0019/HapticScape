@@ -9,19 +9,29 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Properties;
+import java.util.UUID;
 
-/** Durable marker used to carry an unauthorized-end flag across process restarts. */
+/** Durable, controller-bound marker for protected exits and interrupted runs. */
 public final class ProtectedExitAuditStore
 {
 	private static final String RUNNING = "running";
 	private static final String PENDING = "unauthorizedEndPending";
 	private static final String PROTECTED = "protected";
+	private static final String PROTECTED_CONTROLLER = "protectedControllerId";
+	private static final String EVENT_ID = "unauthorizedEndEventId";
+	private static final String EVENT_CONTROLLER = "unauthorizedEndControllerId";
+	private static final String EVENT_TIME = "unauthorizedEndOccurredAt";
 
 	private final Path path;
 	private boolean running;
 	private boolean pending;
 	private boolean protectedExit;
+	private String protectedControllerId;
+	private String eventId;
+	private String eventControllerId;
+	private long eventTime;
 
 	public ProtectedExitAuditStore(Path path)
 	{
@@ -29,21 +39,42 @@ public final class ProtectedExitAuditStore
 		load();
 	}
 
-	/** Marks this run active and converts an uncleared prior run into a pending flag. */
 	public synchronized void beginRun(boolean protectionActive)
+	{
+		beginRun(protectionActive, null);
+	}
+
+	public synchronized void beginRun(boolean protectionActive, String controllerId)
 	{
 		if (running && protectedExit)
 		{
-			pending = true;
+			createPendingEvent(protectedControllerId != null
+				? protectedControllerId
+				: controllerId);
+		}
+		else if (pending && (eventId == null || eventControllerId == null || eventTime <= 0))
+		{
+			// Upgrade the original boolean-only audit marker using the current
+			// protected-exit owner, never whichever controller happens to join next.
+			createPendingEvent(protectedControllerId != null
+				? protectedControllerId
+				: controllerId);
 		}
 		running = true;
 		protectedExit = protectionActive;
+		protectedControllerId = protectionActive ? validUuidOrNull(controllerId) : null;
 		persist();
 	}
 
 	public synchronized void setProtectionActive(boolean protectionActive)
 	{
+		setProtectionActive(protectionActive, null);
+	}
+
+	public synchronized void setProtectionActive(boolean protectionActive, String controllerId)
+	{
 		protectedExit = protectionActive;
+		protectedControllerId = protectionActive ? validUuidOrNull(controllerId) : null;
 		persist();
 	}
 
@@ -51,15 +82,26 @@ public final class ProtectedExitAuditStore
 	{
 		running = false;
 		protectedExit = false;
+		protectedControllerId = null;
 		persist();
 	}
 
 	public synchronized void markUnauthorizedEnd()
 	{
+		markUnauthorizedEnd(null);
+	}
+
+	public synchronized UnauthorizedEndRecord markUnauthorizedEnd(String currentControllerId)
+	{
 		running = false;
 		protectedExit = false;
-		pending = true;
+		String owner = protectedControllerId != null
+			? protectedControllerId
+			: validUuidOrNull(currentControllerId);
+		protectedControllerId = null;
+		createPendingEvent(owner);
 		persist();
+		return new UnauthorizedEndRecord(eventId, eventControllerId, eventTime);
 	}
 
 	public synchronized boolean hasPendingUnauthorizedEnd()
@@ -67,10 +109,64 @@ public final class ProtectedExitAuditStore
 		return pending;
 	}
 
+	public synchronized Optional<UnauthorizedEndRecord> getPendingUnauthorizedEnd()
+	{
+		if (!pending || eventId == null || eventControllerId == null || eventTime <= 0)
+		{
+			return Optional.empty();
+		}
+		return Optional.of(new UnauthorizedEndRecord(eventId, eventControllerId, eventTime));
+	}
+
 	public synchronized void clearPendingUnauthorizedEnd()
 	{
-		pending = false;
+		clearPending();
 		persist();
+	}
+
+	public synchronized boolean clearPendingUnauthorizedEnd(String acknowledgedEventId)
+	{
+		if (!pending || eventId == null || !eventId.equals(acknowledgedEventId))
+		{
+			return false;
+		}
+		clearPending();
+		persist();
+		return true;
+	}
+
+	private void createPendingEvent(String controllerId)
+	{
+		pending = true;
+		eventId = UUID.randomUUID().toString();
+		eventControllerId = validUuidOrNull(controllerId);
+		eventTime = System.currentTimeMillis();
+	}
+
+	private void clearPending()
+	{
+		pending = false;
+		eventId = null;
+		eventControllerId = null;
+		eventTime = 0;
+	}
+
+	private static String validUuidOrNull(String value)
+	{
+		if (value == null || value.trim().isEmpty())
+		{
+			return null;
+		}
+		String normalized = value.trim();
+		try
+		{
+			UUID.fromString(normalized);
+			return normalized;
+		}
+		catch (IllegalArgumentException ignored)
+		{
+			return null;
+		}
 	}
 
 	private void load()
@@ -86,6 +182,17 @@ public final class ProtectedExitAuditStore
 			running = Boolean.parseBoolean(properties.getProperty(RUNNING));
 			pending = Boolean.parseBoolean(properties.getProperty(PENDING));
 			protectedExit = Boolean.parseBoolean(properties.getProperty(PROTECTED));
+			protectedControllerId = validUuidOrNull(properties.getProperty(PROTECTED_CONTROLLER));
+			eventId = validUuidOrNull(properties.getProperty(EVENT_ID));
+			eventControllerId = validUuidOrNull(properties.getProperty(EVENT_CONTROLLER));
+			try
+			{
+				eventTime = Long.parseLong(properties.getProperty(EVENT_TIME, "0"));
+			}
+			catch (NumberFormatException ignored)
+			{
+				eventTime = 0;
+			}
 		}
 		catch (IOException failure)
 		{
@@ -110,20 +217,18 @@ public final class ProtectedExitAuditStore
 			properties.setProperty(RUNNING, Boolean.toString(running));
 			properties.setProperty(PENDING, Boolean.toString(pending));
 			properties.setProperty(PROTECTED, Boolean.toString(protectedExit));
-			try (BufferedWriter writer = Files.newBufferedWriter(
-				temporary,
-				StandardCharsets.UTF_8))
+			put(properties, PROTECTED_CONTROLLER, protectedControllerId);
+			put(properties, EVENT_ID, eventId);
+			put(properties, EVENT_CONTROLLER, eventControllerId);
+			properties.setProperty(EVENT_TIME, Long.toString(eventTime));
+			try (BufferedWriter writer = Files.newBufferedWriter(temporary, StandardCharsets.UTF_8))
 			{
 				properties.store(writer, "HapticScape protected-exit state");
 			}
 			try
 			{
-				Files.move(
-					temporary,
-					absolute,
-					StandardCopyOption.ATOMIC_MOVE,
-					StandardCopyOption.REPLACE_EXISTING
-				);
+				Files.move(temporary, absolute, StandardCopyOption.ATOMIC_MOVE,
+					StandardCopyOption.REPLACE_EXISTING);
 			}
 			catch (AtomicMoveNotSupportedException ignored)
 			{
@@ -149,5 +254,31 @@ public final class ProtectedExitAuditStore
 				}
 			}
 		}
+	}
+
+	private static void put(Properties properties, String key, String value)
+	{
+		if (value != null)
+		{
+			properties.setProperty(key, value);
+		}
+	}
+
+	public static final class UnauthorizedEndRecord
+	{
+		private final String eventId;
+		private final String controllerId;
+		private final long occurredAtMillis;
+
+		private UnauthorizedEndRecord(String eventId, String controllerId, long occurredAtMillis)
+		{
+			this.eventId = eventId;
+			this.controllerId = controllerId;
+			this.occurredAtMillis = occurredAtMillis;
+		}
+
+		public String getEventId() { return eventId; }
+		public String getControllerId() { return controllerId; }
+		public long getOccurredAtMillis() { return occurredAtMillis; }
 	}
 }

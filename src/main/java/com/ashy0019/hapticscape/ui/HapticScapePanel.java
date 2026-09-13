@@ -134,6 +134,7 @@ public final class HapticScapePanel extends JPanel
 	private final JLabel remoteBannerLabel = new JLabel();
 	private final JButton remoteEmergencyButton = new JButton("Emergency Off");
 	private final JButton remoteResumeButton = new JButton("Resume");
+	private final JButton remoteReconnectButton = new JButton("Reconnect");
 	private final JButton remoteEndButton = new JButton("End");
 	private final JCheckBox levelUpCheckBox = new JCheckBox("Level-ups");
 	private final JCheckBox milestoneCheckBox = new JCheckBox("Milestones");
@@ -161,6 +162,8 @@ public final class HapticScapePanel extends JPanel
 	private final RemoteSessionManager remoteSessionManager;
 	private final SettingsLockService settingsLockService;
 	private final SettingsLockDraft settingsLockDraft = new SettingsLockDraft();
+	private final Runnable settingsLockDraftViewportListener =
+		this::preserveSubjectLockDraftViewport;
 	private final LockableCheckBoxBinding levelUpLockBinding;
 	private final LockableCheckBoxBinding milestoneLockBinding;
 	private final LockableCheckBoxBinding level99LockBinding;
@@ -242,6 +245,10 @@ public final class HapticScapePanel extends JPanel
 			"pageScrollPane"
 		);
 		workspaceShell = new WorkspaceShell(this.pageScrollPane);
+		// Register before the lockable controls and Remote Play panel so the
+		// current viewport is anchored before their synchronous draft listeners
+		// can trigger a CardLayout/preferred-size reflow.
+		settingsLockDraft.addListener(settingsLockDraftViewportListener);
 		setLayout(new BorderLayout());
 		setBorder(BorderFactory.createEmptyBorder());
 
@@ -517,6 +524,7 @@ public final class HapticScapePanel extends JPanel
 		JPanel remoteBannerButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 3, 0));
 		remoteBannerButtons.add(remoteEmergencyButton);
 		remoteBannerButtons.add(remoteResumeButton);
+		remoteBannerButtons.add(remoteReconnectButton);
 		remoteBannerButtons.add(remoteEndButton);
 		remoteBanner.add(remoteBannerButtons, BorderLayout.SOUTH);
 		remoteBanner.setVisible(false);
@@ -573,6 +581,7 @@ public final class HapticScapePanel extends JPanel
 		});
 		remoteEmergencyButton.addActionListener(event -> remoteSessionManager.emergencyPause());
 		remoteResumeButton.addActionListener(event -> remoteSessionManager.resumeParticipant());
+		remoteReconnectButton.addActionListener(event -> remoteSessionManager.reconnect());
 		remoteEndButton.addActionListener(event -> remoteSessionManager.endSession());
 
 		JPanel primaryButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
@@ -1202,6 +1211,7 @@ public final class HapticScapePanel extends JPanel
 	public void close()
 	{
 		pageScrollRouting.close();
+		settingsLockDraft.removeListener(settingsLockDraftViewportListener);
 		remoteSessionManager.removeListener(this);
 		settingsLockService.removeListener(this);
 		remoteControlPanel.close();
@@ -1422,6 +1432,20 @@ public final class HapticScapePanel extends JPanel
 					"That key did not unlock these settings.",
 					"Settings remain locked",
 					JOptionPane.ERROR_MESSAGE
+				);
+			}
+			else
+			{
+				int remaining = settingsLockService.getSnapshot().getLockCount();
+				String message = remaining == 0
+					? "Settings lock released."
+					: "Unlock key accepted. " + remaining
+						+ " other lock profile(s) remain.";
+				JOptionPane.showMessageDialog(
+					this,
+					message,
+					"Settings unlock complete",
+					JOptionPane.INFORMATION_MESSAGE
 				);
 			}
 		}
@@ -1735,6 +1759,21 @@ public final class HapticScapePanel extends JPanel
 				|| lockState == RemoteLockState.DECLINED);
 	}
 
+	private void preserveSubjectLockDraftViewport()
+	{
+		if (!SwingUtilities.isEventDispatchThread()
+			|| !GAMEPLAY_WORKSPACE.equals(workspaceShell.getSelectedWorkspace())
+			|| !isSubjectWorkspaceActive())
+		{
+			return;
+		}
+
+		ViewportAnchor viewportAnchor = ViewportAnchor.capture(pageScrollPane);
+		viewportAnchor.holdThroughLayout(() ->
+			GAMEPLAY_WORKSPACE.equals(workspaceShell.getSelectedWorkspace())
+				&& isSubjectWorkspaceActive());
+	}
+
 	private boolean isGlobalFeedbackReadOnly()
 	{
 		return remoteReadOnly || feedbackBlockHeader.isEditLocked();
@@ -1924,10 +1963,13 @@ public final class HapticScapePanel extends JPanel
 				: "")
 			+ "</html>");
 		boolean participant = snapshot.getRole() == RemoteRole.PARTICIPANT && showBanner;
+		boolean reconnectAvailable = remoteSessionManager.canReconnect();
 		remoteEmergencyButton.setEnabled(participant && !emergencyPaused);
-		remoteResumeButton.setEnabled(participant && emergencyPaused);
+		remoteResumeButton.setEnabled(participant && emergencyPaused && !reconnectAvailable);
+		remoteReconnectButton.setEnabled(reconnectAvailable);
 		remoteEmergencyButton.setVisible(participant && !emergencyPaused);
 		remoteResumeButton.setVisible(participant && emergencyPaused);
+		remoteReconnectButton.setVisible(reconnectAvailable);
 		remoteEndButton.setEnabled(showBanner);
 		if (snapshot.getState() == RemoteSessionState.LOCAL)
 		{

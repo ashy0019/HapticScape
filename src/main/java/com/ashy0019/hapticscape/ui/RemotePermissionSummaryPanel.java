@@ -45,21 +45,9 @@ final class RemotePermissionSummaryPanel extends JPanel
 
 	private static String messageDestinations(RemotePermissions permissions)
 	{
-		boolean desktop = permissions.isDesktopNotificationsAllowed();
-		boolean chatbox = permissions.isLocalChatboxMessagesAllowed();
-		if (desktop && chatbox)
-		{
-			return "Desktop + local chatbox";
-		}
-		if (desktop)
-		{
-			return "Desktop only";
-		}
-		if (chatbox)
-		{
-			return "Local chatbox only";
-		}
-		return "Blocked";
+		return permissions.isDesktopNotificationsAllowed()
+			? "Desktop notifications"
+			: "Blocked";
 	}
 
 	private static String allowed(boolean value)

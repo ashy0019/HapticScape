@@ -138,11 +138,12 @@ try
         $launcherSource
     )
 
-    $iconPath = Join-Path $projectRoot 'hapticscape.ico'
-    if (Test-Path $iconPath -PathType Leaf)
+    $iconPath = Join-Path $projectRoot 'lumbridge.ico'
+    if (-not (Test-Path $iconPath -PathType Leaf))
     {
-        $cscArguments += "/win32icon:$iconPath"
+        throw "LumBridge icon was not found: $iconPath"
     }
+    $cscArguments += "/win32icon:$iconPath"
 
     Write-Host 'Creating LumBridge.exe...'
     & $cscPath @cscArguments

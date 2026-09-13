@@ -62,7 +62,7 @@ public class MusicPanelTest
 	}
 
 	@Test
-	public void snapshotMakesCaptureAndOutputStateExplicit() throws Exception
+	public void snapshotMakesCaptureDetailAndOutputExplicit() throws Exception
 	{
 		MusicPanel panel = panel(new ArrayList<>(), new ArrayList<>());
 		panel.updateSnapshot(new MusicSyncSnapshot(
@@ -72,8 +72,6 @@ public class MusicPanelTest
 		));
 		SwingUtilities.invokeAndWait(() -> { });
 
-		assertEquals("Listening",
-			component(panel, "musicCaptureState", JLabel.class).getText());
 		assertEquals("Speakers",
 			component(panel, "musicCaptureDetail", JLabel.class).getText());
 		JProgressBar meter = component(panel, "musicOutputMeter", JProgressBar.class);

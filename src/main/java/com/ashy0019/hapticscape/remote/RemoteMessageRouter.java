@@ -36,7 +36,7 @@ final class RemoteMessageRouter
 		switch (message.getType())
 		{
 			case HELLO:
-				lifecycle.handleHello();
+				lifecycle.handleHello(message.getPayload());
 				break;
 			case SETTINGS_SEED_REQUEST:
 				lifecycle.handleSettingsSeedRequest();
@@ -79,6 +79,9 @@ final class RemoteMessageRouter
 				break;
 			case LOCK_PROPOSAL:
 			case LOCK_ACCEPTED:
+			case LOCK_FINALIZE:
+			case LOCK_COMMITTED:
+			case LOCK_PROFILE_STATE:
 			case LOCK_DECLINED:
 			case LOCK_CANCEL_REQUEST:
 			case LOCK_CANCELLED:
@@ -93,8 +96,17 @@ final class RemoteMessageRouter
 			case SESSION_END:
 				lifecycle.handlePeerEnd();
 				break;
+			case HEARTBEAT:
+				lifecycle.handleHeartbeat();
+				break;
+			case HEARTBEAT_ACK:
+				lifecycle.handleHeartbeatAcknowledgement();
+				break;
 			case UNAUTHORIZED_END:
 				lifecycle.handleUnauthorizedEnd(message.getPayload());
+				break;
+			case UNAUTHORIZED_END_ACK:
+				lifecycle.handleUnauthorizedEndAcknowledgement(message.getPayload());
 				break;
 			default:
 				break;

@@ -29,6 +29,7 @@ final class RemoteSessionHeaderPanel extends JPanel
 	RemoteSessionHeaderPanel(
 		JButton emergencyButton,
 		JButton resumeButton,
+		JButton reconnectButton,
 		JButton endButton)
 	{
 		setName("remoteSessionHeader");
@@ -56,7 +57,8 @@ final class RemoteSessionHeaderPanel extends JPanel
 
 		addAction(emergencyButton, 0);
 		addAction(resumeButton, 1);
-		addAction(endButton, 2);
+		addAction(reconnectButton, 2);
+		addAction(endButton, 3);
 		addComponentListener(new ComponentAdapter()
 		{
 			@Override

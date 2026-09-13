@@ -18,6 +18,7 @@ import com.ashy0019.hapticscape.remote.DiscordCredentialStore;
 import com.ashy0019.hapticscape.remote.DiscordPairingBridge;
 import com.ashy0019.hapticscape.remote.EffectiveSettingsService;
 import com.ashy0019.hapticscape.remote.RemoteActivityPublisher;
+import com.ashy0019.hapticscape.remote.RemoteClientIdentity;
 import com.ashy0019.hapticscape.remote.RemotePairingService;
 import com.ashy0019.hapticscape.remote.RemoteSessionListener;
 import com.ashy0019.hapticscape.remote.RemoteSessionManager;
@@ -137,7 +138,8 @@ public final class HapticScapeRuntime implements AutoCloseable
                     dependencies.getSettings(),
                     dependencies.getSettingsStore()
                 ),
-                feedbackCoordinator.createRemoteActionExecutor()
+                feedbackCoordinator.createRemoteActionExecutor(),
+                new RemoteClientIdentity(dependencies.getStoragePaths()).getId()
             );
             remoteSessionManager.addListener(new RemoteSessionListener()
             {

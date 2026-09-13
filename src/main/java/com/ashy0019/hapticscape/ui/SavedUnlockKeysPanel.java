@@ -121,9 +121,18 @@ final class SavedUnlockKeysPanel extends JPanel
 					selected,
 					focused
 				);
-				setText(value instanceof SavedUnlockKey
-					? ((SavedUnlockKey) value).getLabel()
-					: "");
+				SavedUnlockKey entry = value instanceof SavedUnlockKey
+					? (SavedUnlockKey) value
+					: null;
+				setText(entry == null ? "" : entry.getLabel());
+				if (entry != null && entry.isProfileKey())
+				{
+					setFont(getFont().deriveFont(Font.BOLD));
+					if (!selected)
+					{
+						setForeground(HapticScapeTheme.ACCENT);
+					}
+				}
 				return this;
 			}
 		});
@@ -144,7 +153,7 @@ final class SavedUnlockKeysPanel extends JPanel
 		details.setLayout(new BoxLayout(details, BoxLayout.Y_AXIS));
 		details.setBorder(PanelUi.createSectionBorder("Details"));
 		detailLabel.setName("savedUnlockKeyLabel");
-		detailLabel.setFont(detailLabel.getFont().deriveFont(Font.BOLD));
+		detailLabel.setFont(detailLabel.getFont().deriveFont(Font.BOLD, 15f));
 		PanelUi.addPreferredHeightComponent(details, detailLabel);
 		PanelUi.addPreferredHeightComponent(details, createdLabel);
 		PanelUi.addPreferredHeightComponent(details, lastUsedLabel);
@@ -256,6 +265,11 @@ final class SavedUnlockKeysPanel extends JPanel
 		SavedUnlockKey selected = keyList.getSelectedValue();
 		boolean present = selected != null;
 		detailLabel.setPlainText(present ? selected.getLabel() : "No key selected");
+		detailLabel.setForeground(
+			present && selected.isProfileKey()
+				? HapticScapeTheme.ACCENT
+				: javax.swing.UIManager.getColor("Label.foreground")
+		);
 		createdLabel.setText(present
 			? "Created " + dateFormat.format(selected.getCreatedAt())
 			: "");

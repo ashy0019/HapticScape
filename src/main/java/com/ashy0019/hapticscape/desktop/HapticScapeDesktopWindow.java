@@ -44,6 +44,7 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 	static final int DEFAULT_WINDOW_HEIGHT = 900;
 	static final int MINIMUM_WINDOW_WIDTH = 480;
 	static final int MINIMUM_WINDOW_HEIGHT = 640;
+	static final int AUTHORIZED_UNLOCK_FLUSH_MILLIS = 250;
 	static final int UNAUTHORIZED_EXIT_FLUSH_MILLIS = 750;
 
 	private final HapticScapeRuntime runtime;
@@ -152,8 +153,7 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 		}
 		if (!settingsLockService.isLocked(SettingsLockCatalog.PROTECTED_EXIT))
 		{
-			protectedExitAudit.markAuthorizedEnd();
-			closeAction.run();
+			finishAuthorizedExit();
 			return;
 		}
 		if (protectedExitDialog != null && protectedExitDialog.isDisplayable())
@@ -173,22 +173,72 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 
 	private void authorizedExit()
 	{
-		protectedExitAudit.markAuthorizedEnd();
-		closeAction.run();
+		exitScheduled = true;
+		try
+		{
+			protectedExitAudit.markAuthorizedEnd();
+		}
+		finally
+		{
+			// The local lock is already durably removed. Keep the runtime alive
+			// briefly so the controller can receive LOCK_CANCELLED as well.
+			Timer flushTimer = new Timer(
+				AUTHORIZED_UNLOCK_FLUSH_MILLIS,
+				event -> closeAction.run()
+			);
+			flushTimer.setRepeats(false);
+			flushTimer.start();
+		}
+	}
+
+	private void finishAuthorizedExit()
+	{
+		exitScheduled = true;
+		try
+		{
+			protectedExitAudit.markAuthorizedEnd();
+		}
+		finally
+		{
+			closeAction.run();
+		}
 	}
 
 	private void unauthorizedExit()
 	{
 		exitScheduled = true;
-		protectedExitAudit.markUnauthorizedEnd();
-		runtime.stopAll();
+		ProtectedExitAuditStore.UnauthorizedEndRecord record;
+		try
+		{
+			record = protectedExitAudit.markUnauthorizedEnd(
+				runtime.getRemoteSessionManager().getPeerClientId().orElse(null)
+			);
+			runtime.stopAll();
+		}
+		catch (RuntimeException failure)
+		{
+			closeAction.run();
+			return;
+		}
 		// WebSocket.send confirms that the message was queued, not that OkHttp put
 		// it on the wire. Keep the runtime alive briefly so close() cannot tear the
 		// transport down before the controller receives the flag. The durable flag
 		// remains as a fallback if delivery still fails.
-		boolean queued = runtime.getRemoteSessionManager().reportUnauthorizedEnd(
-			"Unauthorized end"
-		);
+		boolean queued = false;
+		try
+		{
+			queued = record.getControllerId() != null
+				&& runtime.getRemoteSessionManager().reportUnauthorizedEnd(
+					record.getEventId(),
+					record.getControllerId(),
+					record.getOccurredAtMillis(),
+					"Unauthorized end"
+				);
+		}
+		catch (RuntimeException ignored)
+		{
+			// The durable event remains pending for the next matching session.
+		}
 		if (!queued)
 		{
 			closeAction.run();
@@ -237,6 +287,7 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 
 	void requestCloseFromTray()
 	{
+		restoreFromTray();
 		requestClose();
 	}
 

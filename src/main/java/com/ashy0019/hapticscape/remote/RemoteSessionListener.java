@@ -16,6 +16,11 @@ public interface RemoteSessionListener
 	{
 	}
 
+
+	default void onRemoteLockNamingRequired(String currentProfileName)
+	{
+	}
+
 	default void onRemotePermissionsChanged(RemotePermissions permissions)
 	{
 	}
@@ -29,6 +34,10 @@ public interface RemoteSessionListener
 	}
 
 	default void onUnauthorizedEnd(String reason)
+	{
+	}
+
+	default void onUnauthorizedEndAcknowledged(String eventId)
 	{
 	}
 }

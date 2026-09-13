@@ -55,6 +55,31 @@ final class SettingsLockDraft
 		return changed;
 	}
 
+
+	synchronized void replaceAll(Set<SettingsLockTarget> nextTargets)
+	{
+		Set<SettingsLockTarget> normalized = new LinkedHashSet<>();
+		for (SettingsLockTarget target : nextTargets)
+		{
+			Set<SettingsLockTarget> conflicts = new LinkedHashSet<>();
+			for (SettingsLockTarget existing : normalized)
+			{
+				if (SettingsLockCatalog.conflicts(existing, target))
+				{
+					conflicts.add(existing);
+				}
+			}
+			normalized.removeAll(conflicts);
+			normalized.add(target);
+		}
+		if (!targets.equals(normalized))
+		{
+			targets.clear();
+			targets.addAll(normalized);
+			publish();
+		}
+	}
+
 	synchronized boolean contains(SettingsLockTarget target)
 	{
 		return targets.contains(target);

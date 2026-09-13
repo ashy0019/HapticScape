@@ -187,7 +187,7 @@ public final class RemotePermissions
 	public static RemotePermissions defaults()
 	{
 		return new RemotePermissions(
-			true, true, false, true, true, false, false, false,
+			true, true, false, true, true, false, false, true,
 			60, 3_000, DEFAULT_LIVE_DURATION_MILLIS
 		);
 	}

@@ -7,11 +7,13 @@ import com.ashy0019.hapticscape.CustomPattern;
 import com.ashy0019.hapticscape.CustomPatternLibrary;
 import com.google.gson.Gson;
 import java.time.Clock;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
@@ -57,7 +59,7 @@ public class RemoteSessionManagerTest
 				participantLock,
 				relay))
 		{
-			List<RemoteSettingsSnapshot> controllerViews = new ArrayList<>();
+			List<RemoteSettingsSnapshot> controllerViews = new CopyOnWriteArrayList<>();
 			controller.addListener(new RecordingListener(controllerViews));
 			AtomicInteger controllerSessionEvents = new AtomicInteger();
 			controller.addListener(new RemoteSessionListener()
@@ -73,7 +75,8 @@ public class RemoteSessionManagerTest
 			);
 			participant.joinParticipant(invitation.encode());
 
-			assertEquals(RemoteSessionState.ACTIVE, controller.getSnapshot().getState());
+			awaitActive(controller, participant);
+			await(() -> !controllerViews.isEmpty());
 			assertEquals(47, last(controllerViews).getGlobalXpFeedbackSettings()
 				.getIntensityPercent());
 			assertEquals(47, participantEffective.current().getGlobalXpFeedbackSettings()
@@ -156,7 +159,272 @@ public class RemoteSessionManagerTest
 	}
 
 	@Test
-	public void participantApprovalPersistsLockAfterSession()
+	public void controllerTimesOutWhenEndFrameAndCloseCallbackAreBothLost() throws Exception
+	{
+		TestRelay relay = new TestRelay();
+		MutableConfig controllerConfig = new MutableConfig(20);
+		MutableConfig participantConfig = new MutableConfig(60);
+		try (RemoteSessionManager controller = new RemoteSessionManager(
+			new Gson(),
+			new MemoryStore(controllerConfig),
+			new EffectiveSettingsService(controllerConfig),
+			lockService("liveness-controller.json"),
+			relay);
+			RemoteSessionManager participant = new RemoteSessionManager(
+				new Gson(),
+				new MemoryStore(participantConfig),
+				new EffectiveSettingsService(participantConfig),
+				lockService("liveness-participant.json"),
+				relay))
+		{
+			RemoteInvitation invitation = controller.startController(
+				"wss://relay.example/relay"
+			);
+			participant.joinParticipant(invitation.encode());
+			awaitActive(controller, participant);
+
+			// Model the observed production failure: the relay accepts but loses
+			// SESSION_END, and removing the participant produces no peer callback.
+			relay.suppressFrom(RemoteRole.PARTICIPANT);
+			participant.endSession();
+			awaitState(controller, RemoteSessionState.DISCONNECTED, 6);
+		}
+	}
+
+	@Test
+	public void closingParticipantServiceExplicitlyEndsControllerSession()
+		throws Exception
+	{
+		TestRelay relay = new TestRelay();
+		MutableConfig controllerConfig = new MutableConfig(20);
+		MutableConfig participantConfig = new MutableConfig(60);
+		try (RemoteSessionManager controller = new RemoteSessionManager(
+			new Gson(),
+			new MemoryStore(controllerConfig),
+			new EffectiveSettingsService(controllerConfig),
+			lockService("service-close-controller.json"),
+			relay);
+			RemoteSessionManager participant = new RemoteSessionManager(
+				new Gson(),
+				new MemoryStore(participantConfig),
+				new EffectiveSettingsService(participantConfig),
+				lockService("service-close-participant.json"),
+				relay))
+		{
+			RemoteInvitation invitation = controller.startController(
+				"wss://relay.example/relay"
+			);
+			participant.joinParticipant(invitation.encode());
+			awaitActive(controller, participant);
+
+			participant.close();
+
+			awaitState(controller, RemoteSessionState.LOCAL, 2);
+			assertEquals(RemoteRole.NONE, controller.getSnapshot().getRole());
+		}
+	}
+
+	@Test
+	public void healthySessionRemainsActiveAcrossLivenessWindow() throws Exception
+	{
+		TestRelay relay = new TestRelay();
+		MutableConfig controllerConfig = new MutableConfig(20);
+		MutableConfig participantConfig = new MutableConfig(60);
+		try (RemoteSessionManager controller = new RemoteSessionManager(
+			new Gson(),
+			new MemoryStore(controllerConfig),
+			new EffectiveSettingsService(controllerConfig),
+			lockService("healthy-controller.json"),
+			relay);
+			RemoteSessionManager participant = new RemoteSessionManager(
+				new Gson(),
+				new MemoryStore(participantConfig),
+				new EffectiveSettingsService(participantConfig),
+				lockService("healthy-participant.json"),
+				relay))
+		{
+			RemoteInvitation invitation = controller.startController(
+				"wss://relay.example/relay"
+			);
+			participant.joinParticipant(invitation.encode());
+			awaitActive(controller, participant);
+			Thread.sleep(RemoteSessionManager.PEER_LIVENESS_TIMEOUT_MILLIS + 1_000);
+
+			assertEquals(RemoteSessionState.ACTIVE, controller.getSnapshot().getState());
+			assertEquals(RemoteSessionState.ACTIVE, participant.getSnapshot().getState());
+		}
+	}
+
+	@Test
+	public void participantEntersEmergencyPauseWhenControllerSilentlyDisappears()
+		throws Exception
+	{
+		TestRelay relay = new TestRelay();
+		MutableConfig controllerConfig = new MutableConfig(20);
+		MutableConfig participantConfig = new MutableConfig(60);
+		try (RemoteSessionManager controller = new RemoteSessionManager(
+			new Gson(),
+			new MemoryStore(controllerConfig),
+			new EffectiveSettingsService(controllerConfig),
+			lockService("controller-loss-controller.json"),
+			relay);
+			RemoteSessionManager participant = new RemoteSessionManager(
+				new Gson(),
+				new MemoryStore(participantConfig),
+				new EffectiveSettingsService(participantConfig),
+				lockService("controller-loss-participant.json"),
+				relay))
+		{
+			RemoteInvitation invitation = controller.startController(
+				"wss://relay.example/relay"
+			);
+			participant.joinParticipant(invitation.encode());
+			awaitActive(controller, participant);
+			relay.suppressFrom(RemoteRole.CONTROLLER);
+			controller.endSession();
+
+			awaitState(participant, RemoteSessionState.EMERGENCY_PAUSED, 6);
+		}
+	}
+
+	@Test
+	public void droppedTransportWaitsForManualReconnectAndRequiresParticipantResume()
+		throws Exception
+	{
+		TestRelay relay = new TestRelay();
+		MutableConfig controllerConfig = new MutableConfig(20);
+		MutableConfig participantConfig = new MutableConfig(60);
+		try (RemoteSessionManager controller = new RemoteSessionManager(
+			new Gson(),
+			new MemoryStore(controllerConfig),
+			new EffectiveSettingsService(controllerConfig),
+			lockService("reconnect-controller.json"),
+			relay);
+			RemoteSessionManager participant = new RemoteSessionManager(
+				new Gson(),
+				new MemoryStore(participantConfig),
+				new EffectiveSettingsService(participantConfig),
+				lockService("reconnect-participant.json"),
+				relay))
+		{
+			RemoteInvitation invitation = controller.startController(
+				"wss://relay.example/relay"
+			);
+			participant.joinParticipant(invitation.encode());
+			awaitActive(controller, participant);
+
+			relay.disconnectAll("test network drop");
+
+			assertEquals(RemoteRole.CONTROLLER, controller.getSnapshot().getRole());
+			assertEquals(RemoteSessionState.DISCONNECTED, controller.getSnapshot().getState());
+			assertEquals(RemoteRole.PARTICIPANT, participant.getSnapshot().getRole());
+			assertEquals(
+				RemoteSessionState.EMERGENCY_PAUSED,
+				participant.getSnapshot().getState()
+			);
+			assertTrue(controller.canReconnect());
+			assertTrue(participant.canReconnect());
+
+			Thread.sleep(1_000);
+			assertEquals(0, relay.connectedCount());
+			assertEquals(
+				RemoteSessionState.DISCONNECTED,
+				controller.getSnapshot().getState()
+			);
+			assertEquals(
+				RemoteSessionState.EMERGENCY_PAUSED,
+				participant.getSnapshot().getState()
+			);
+
+			assertTrue(controller.reconnect());
+			assertFalse(controller.canReconnect());
+			assertTrue(participant.canReconnect());
+			assertTrue(participant.reconnect());
+			awaitState(controller, RemoteSessionState.PEER_EMERGENCY_PAUSED, 6);
+			assertEquals(
+				RemoteSessionState.EMERGENCY_PAUSED,
+				participant.getSnapshot().getState()
+			);
+			relay.repeatLastDisconnectCallbacks("late callback from old transport");
+			assertEquals(
+				RemoteSessionState.PEER_EMERGENCY_PAUSED,
+				controller.getSnapshot().getState()
+			);
+			assertEquals(
+				RemoteSessionState.EMERGENCY_PAUSED,
+				participant.getSnapshot().getState()
+			);
+
+			participant.resumeParticipant();
+			awaitState(controller, RemoteSessionState.ACTIVE, 2);
+			awaitState(participant, RemoteSessionState.ACTIVE, 2);
+		}
+	}
+
+	@Test
+	public void unauthorizedEndIsControllerBoundAcknowledgedAndDeduplicated()
+		throws Exception
+	{
+		TestRelay relay = new TestRelay();
+		try (RemoteSessionManager controller = new RemoteSessionManager(
+			new Gson(),
+			new MemoryStore(new MutableConfig(20)),
+			new EffectiveSettingsService(new MutableConfig(20)),
+			lockService("audit-controller.json"),
+			relay);
+			RemoteSessionManager participant = new RemoteSessionManager(
+				new Gson(),
+				new MemoryStore(new MutableConfig(60)),
+				new EffectiveSettingsService(new MutableConfig(60)),
+				lockService("audit-participant.json"),
+				relay))
+		{
+			List<String> received = new CopyOnWriteArrayList<>();
+			List<String> acknowledged = new CopyOnWriteArrayList<>();
+			controller.addListener(new RemoteSessionListener()
+			{
+				@Override
+				public void onRemoteSessionChanged(RemoteSessionSnapshot snapshot) { }
+
+				@Override
+				public void onUnauthorizedEnd(String reason) { received.add(reason); }
+			});
+			participant.addListener(new RemoteSessionListener()
+			{
+				@Override
+				public void onRemoteSessionChanged(RemoteSessionSnapshot snapshot) { }
+
+				@Override
+				public void onUnauthorizedEndAcknowledged(String eventId)
+				{
+					acknowledged.add(eventId);
+				}
+			});
+
+			RemoteInvitation invitation = controller.startController("wss://relay.example/relay");
+			participant.joinParticipant(invitation.encode());
+			awaitActive(controller, participant);
+			await(() -> participant.getPeerClientId().isPresent());
+			String controllerId = participant.getPeerClientId().orElseThrow(AssertionError::new);
+			String eventId = java.util.UUID.randomUUID().toString();
+
+			assertFalse(participant.reportUnauthorizedEnd(
+				eventId, java.util.UUID.randomUUID().toString(), 1234L, "wrong target"));
+			assertTrue(participant.reportUnauthorizedEnd(
+				eventId, controllerId, 1234L, "Unauthorized end"));
+			assertTrue(participant.reportUnauthorizedEnd(
+				eventId, controllerId, 1234L, "Unauthorized end"));
+
+			await(() -> received.size() == 1 && acknowledged.size() == 2);
+			assertEquals(Collections.singletonList("Unauthorized end"), received);
+			assertEquals(2, acknowledged.size());
+			assertEquals(eventId, acknowledged.get(0));
+		}
+	}
+
+	@Test
+	public void participantApprovalPersistsLockAndAllowsFreshSession()
+		throws Exception
 	{
 		Gson gson = new Gson();
 		TestRelay relay = new TestRelay();
@@ -182,30 +450,29 @@ public class RemoteSessionManagerTest
 				"wss://relay.example/relay"
 			);
 			participant.joinParticipant(invitation.encode());
+			awaitActive(controller, participant);
 			controller.proposeSettingsLock(password);
 
-			assertEquals(
-				RemoteLockState.APPROVAL_REQUIRED,
-				participant.getLockSnapshot().getState()
-			);
+			await(() -> participant.getLockSnapshot().getState()
+				== RemoteLockState.APPROVAL_REQUIRED);
 			assertFalse(participantLock.isLocked());
 			participant.acceptPendingSettingsLock();
 
-			assertEquals(RemoteLockState.ARMED, controller.getLockSnapshot().getState());
-			assertEquals(RemoteLockState.ARMED, participant.getLockSnapshot().getState());
-			assertTrue(participantLock.isLocked());
+			await(() -> controller.getLockSnapshot().getState() == RemoteLockState.ARMED
+				&& participant.getLockSnapshot().getState() == RemoteLockState.ARMED
+				&& participantLock.isLocked());
 			participant.endSession();
 			assertTrue(participantLock.isLocked());
-			boolean rejoinRejected = false;
-			try
-			{
-				participant.joinParticipant(invitation.encode());
-			}
-			catch (IllegalStateException expected)
-			{
-				rejoinRejected = true;
-			}
-			assertTrue(rejoinRejected);
+
+			RemoteInvitation reconnect = controller.startController(
+				"wss://relay.example/relay"
+			);
+			participant.joinParticipant(reconnect.encode());
+			awaitActive(controller, participant);
+			assertTrue(participantLock.isLocked());
+			assertEquals(RemoteSessionState.ACTIVE, participant.getSnapshot().getState());
+			participant.endSession();
+
 			assertFalse(participantLock.unlock("wrong password".toCharArray()));
 			assertTrue(participantLock.isLocked());
 			assertTrue(participantLock.unlock(password));
@@ -220,6 +487,7 @@ public class RemoteSessionManagerTest
 
 	@Test
 	public void targetedLockProposalPreservesExactTargetAcrossRelay()
+		throws Exception
 	{
 		Gson gson = new Gson();
 		TestRelay relay = new TestRelay();
@@ -244,6 +512,7 @@ public class RemoteSessionManagerTest
 				"wss://relay.example/relay"
 			);
 			participant.joinParticipant(invitation.encode());
+			awaitActive(controller, participant);
 			controller.proposeSettingsLock(
 				password,
 				Collections.singleton(SettingsLockCatalog.skillClicks(
@@ -251,16 +520,21 @@ public class RemoteSessionManagerTest
 				))
 			);
 
-			assertEquals(
-				Collections.singleton(SettingsLockCatalog.skillClicks(
-					"fishing"
-				)),
-				participant.getLockSnapshot().getTargets()
-			);
+			await(() -> Collections.singleton(SettingsLockCatalog.skillClicks(
+				"fishing"
+			)).equals(participant.getLockSnapshot().getTargets()));
 			participant.acceptPendingSettingsLock();
-			assertTrue(participantLock.isLocked(
+			await(() -> controller.getLockSnapshot().getState()
+				== RemoteLockState.AWAITING_FINALIZE);
+			assertFalse(participantLock.isLocked(
 				SettingsLockCatalog.skillClicks("fishing")
 			));
+			controller.finalizePendingSettingsLock("Fishing clicks");
+			await(() -> participantLock.isLocked(
+				SettingsLockCatalog.skillClicks("fishing")
+			));
+			await(() -> "Fishing clicks".equals(
+				controller.getLockSnapshot().getProfileName()));
 			assertFalse(participantLock.isLocked(
 				SettingsLockCatalog.skillHaptics("fishing")
 			));
@@ -274,6 +548,7 @@ public class RemoteSessionManagerTest
 
 	@Test
 	public void controllerCanCancelAnAcceptedSessionLock()
+		throws Exception
 	{
 		Gson gson = new Gson();
 		TestRelay relay = new TestRelay();
@@ -297,20 +572,24 @@ public class RemoteSessionManagerTest
 				"wss://relay.example/relay"
 			);
 			participant.joinParticipant(invitation.encode());
+			awaitActive(controller, participant);
 			controller.proposeSettingsLock("cancel this password".toCharArray());
+			await(() -> participant.getLockSnapshot().getState()
+				== RemoteLockState.APPROVAL_REQUIRED);
 			participant.acceptPendingSettingsLock();
-			assertTrue(participantLock.isLocked());
+			await(participantLock::isLocked);
 
 			controller.cancelSettingsLock();
 
-			assertFalse(participantLock.isLocked());
-			assertEquals(RemoteLockState.INACTIVE, controller.getLockSnapshot().getState());
-			assertEquals(RemoteLockState.INACTIVE, participant.getLockSnapshot().getState());
+			await(() -> !participantLock.isLocked()
+				&& controller.getLockSnapshot().getState() == RemoteLockState.INACTIVE
+				&& participant.getLockSnapshot().getState() == RemoteLockState.INACTIVE);
 		}
 	}
 
 	@Test
 	public void controllerVaultSavesOnlyAcceptedKeysAndRemovesCancelledLocks()
+		throws Exception
 	{
 		Gson gson = new Gson();
 		TestRelay relay = new TestRelay();
@@ -343,6 +622,7 @@ public class RemoteSessionManagerTest
 				"wss://relay.example/relay"
 			);
 			participant.joinParticipant(invitation.encode());
+			awaitActive(controller, participant);
 
 			controller.proposeSettingsLock(declinedKey);
 			assertTrue(vault.list().isEmpty());
@@ -355,6 +635,7 @@ public class RemoteSessionManagerTest
 			controller.proposeSettingsLock(acceptedKey);
 			assertTrue(vault.list().isEmpty());
 			participant.acceptPendingSettingsLock();
+			await(() -> vault.list().size() == 1);
 			assertEquals(1, vault.list().size());
 			assertEquals(1, protector.getProtectCount());
 			char[] revealed = controller.revealSavedUnlockKey(vault.list().get(0).getId());
@@ -368,12 +649,155 @@ public class RemoteSessionManagerTest
 			}
 
 			controller.cancelSettingsLock();
+			await(() -> vault.list().isEmpty());
 			assertTrue(vault.list().isEmpty());
 		}
 		finally
 		{
 			java.util.Arrays.fill(declinedKey, '\0');
 			java.util.Arrays.fill(acceptedKey, '\0');
+		}
+	}
+
+	@Test
+	public void acceptedProfileUpdateDoesNotReplaceOldProfileUntilNamed()
+		throws Exception
+	{
+		Gson gson = new Gson();
+		TestRelay relay = new TestRelay();
+		MutableConfig controllerConfig = new MutableConfig(20);
+		MutableConfig participantConfig = new MutableConfig(60);
+		SettingsLockService participantLock = lockService("profile-pending-participant.json");
+		char[] firstKey = "ABCD-EFGH-JKLM-NPQR-STUV".toCharArray();
+		char[] secondKey = "WXYZ-2345-6789-BCDF-GHJK".toCharArray();
+		try (RemoteSessionManager controller = new RemoteSessionManager(
+			gson,
+			new MemoryStore(controllerConfig),
+			new EffectiveSettingsService(controllerConfig),
+			lockService("profile-pending-controller.json"),
+			relay);
+			RemoteSessionManager participant = new RemoteSessionManager(
+				gson,
+				new MemoryStore(participantConfig),
+				new EffectiveSettingsService(participantConfig),
+				participantLock,
+				relay))
+		{
+			RemoteInvitation invitation = controller.startController("wss://relay.example/relay");
+			participant.joinParticipant(invitation.encode());
+			awaitActive(controller, participant);
+			controller.proposeSettingsLock(
+				firstKey,
+				Collections.singleton(SettingsLockCatalog.LEVEL_UP_HAPTICS)
+			);
+			await(() -> participant.getLockSnapshot().getState()
+				== RemoteLockState.APPROVAL_REQUIRED);
+			participant.acceptPendingSettingsLock();
+			await(() -> controller.getLockSnapshot().getState()
+				== RemoteLockState.AWAITING_FINALIZE);
+			controller.finalizePendingSettingsLock("Bossing");
+			await(() -> participantLock.isLocked(SettingsLockCatalog.LEVEL_UP_HAPTICS));
+
+			participant.endSession();
+			RemoteInvitation reconnect = controller.startController("wss://relay.example/relay");
+			participant.joinParticipant(reconnect.encode());
+			awaitActive(controller, participant);
+			controller.proposeSettingsLock(
+				secondKey,
+				Collections.singleton(SettingsLockCatalog.MILESTONE_HAPTICS)
+			);
+			await(() -> participant.getLockSnapshot().getState()
+				== RemoteLockState.APPROVAL_REQUIRED);
+			participant.acceptPendingSettingsLock();
+			await(() -> controller.getLockSnapshot().getState()
+				== RemoteLockState.AWAITING_FINALIZE);
+
+			participant.endSession();
+			assertTrue(participantLock.isLocked(SettingsLockCatalog.LEVEL_UP_HAPTICS));
+			assertFalse(participantLock.isLocked(SettingsLockCatalog.MILESTONE_HAPTICS));
+			assertFalse(participantLock.unlock(secondKey));
+			assertTrue(participantLock.unlock(firstKey));
+		}
+		finally
+		{
+			java.util.Arrays.fill(firstKey, '\0');
+			java.util.Arrays.fill(secondKey, '\0');
+		}
+	}
+
+	@Test
+	public void reconnectingControllerCanAtomicallyReplaceItsNamedProfile()
+		throws Exception
+	{
+		Gson gson = new Gson();
+		TestRelay relay = new TestRelay();
+		MutableConfig controllerConfig = new MutableConfig(20);
+		MutableConfig participantConfig = new MutableConfig(60);
+		SettingsLockService participantLock = lockService("profile-replace-participant.json");
+		char[] firstKey = "ABCD-EFGH-JKLM-NPQR-STUV".toCharArray();
+		char[] secondKey = "WXYZ-2345-6789-BCDF-GHJK".toCharArray();
+		try (RemoteSessionManager controller = new RemoteSessionManager(
+			gson,
+			new MemoryStore(controllerConfig),
+			new EffectiveSettingsService(controllerConfig),
+			lockService("profile-replace-controller.json"),
+			relay);
+			RemoteSessionManager participant = new RemoteSessionManager(
+				gson,
+				new MemoryStore(participantConfig),
+				new EffectiveSettingsService(participantConfig),
+				participantLock,
+				relay))
+		{
+			RemoteInvitation invitation = controller.startController("wss://relay.example/relay");
+			participant.joinParticipant(invitation.encode());
+			awaitActive(controller, participant);
+			controller.proposeSettingsLock(
+				firstKey,
+				Collections.singleton(SettingsLockCatalog.LEVEL_UP_HAPTICS)
+			);
+			await(() -> participant.getLockSnapshot().getState()
+				== RemoteLockState.APPROVAL_REQUIRED);
+			participant.acceptPendingSettingsLock();
+			await(() -> controller.getLockSnapshot().getState()
+				== RemoteLockState.AWAITING_FINALIZE);
+			controller.finalizePendingSettingsLock("Bossing");
+			await(() -> participantLock.isLocked(SettingsLockCatalog.LEVEL_UP_HAPTICS)
+				&& "Bossing".equals(controller.getLockSnapshot().getProfileName()));
+
+			participant.endSession();
+			RemoteInvitation reconnect = controller.startController("wss://relay.example/relay");
+			participant.joinParticipant(reconnect.encode());
+			awaitActive(controller, participant);
+			assertEquals("Bossing", controller.getLockSnapshot().getProfileName());
+			assertTrue(controller.getLockSnapshot().getTargets().contains(
+				SettingsLockCatalog.LEVEL_UP_HAPTICS
+			));
+
+			controller.proposeSettingsLock(
+				secondKey,
+				Collections.singleton(SettingsLockCatalog.MILESTONE_HAPTICS)
+			);
+			await(() -> participant.getLockSnapshot().getState()
+				== RemoteLockState.APPROVAL_REQUIRED);
+			participant.acceptPendingSettingsLock();
+			await(() -> controller.getLockSnapshot().getState()
+				== RemoteLockState.AWAITING_FINALIZE);
+			assertTrue("Old profile stays active until finalize",
+				participantLock.isLocked(SettingsLockCatalog.LEVEL_UP_HAPTICS));
+			assertFalse(participantLock.isLocked(SettingsLockCatalog.MILESTONE_HAPTICS));
+
+			controller.finalizePendingSettingsLock("Skilling");
+			await(() -> !participantLock.isLocked(SettingsLockCatalog.LEVEL_UP_HAPTICS)
+				&& participantLock.isLocked(SettingsLockCatalog.MILESTONE_HAPTICS)
+				&& "Skilling".equals(controller.getLockSnapshot().getProfileName()));
+			assertFalse(participantLock.unlock(firstKey));
+			assertTrue(participantLock.unlock(secondKey));
+		}
+		finally
+		{
+			java.util.Arrays.fill(firstKey, '\0');
+			java.util.Arrays.fill(secondKey, '\0');
 		}
 	}
 
@@ -390,6 +814,14 @@ public class RemoteSessionManagerTest
 		return settings.get(settings.size() - 1);
 	}
 
+	private static void awaitActive(
+		RemoteSessionManager controller,
+		RemoteSessionManager participant) throws Exception
+	{
+		await(() -> controller.getSnapshot().getState() == RemoteSessionState.ACTIVE
+			&& participant.getSnapshot().getState() == RemoteSessionState.ACTIVE);
+	}
+
 	private static void await(BooleanSupplier condition) throws Exception
 	{
 		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
@@ -397,7 +829,21 @@ public class RemoteSessionManagerTest
 		{
 			Thread.sleep(10);
 		}
-		assertTrue("Timed out waiting for remote settings", condition.getAsBoolean());
+		assertTrue("Timed out waiting for remote state", condition.getAsBoolean());
+	}
+
+	private static void awaitState(
+		RemoteSessionManager manager,
+		RemoteSessionState expected,
+		int timeoutSeconds) throws Exception
+	{
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds);
+		while (manager.getSnapshot().getState() != expected
+			&& System.nanoTime() < deadline)
+		{
+			Thread.sleep(20);
+		}
+		assertEquals(expected, manager.getSnapshot().getState());
 	}
 
 	private static final class RecordingListener implements RemoteSessionListener
@@ -448,7 +894,7 @@ public class RemoteSessionManagerTest
 	private static final class MemoryStore implements RemoteSettingsStore
 	{
 		private final MutableConfig config;
-		private int saveCount;
+		private volatile int saveCount;
 
 		private MemoryStore(MutableConfig config)
 		{
@@ -481,7 +927,11 @@ public class RemoteSessionManagerTest
 	{
 		private final Map<RemoteRole, TestConnection> peers =
 			new EnumMap<>(RemoteRole.class);
+		private final ArrayDeque<Delivery> deliveries = new ArrayDeque<>();
 		private RemoteRole dropNextRole = RemoteRole.NONE;
+		private RemoteRole suppressedRole = RemoteRole.NONE;
+		private List<TestConnection> lastDisconnected = Collections.emptyList();
+		private boolean delivering;
 
 		@Override
 		public synchronized RemoteTransport create(RemoteTransport.Listener listener)
@@ -489,33 +939,87 @@ public class RemoteSessionManagerTest
 			return new TestConnection(this, listener);
 		}
 
-		private synchronized void connect(TestConnection connection, RemoteRole role)
+		private void connect(TestConnection connection, RemoteRole role)
 		{
-			connection.role = role;
-			connection.open = true;
-			peers.put(role, connection);
+			synchronized (this)
+			{
+				connection.role = role;
+				connection.open = true;
+				peers.put(role, connection);
+			}
 			connection.listener.onOpen();
 		}
 
-		private synchronized boolean send(TestConnection sender, String message)
+		private boolean send(TestConnection sender, String message)
 		{
-			if (!sender.open)
+			boolean shouldDrain;
+			synchronized (this)
 			{
-				return false;
-			}
-			if (sender.role == dropNextRole)
-			{
-				dropNextRole = RemoteRole.NONE;
-				return true;
-			}
-			for (TestConnection peer : new ArrayList<>(peers.values()))
-			{
-				if (peer != sender && peer.open)
+				if (!sender.open)
 				{
-					peer.listener.onMessage(message);
+					return false;
+				}
+				if (sender.role == dropNextRole)
+				{
+					dropNextRole = RemoteRole.NONE;
+					return true;
+				}
+				if (sender.role == suppressedRole)
+				{
+					return true;
+				}
+				for (TestConnection peer : peers.values())
+				{
+					if (peer != sender && peer.open)
+					{
+						deliveries.addLast(new Delivery(peer, message));
+					}
+				}
+				shouldDrain = !delivering;
+				if (shouldDrain)
+				{
+					delivering = true;
 				}
 			}
+			if (shouldDrain)
+			{
+				drainDeliveries();
+			}
 			return true;
+		}
+
+		private void drainDeliveries()
+		{
+			while (true)
+			{
+				Delivery delivery;
+				synchronized (this)
+				{
+					delivery = deliveries.pollFirst();
+					if (delivery == null)
+					{
+						delivering = false;
+						return;
+					}
+					if (!delivery.recipient.open)
+					{
+						continue;
+					}
+				}
+				try
+				{
+					delivery.recipient.listener.onMessage(delivery.message);
+				}
+				catch (RuntimeException | Error failure)
+				{
+					synchronized (this)
+					{
+						deliveries.clear();
+						delivering = false;
+					}
+					throw failure;
+				}
+			}
 		}
 
 		private synchronized void dropNextFrom(RemoteRole role)
@@ -523,10 +1027,66 @@ public class RemoteSessionManagerTest
 			dropNextRole = role;
 		}
 
+		private synchronized void suppressFrom(RemoteRole role)
+		{
+			suppressedRole = role;
+		}
+
+		private synchronized int connectedCount()
+		{
+			return peers.size();
+		}
+
+		private void disconnectAll(String reason)
+		{
+			List<TestConnection> disconnected;
+			synchronized (this)
+			{
+				disconnected = new ArrayList<>(peers.values());
+				lastDisconnected = new ArrayList<>(disconnected);
+				peers.clear();
+				for (TestConnection connection : disconnected)
+				{
+					connection.open = false;
+				}
+				deliveries.clear();
+			}
+			for (TestConnection connection : disconnected)
+			{
+				connection.listener.onClosed(reason);
+			}
+		}
+
+		private void repeatLastDisconnectCallbacks(String reason)
+		{
+			List<TestConnection> disconnected;
+			synchronized (this)
+			{
+				disconnected = new ArrayList<>(lastDisconnected);
+			}
+			for (TestConnection connection : disconnected)
+			{
+				connection.listener.onClosed(reason);
+			}
+		}
+
 		private synchronized void close(TestConnection connection)
 		{
 			connection.open = false;
 			peers.remove(connection.role, connection);
+			deliveries.removeIf(delivery -> delivery.recipient == connection);
+		}
+
+		private static final class Delivery
+		{
+			private final TestConnection recipient;
+			private final String message;
+
+			private Delivery(TestConnection recipient, String message)
+			{
+				this.recipient = recipient;
+				this.message = message;
+			}
 		}
 	}
 
@@ -535,7 +1095,7 @@ public class RemoteSessionManagerTest
 		private final TestRelay relay;
 		private final Listener listener;
 		private RemoteRole role = RemoteRole.NONE;
-		private boolean open;
+		private volatile boolean open;
 
 		private TestConnection(TestRelay relay, Listener listener)
 		{
@@ -544,7 +1104,11 @@ public class RemoteSessionManagerTest
 		}
 
 		@Override
-		public void connect(String relayUrl, String roomId, RemoteRole role)
+		public void connect(
+			String relayUrl,
+			String roomId,
+			RemoteRole role,
+			String reconnectSlot)
 		{
 			relay.connect(this, role);
 		}

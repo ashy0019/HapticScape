@@ -35,13 +35,12 @@ public class RemoteActivityCoordinatorTest
 		assertFalse(coordinator.publish(
 			RemoteRole.PARTICIPANT,
 			RemoteSessionState.ACTIVE,
-			RemotePermissions.defaults(),
+			RemotePermissions.defaults().withActivitySharingAllowed(false),
 			event
 		));
 		assertTrue(sent.isEmpty());
 
-		RemotePermissions allowed = RemotePermissions.defaults()
-			.withActivitySharingAllowed(true);
+		RemotePermissions allowed = RemotePermissions.defaults();
 		assertTrue(coordinator.publish(
 			RemoteRole.PARTICIPANT,
 			RemoteSessionState.ACTIVE,

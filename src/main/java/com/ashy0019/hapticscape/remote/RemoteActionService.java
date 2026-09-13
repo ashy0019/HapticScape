@@ -171,9 +171,7 @@ final class RemoteActionService
 	{
 		boolean desktop = action.isDesktopNotification()
 			&& permissions.isDesktopNotificationsAllowed();
-		boolean chatbox = action.isLocalChatboxMessage()
-			&& permissions.isLocalChatboxMessagesAllowed();
-		if (!desktop && !chatbox)
+		if (!desktop)
 		{
 			return record(ack(action, RemoteActionResult.DENIED, "Remote messages not allowed", 0, 0));
 		}
@@ -182,9 +180,9 @@ final class RemoteActionService
 		{
 			return record(ack(action, RemoteActionResult.INVALID, "Message was empty after sanitizing", 0, 0));
 		}
-		executor.showMessage(message, desktop, chatbox);
+		executor.showMessage(message, true, false);
 		boolean limited = desktop != action.isDesktopNotification()
-			|| chatbox != action.isLocalChatboxMessage();
+			|| action.isLocalChatboxMessage();
 		return record(ack(
 			action,
 			limited ? RemoteActionResult.LIMITED : RemoteActionResult.EXECUTED,
