@@ -37,7 +37,7 @@ public class RemoteActionProtocolTest
 		TestRelay relay = new TestRelay();
 		RecordingExecutor participantExecutor = new RecordingExecutor();
 		RemotePermissions participantPermissions = new RemotePermissions(
-			false, true, true, false, true, 42, 900
+			false, true, true, true, true, 42, 900
 		);
 		List<RemoteActionAcknowledgement> acknowledgements =
 			new CopyOnWriteArrayList<>();
@@ -94,8 +94,8 @@ public class RemoteActionProtocolTest
 			await(() -> acknowledgements.size() == 2
 				&& "local".equals(participantExecutor.message));
 			assertEquals("local", participantExecutor.message);
-			assertFalse(participantExecutor.desktop);
-			assertTrue(participantExecutor.chatbox);
+			assertTrue(participantExecutor.desktop);
+			assertFalse(participantExecutor.chatbox);
 			assertEquals(2, acknowledgements.size());
 			assertEquals(RemoteActionResult.LIMITED, acknowledgements.get(1).getResult());
 			assertFalse(relay.containsPlaintext("REMOTE_ACTION"));

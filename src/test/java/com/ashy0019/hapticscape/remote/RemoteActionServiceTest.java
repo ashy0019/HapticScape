@@ -105,12 +105,12 @@ public class RemoteActionServiceTest
 	}
 
 	@Test
-	public void messageIsSanitizedAndRestrictedToAllowedDestinations()
+	public void messageIsSanitizedAndLegacyChatboxDestinationIsRetired()
 	{
 		RecordingExecutor executor = new RecordingExecutor();
 		RemoteActionService service = service(executor);
 		RemotePermissions permissions = new RemotePermissions(
-			true, true, true, false, true, 60, 3_000
+			true, true, true, true, true, 60, 3_000
 		);
 		RemoteAction action = RemoteAction.message(
 			"  <col=ff0000>Hello</col>\n\u202eHTTPS://example.com  ",
@@ -126,9 +126,28 @@ public class RemoteActionServiceTest
 		);
 
 		assertEquals(RemoteActionResult.LIMITED, acknowledgement.getResult());
-		assertFalse(executor.desktop);
-		assertTrue(executor.chatbox);
+		assertTrue(executor.desktop);
+		assertFalse(executor.chatbox);
 		assertEquals("Hello https[:]//example.com", executor.message);
+	}
+
+	@Test
+	public void legacyChatboxOnlyMessageIsDenied()
+	{
+		RecordingExecutor executor = new RecordingExecutor();
+		RemoteActionService service = service(executor);
+		RemotePermissions legacyPermissions = new RemotePermissions(
+			true, true, true, false, true, 60, 3_000
+		);
+
+		RemoteActionAcknowledgement acknowledgement = service.process(
+			RemoteAction.message("Legacy destination", false, true, fixedClock()),
+			legacyPermissions,
+			false
+		);
+
+		assertEquals(RemoteActionResult.DENIED, acknowledgement.getResult());
+		assertEquals(null, executor.message);
 	}
 
 	@Test

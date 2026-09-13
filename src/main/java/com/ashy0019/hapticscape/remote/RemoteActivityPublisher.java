@@ -116,8 +116,8 @@ public final class RemoteActivityPublisher implements GameplayEventSink
 		{
 			publish(
 				RemoteActivityType.INVENTORY_FULL,
-				"Inventory",
-				event.getFilledSlots() + " / " + event.getCapacity() + " slots"
+				"Inventory Full",
+				""
 			);
 		}
 		inventoryFull = nowFull;

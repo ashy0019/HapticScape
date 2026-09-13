@@ -22,7 +22,6 @@ final class RemotePermissionsPanel extends JPanel
 	private final JCheckBox liveHaptics = new JCheckBox("Live Forge control");
 	private final JCheckBox clicks = new JCheckBox("Click sounds");
 	private final JCheckBox notifications = new JCheckBox("Desktop notifications");
-	private final JCheckBox chatbox = new JCheckBox("Local chatbox notices");
 	private final JCheckBox protectedExit = new JCheckBox("Protected startup and exit requests");
 	private final JCheckBox activitySharing = new JCheckBox("Share live gameplay activity");
 	private final JSlider maximumIntensity = new JSlider(0, 100);
@@ -60,9 +59,6 @@ final class RemotePermissionsPanel extends JPanel
 		);
 		clicks.setToolTipText("Allow the controller to play your local click sound");
 		notifications.setToolTipText("Allow local operating-system notifications");
-		chatbox.setToolTipText(
-			"Show a local-only HapticScape console line; nothing is sent to game chat"
-		);
 		protectedExit.setToolTipText(
 			"Allow the controller to request password-protected startup and exit locks"
 		);
@@ -74,7 +70,6 @@ final class RemotePermissionsPanel extends JPanel
 		PanelUi.addPreferredHeightComponent(this, liveHaptics);
 		PanelUi.addPreferredHeightComponent(this, clicks);
 		PanelUi.addPreferredHeightComponent(this, notifications);
-		PanelUi.addPreferredHeightComponent(this, chatbox);
 		PanelUi.addPreferredHeightComponent(this, protectedExit);
 		PanelUi.addPreferredHeightComponent(this, activitySharing);
 
@@ -119,7 +114,6 @@ final class RemotePermissionsPanel extends JPanel
 		});
 		clicks.addActionListener(event -> save());
 		notifications.addActionListener(event -> save());
-		chatbox.addActionListener(event -> save());
 		protectedExit.addActionListener(event -> save());
 		activitySharing.addActionListener(event -> save());
 		maximumIntensity.addChangeListener(event ->
@@ -145,7 +139,6 @@ final class RemotePermissionsPanel extends JPanel
 			liveHaptics.setSelected(permissions.isLiveHapticsAllowed());
 			clicks.setSelected(permissions.isClicksAllowed());
 			notifications.setSelected(permissions.isDesktopNotificationsAllowed());
-			chatbox.setSelected(permissions.isLocalChatboxMessagesAllowed());
 			protectedExit.setSelected(permissions.isProtectedExitAllowed());
 			activitySharing.setSelected(permissions.isActivitySharingAllowed());
 			maximumIntensity.setValue(permissions.getMaximumIntensityPercent());
@@ -177,7 +170,7 @@ final class RemotePermissionsPanel extends JPanel
 			liveHaptics.isSelected(),
 			clicks.isSelected(),
 			notifications.isSelected(),
-			chatbox.isSelected(),
+			false,
 			protectedExit.isSelected(),
 			activitySharing.isSelected(),
 			maximumIntensity.getValue(),

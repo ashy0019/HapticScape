@@ -143,7 +143,7 @@ public class RemoteSessionDashboardTest
 				+ "Haptics: Up to 60% for 3 s\n"
 				+ "Live Forge: Up to 30 s\n"
 				+ "Clicks: Allowed\n"
-				+ "Messages: Desktop only\n"
+				+ "Messages: Desktop notifications\n"
 				+ "Live activity: Blocked\n"
 				+ "Protected startup/exit: Blocked",
 			RemotePermissionSummaryPanel.describe(permissions)

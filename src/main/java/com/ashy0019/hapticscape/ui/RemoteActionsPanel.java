@@ -62,7 +62,6 @@ final class RemoteActionsPanel extends JPanel
 		"0 / " + RemoteAction.MAXIMUM_MESSAGE_LENGTH
 	);
 	private final JCheckBox desktopNotification = new JCheckBox("Desktop notification", true);
-	private final JCheckBox localChatbox = new JCheckBox("Local chatbox notice");
 	private final JButton sendMessageButton = new JButton("Send message");
 	private final WrappedTextLabel actionStatus = new WrappedTextLabel(
 		"Ready for remote actions"
@@ -180,13 +179,8 @@ final class RemoteActionsPanel extends JPanel
 		PanelUi.addPreferredHeightComponent(communicationControls, messageScroll);
 
 		desktopNotification.setName("remoteDesktopDestination");
-		localChatbox.setName("remoteChatboxDestination");
 		desktopNotification.setToolTipText("Show a local operating-system notification");
-		localChatbox.setToolTipText(
-			"Show a local-only HapticScape console line; nothing is sent to Jagex"
-		);
 		PanelUi.addPreferredHeightComponent(communicationControls, desktopNotification);
-		PanelUi.addPreferredHeightComponent(communicationControls, localChatbox);
 
 		sendMessageButton.setName("remoteSendMessage");
 		configureCompactButton(sendMessageButton);
@@ -227,7 +221,6 @@ final class RemoteActionsPanel extends JPanel
 			}
 		});
 		desktopNotification.addActionListener(event -> updateEnabledState());
-		localChatbox.addActionListener(event -> updateEnabledState());
 		buzzButton.addActionListener(event -> sendBuzz());
 		stopButton.addActionListener(event -> sendStop());
 		clickButton.addActionListener(event -> sendClick());
@@ -355,7 +348,6 @@ final class RemoteActionsPanel extends JPanel
 			&& permissions.getMaximumIntensityPercent() > 0;
 		boolean mayClick = active && permissions.isClicksAllowed();
 		boolean mayDesktop = active && permissions.isDesktopNotificationsAllowed();
-		boolean mayChatbox = active && permissions.isLocalChatboxMessagesAllowed();
 
 		pattern.setEnabled(mayHaptic);
 		intensity.setEnabled(mayHaptic);
@@ -377,35 +369,23 @@ final class RemoteActionsPanel extends JPanel
 
 		stopButton.setEnabled(session.getRole() == RemoteRole.CONTROLLER
 			&& isConnectedState(session.getState()));
-		message.setEnabled(mayDesktop || mayChatbox);
+		message.setEnabled(mayDesktop);
 		desktopNotification.setEnabled(mayDesktop);
-		localChatbox.setEnabled(mayChatbox);
 		if (!permissions.isDesktopNotificationsAllowed())
 		{
 			desktopNotification.setSelected(false);
 		}
-		if (!permissions.isLocalChatboxMessagesAllowed())
+		if (!desktopNotification.isSelected() && mayDesktop)
 		{
-			localChatbox.setSelected(false);
-		}
-		if (!desktopNotification.isSelected() && !localChatbox.isSelected())
-		{
-			if (mayDesktop)
-			{
-				desktopNotification.setSelected(true);
-			}
-			else if (mayChatbox)
-			{
-				localChatbox.setSelected(true);
-			}
+			desktopNotification.setSelected(true);
 		}
 		sendMessageButton.setEnabled(
 			active
 				&& !message.getText().trim().isEmpty()
-				&& (desktopNotification.isSelected() || localChatbox.isSelected())
+				&& desktopNotification.isSelected()
 		);
 		sendMessageButton.setToolTipText(
-			mayDesktop || mayChatbox
+			mayDesktop
 				? null
 				: permissionTooltip(active, false, "remote messages")
 		);
@@ -440,7 +420,7 @@ final class RemoteActionsPanel extends JPanel
 		if (sendAction("Sending message...", () -> dispatcher.sendMessage(
 			message.getText(),
 			desktopNotification.isSelected(),
-			localChatbox.isSelected()
+			false
 		)))
 		{
 			message.setText("");

@@ -36,7 +36,7 @@ public class RemoteActionsPanelTest
 		RecordingDispatcher dispatcher = new RecordingDispatcher();
 		RemoteActionsPanel panel = onEdt(() -> new RemoteActionsPanel(dispatcher));
 		RemotePermissions permissions = new RemotePermissions(
-			true, true, false, false, true, 42, 900
+			true, true, false, true, true, 42, 900
 		);
 
 		onEdt(() ->
@@ -54,11 +54,6 @@ public class RemoteActionsPanelTest
 			"remoteDesktopDestination",
 			AbstractButton.class
 		);
-		AbstractButton chatbox = component(
-			panel,
-			"remoteChatboxDestination",
-			AbstractButton.class
-		);
 		AbstractButton sendMessage = component(
 			panel,
 			"remoteSendMessage",
@@ -72,10 +67,12 @@ public class RemoteActionsPanelTest
 		assertTrue(buzz.isEnabled());
 		assertFalse(click.isEnabled());
 		assertTrue(stop.isEnabled());
-		assertFalse(desktop.isEnabled());
-		assertFalse(desktop.isSelected());
-		assertTrue(chatbox.isEnabled());
-		assertTrue(chatbox.isSelected());
+		assertTrue(desktop.isEnabled());
+		assertTrue(desktop.isSelected());
+		assertEquals(
+			null,
+			componentOrNull(panel, "remoteChatboxDestination", AbstractButton.class)
+		);
 		assertEquals(42, intensity.getMaximum());
 		assertEquals(42, intensity.getValue());
 		assertEquals(500, ((Number) duration.getValue()).intValue());
@@ -100,8 +97,8 @@ public class RemoteActionsPanelTest
 		assertEquals(42, dispatcher.intensity);
 		assertEquals(500, dispatcher.duration);
 		assertEquals("Good job.", dispatcher.message);
-		assertFalse(dispatcher.desktop);
-		assertTrue(dispatcher.chatbox);
+		assertTrue(dispatcher.desktop);
+		assertFalse(dispatcher.chatbox);
 		assertEquals("", message.getText());
 	}
 
