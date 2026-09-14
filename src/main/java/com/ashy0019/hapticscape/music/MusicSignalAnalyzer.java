@@ -23,6 +23,7 @@ public final class MusicSignalAnalyzer
 	private double bassBaseline;
 	private double fluxBaseline;
 	private double smoothedLevel;
+	private double previousMeterLevel;
 	private volatile MusicResponse response = MusicResponse.RHYTHMIC;
 	private volatile double outputVolume = 1.0;
 
@@ -79,6 +80,21 @@ public final class MusicSignalAnalyzer
 				bufferedSamples = HOP_SIZE;
 			}
 		}
+	}
+
+	/**
+	 * Accepts the normalized peak exposed by a Windows application mixer session.
+	 * This path never receives or records PCM samples, so it derives a small onset
+	 * signal from the change in successive meter readings.
+	 */
+	public void acceptLevel(double normalizedLevel)
+	{
+		double peak = Double.isFinite(normalizedLevel) ? clamp(normalizedLevel) : 0.0;
+		double onset = clamp((peak - previousMeterLevel) * 5.0);
+		double target = response.combine(peak, onset);
+		smoothedLevel = response.smooth(smoothedLevel, target);
+		previousMeterLevel = peak;
+		levelListener.accept(smoothedLevel < 0.01 ? 0.0 : smoothedLevel);
 	}
 
 	public void clear()
@@ -176,6 +192,7 @@ public final class MusicSignalAnalyzer
 		bassBaseline = 0.0;
 		fluxBaseline = 0.0;
 		smoothedLevel = 0.0;
+		previousMeterLevel = 0.0;
 		Arrays.fill(sampleWindow, 0.0f);
 		previousMagnitudes = new double[previousMagnitudes.length];
 	}

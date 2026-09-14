@@ -8,6 +8,11 @@ public interface AudioCaptureSource extends AutoCloseable
 
 		void onSamples(float[] monoSamples, int sampleRate, double outputVolume);
 
+		/** Accepts a normalized Windows mixer level when raw samples are unavailable. */
+		default void onLevel(double normalizedLevel)
+		{
+		}
+
 		void onError(String message, Throwable error);
 	}
 

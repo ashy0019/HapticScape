@@ -186,6 +186,42 @@ public final class SettingsBackedHapticScapeSettings implements HapticScapeSetti
     }
 
     @Override
+    public String musicCaptureEndpointId()
+    {
+        return stringValue(HapticScapeSettingKeys.MUSIC_CAPTURE_ENDPOINT_ID, "");
+    }
+
+    @Override
+    public String musicCaptureEndpointName()
+    {
+        return stringValue(
+            HapticScapeSettingKeys.MUSIC_CAPTURE_ENDPOINT_NAME,
+            "Default Windows output"
+        );
+    }
+
+	@Override
+	public String musicCaptureMode()
+	{
+		return stringValue(HapticScapeSettingKeys.MUSIC_CAPTURE_MODE, "OUTPUT");
+	}
+
+	@Override
+	public String musicCaptureApplicationId()
+	{
+		return stringValue(HapticScapeSettingKeys.MUSIC_CAPTURE_APPLICATION_ID, "");
+	}
+
+	@Override
+	public String musicCaptureApplicationName()
+	{
+		return stringValue(
+			HapticScapeSettingKeys.MUSIC_CAPTURE_APPLICATION_NAME,
+			"Previously selected application"
+		);
+	}
+
+    @Override
     public boolean clickerEnabled()
     {
         return booleanValue(HapticScapeSettingKeys.CLICKER_ENABLED, false);

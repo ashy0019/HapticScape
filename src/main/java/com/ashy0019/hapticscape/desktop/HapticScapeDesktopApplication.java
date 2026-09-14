@@ -7,6 +7,9 @@ import com.ashy0019.hapticscape.SettingsBackedHapticScapeSettings;
 import com.ashy0019.hapticscape.SkillCatalog;
 import com.ashy0019.hapticscape.integration.desktop.AwtDesktopNotificationService;
 import com.ashy0019.hapticscape.integration.desktop.DesktopAudioCaptureSources;
+import com.ashy0019.hapticscape.music.AudioCaptureEndpoint;
+import com.ashy0019.hapticscape.music.AudioCaptureApplication;
+import com.ashy0019.hapticscape.music.AudioCaptureMode;
 import com.ashy0019.hapticscape.integration.desktop.DesktopDiscordDeepLinkInbox;
 import com.ashy0019.hapticscape.integration.desktop.DesktopSecretProtectors;
 import com.ashy0019.hapticscape.integration.desktop.DesktopSourceMessageService;
@@ -100,7 +103,18 @@ public final class HapticScapeDesktopApplication implements AutoCloseable
 			new JavaSoundPlayer(),
 			desktopNotifications,
 			sourceMessages,
-			DesktopAudioCaptureSources::systemOutput,
+			DesktopAudioCaptureSources.factory(),
+			DesktopAudioCaptureSources.endpointCatalog(),
+			AudioCaptureEndpoint.fromPersisted(
+				settings.musicCaptureEndpointId(),
+				settings.musicCaptureEndpointName()
+			),
+			DesktopAudioCaptureSources.applicationCatalog(),
+			AudioCaptureMode.fromConfigValue(settings.musicCaptureMode()),
+			AudioCaptureApplication.fromPersisted(
+				settings.musicCaptureApplicationId(),
+				settings.musicCaptureApplicationName()
+			),
 			DesktopSecretProtectors.savedUnlockKeys(),
 			DesktopSecretProtectors.discordCredentials(),
 			launchOptions.getGameplayPort()

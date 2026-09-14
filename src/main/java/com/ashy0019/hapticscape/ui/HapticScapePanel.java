@@ -25,6 +25,9 @@ import com.ashy0019.hapticscape.host.ExternalLinkOpener;
 import com.ashy0019.hapticscape.host.GlobalUiHooks;
 import com.ashy0019.hapticscape.host.TextClipboard;
 import com.ashy0019.hapticscape.music.MusicSyncSettings;
+import com.ashy0019.hapticscape.music.AudioCaptureEndpoint;
+import com.ashy0019.hapticscape.music.AudioCaptureApplication;
+import com.ashy0019.hapticscape.music.AudioCaptureMode;
 import com.ashy0019.hapticscape.music.MusicSyncSnapshot;
 import com.ashy0019.hapticscape.rogue.KonamiCodeDetector;
 import com.ashy0019.hapticscape.rogue.RogueFeedbackEvent;
@@ -63,6 +66,7 @@ import java.awt.event.MouseEvent;
 import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.DefaultListModel;
@@ -221,6 +225,8 @@ public final class HapticScapePanel extends JPanel
 		Consumer<AlertCategory> testSpecificAlertAction,
 		Consumer<CustomPatternEntry> patternForgePreviewAction,
 		Consumer<MusicSyncSettings> musicSettingsAction,
+		Supplier<java.util.List<AudioCaptureEndpoint>> audioCaptureEndpoints,
+		Consumer<AudioCaptureEndpoint> audioCaptureEndpointAction,
 		Consumer<ClickerSettings> clickerSettingsAction,
 		Runnable testClickAction,
 		UpdatePreferencesStore updatePreferencesStore,
@@ -433,13 +439,16 @@ public final class HapticScapePanel extends JPanel
 		musicPanel = new MusicPanel(
 			config,
 			this::writeFeedbackSetting,
+			(target, key, value) -> settingsStore.set(key, value),
 			settings ->
 			{
 				if (!isSubjectWorkspaceActive())
 				{
 					musicSettingsAction.accept(settings);
 				}
-			}
+			},
+			audioCaptureEndpoints,
+			audioCaptureEndpointAction
 		);
 		phraseRulesPanel = new ClickerPhraseRulesPanel(
 			config,
@@ -1975,6 +1984,7 @@ public final class HapticScapePanel extends JPanel
 		{
 			settingsLockDraft.clear();
 		}
+		musicPanel.setCaptureSourceRemote(isSubjectWorkspaceActive(snapshot));
 		applySettingsLockState(settingsLockService.getSnapshot());
 		revalidate();
 		repaint();
@@ -2041,6 +2051,18 @@ public final class HapticScapePanel extends JPanel
 		}
 		statusLabel.setText(message);
 		connectButton.setEnabled(true);
+	}
+
+	public void configureAudioApplicationCapture(
+		Supplier<java.util.List<AudioCaptureApplication>> applicationSupplier,
+		Consumer<AudioCaptureMode> modeListener,
+		Consumer<AudioCaptureApplication> applicationListener)
+	{
+		musicPanel.configureApplicationCapture(
+			applicationSupplier,
+			modeListener,
+			applicationListener
+		);
 	}
 
 	private void applyState(ConnectionSnapshot snapshot)

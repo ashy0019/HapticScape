@@ -6,6 +6,8 @@ import com.ashy0019.hapticscape.device.IntifaceService;
 import java.net.URI;
 import java.time.Duration;
 import java.util.function.Consumer;
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -63,6 +65,79 @@ public class MusicSyncServiceTest
 		assertTrue(intiface.liveStopped);
 	}
 
+	@Test
+	public void changingEndpointSafelyRestartsActiveCapture()
+	{
+		FakeIntifaceService intiface = new FakeIntifaceService();
+		List<FakeCaptureSource> captures = new ArrayList<>();
+		MusicSyncService service = new MusicSyncService(
+			intiface,
+			endpoint ->
+			{
+				FakeCaptureSource capture = new FakeCaptureSource();
+				captures.add(capture);
+				return capture;
+			},
+			new AudioCaptureEndpoint("endpoint-1", "Speakers"),
+			settings(false)
+		);
+
+		service.updateSettings(settings(true));
+		service.updateCaptureEndpoint(
+			new AudioCaptureEndpoint("endpoint-2", "Music channel")
+		);
+
+		assertEquals(2, captures.size());
+		assertTrue(captures.get(0).closed);
+		assertTrue(captures.get(1).started);
+		assertEquals("endpoint-2", service.getCaptureEndpoint().getId());
+	}
+
+	@Test
+	public void applicationModeUsesMixerLevelsAndReplacesEndpointCapture()
+	{
+		FakeIntifaceService intiface = new FakeIntifaceService();
+		List<FakeCaptureSource> endpointCaptures = new ArrayList<>();
+		List<FakeCaptureSource> applicationCaptures = new ArrayList<>();
+		AudioCaptureSourceFactory factory = new AudioCaptureSourceFactory()
+		{
+			@Override
+			public AudioCaptureSource create(AudioCaptureEndpoint endpoint)
+			{
+				FakeCaptureSource capture = new FakeCaptureSource();
+				endpointCaptures.add(capture);
+				return capture;
+			}
+
+			@Override
+			public AudioCaptureSource createApplication(
+				AudioCaptureApplication application)
+			{
+				FakeCaptureSource capture = new FakeCaptureSource();
+				applicationCaptures.add(capture);
+				return capture;
+			}
+		};
+		MusicSyncService service = new MusicSyncService(
+			intiface,
+			factory,
+			AudioCaptureMode.OUTPUT,
+			AudioCaptureEndpoint.systemDefault(),
+			new AudioCaptureApplication("command:spotify.exe", "Spotify"),
+			settings(false)
+		);
+
+		service.updateSettings(settings(true));
+		service.updateCaptureMode(AudioCaptureMode.APPLICATION);
+		applicationCaptures.get(0).emitLevel(0.8);
+
+		assertEquals(1, endpointCaptures.size());
+		assertTrue(endpointCaptures.get(0).closed);
+		assertEquals(1, applicationCaptures.size());
+		assertTrue(applicationCaptures.get(0).started);
+		assertTrue(intiface.liveIntensity > 0.0);
+	}
+
 	private static MusicSyncSettings settings(boolean enabled)
 	{
 		return new MusicSyncSettings(enabled, MusicResponse.RHYTHMIC, 100, 0, 60);
@@ -90,6 +165,11 @@ public class MusicSyncServiceTest
 		private void fail(String message)
 		{
 			listener.onError(message, null);
+		}
+
+		private void emitLevel(double level)
+		{
+			listener.onLevel(level);
 		}
 
 		@Override

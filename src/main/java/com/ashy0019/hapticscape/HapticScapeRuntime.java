@@ -10,6 +10,7 @@ import com.ashy0019.hapticscape.device.GatedIntifaceService;
 import com.ashy0019.hapticscape.device.HapticEventType;
 import com.ashy0019.hapticscape.device.HapticRequest;
 import com.ashy0019.hapticscape.music.MusicResponse;
+import com.ashy0019.hapticscape.music.AudioCaptureEndpoint;
 import com.ashy0019.hapticscape.music.MusicSyncService;
 import com.ashy0019.hapticscape.music.MusicSyncSettings;
 import com.ashy0019.hapticscape.protocol.LocalhostGameplayEventServer;
@@ -35,6 +36,7 @@ import com.ashy0019.hapticscape.update.UpdatePreferencesStore;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Objects;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import lombok.extern.slf4j.Slf4j;
 
@@ -102,6 +104,9 @@ public final class HapticScapeRuntime implements AutoCloseable
             musicSyncService = new MusicSyncService(
                 intifaceService,
                 dependencies.getAudioCaptureSourceFactory(),
+				dependencies.getInitialAudioCaptureMode(),
+                dependencies.getInitialAudioCaptureEndpoint(),
+				dependencies.getInitialAudioCaptureApplication(),
                 musicSettingsFromSettings(dependencies.getSettings())
             );
             clickerService = new ClickerService(
@@ -234,6 +239,19 @@ public final class HapticScapeRuntime implements AutoCloseable
         ensureStarted();
         return musicSyncService;
     }
+
+    public List<AudioCaptureEndpoint> listAudioCaptureEndpoints()
+    {
+        ensureStarted();
+        return dependencies.getAudioCaptureEndpointCatalog().listActiveEndpoints();
+    }
+
+	public List<com.ashy0019.hapticscape.music.AudioCaptureApplication>
+		listAudioCaptureApplications()
+	{
+		ensureStarted();
+		return dependencies.getAudioCaptureApplicationCatalog().listActiveApplications();
+	}
 
     public ClickerService getClickerService()
     {
