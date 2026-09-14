@@ -787,7 +787,6 @@ final class MusicPanel extends JPanel
 		if (matched != null)
 		{
 			selectedCaptureApplication = matched;
-			applicationListener.accept(matched);
 			applicationComboBox.setToolTipText(matched.getMenuLabel());
 			if (newlySelected)
 			{
@@ -800,6 +799,7 @@ final class MusicPanel extends JPanel
 					matched.getDisplayName()
 				);
 			}
+			applicationListener.accept(matched);
 		}
 		sourceScanRunning = false;
 		refreshSourcesButton.setText("Refresh");
