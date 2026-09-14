@@ -5,4 +5,9 @@ package com.ashy0019.hapticscape.music;
 public interface AudioCaptureSourceFactory
 {
 	AudioCaptureSource create(AudioCaptureEndpoint endpoint);
+
+	default AudioCaptureSource createApplication(AudioCaptureApplication application)
+	{
+		throw new UnsupportedOperationException("Application audio capture is unavailable");
+	}
 }

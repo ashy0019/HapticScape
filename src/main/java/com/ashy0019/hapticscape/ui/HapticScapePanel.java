@@ -26,6 +26,8 @@ import com.ashy0019.hapticscape.host.GlobalUiHooks;
 import com.ashy0019.hapticscape.host.TextClipboard;
 import com.ashy0019.hapticscape.music.MusicSyncSettings;
 import com.ashy0019.hapticscape.music.AudioCaptureEndpoint;
+import com.ashy0019.hapticscape.music.AudioCaptureApplication;
+import com.ashy0019.hapticscape.music.AudioCaptureMode;
 import com.ashy0019.hapticscape.music.MusicSyncSnapshot;
 import com.ashy0019.hapticscape.rogue.KonamiCodeDetector;
 import com.ashy0019.hapticscape.rogue.RogueFeedbackEvent;
@@ -2049,6 +2051,18 @@ public final class HapticScapePanel extends JPanel
 		}
 		statusLabel.setText(message);
 		connectButton.setEnabled(true);
+	}
+
+	public void configureAudioApplicationCapture(
+		Supplier<java.util.List<AudioCaptureApplication>> applicationSupplier,
+		Consumer<AudioCaptureMode> modeListener,
+		Consumer<AudioCaptureApplication> applicationListener)
+	{
+		musicPanel.configureApplicationCapture(
+			applicationSupplier,
+			modeListener,
+			applicationListener
+		);
 	}
 
 	private void applyState(ConnectionSnapshot snapshot)

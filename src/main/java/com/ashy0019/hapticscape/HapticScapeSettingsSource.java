@@ -30,6 +30,24 @@ public interface HapticScapeSettingsSource extends RemoteSettingsSource, RemoteP
         return "Default Windows output";
     }
 
+	/** Local-only selection between whole-output and application mixer capture. */
+	default String musicCaptureMode()
+	{
+		return "OUTPUT";
+	}
+
+	/** Stable local application identity; intentionally excluded from remote snapshots. */
+	default String musicCaptureApplicationId()
+	{
+		return "";
+	}
+
+	/** Last known local application label for unavailable-session feedback. */
+	default String musicCaptureApplicationName()
+	{
+		return "Previously selected application";
+	}
+
     static String resolveRemoteRelayUrl(String configuredValue)
     {
         if (configuredValue == null || configuredValue.trim().isEmpty())

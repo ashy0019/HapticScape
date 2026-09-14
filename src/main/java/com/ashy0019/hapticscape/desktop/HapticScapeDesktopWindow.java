@@ -115,7 +115,12 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 			runtime.getSettingsLockService(),
 			runtime::dispatchRogueFeedback,
 			runtime::playRogueUnlockStingAsync,
-			runtime::stopAll
+			 runtime::stopAll
+		);
+		panel.configureAudioApplicationCapture(
+			runtime::listAudioCaptureApplications,
+			runtime.getMusicSyncService()::updateCaptureMode,
+			runtime.getMusicSyncService()::updateCaptureApplication
 		);
 
 		frame.setContentPane(panel);

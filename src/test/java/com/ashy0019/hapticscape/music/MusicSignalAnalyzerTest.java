@@ -68,6 +68,19 @@ public class MusicSignalAnalyzerTest
 		assertTrue(levels.stream().allMatch(level -> level == 0.0));
 	}
 
+	@Test
+	public void windowsMixerLevelsProduceResponsiveBoundedOutput()
+	{
+		List<Double> levels = new ArrayList<>();
+		MusicSignalAnalyzer analyzer = new MusicSignalAnalyzer(levels::add);
+		analyzer.acceptLevel(0.0);
+		analyzer.acceptLevel(0.75);
+		analyzer.acceptLevel(0.40);
+
+		assertTrue(levels.stream().anyMatch(level -> level > 0.05));
+		assertTrue(levels.stream().allMatch(level -> level >= 0.0 && level <= 1.0));
+	}
+
 	private static double peakBassLevel(double amplitude)
 	{
 		return peakBassLevel(amplitude, 1.0);

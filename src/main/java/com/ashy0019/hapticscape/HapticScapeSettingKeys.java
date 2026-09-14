@@ -37,6 +37,9 @@ public final class HapticScapeSettingKeys
 	public static final String MUSIC_MAXIMUM_INTENSITY_PERCENT = "musicMaximumIntensityPercent";
 	public static final String MUSIC_CAPTURE_ENDPOINT_ID = "musicCaptureEndpointId";
 	public static final String MUSIC_CAPTURE_ENDPOINT_NAME = "musicCaptureEndpointName";
+	public static final String MUSIC_CAPTURE_MODE = "musicCaptureMode";
+	public static final String MUSIC_CAPTURE_APPLICATION_ID = "musicCaptureApplicationId";
+	public static final String MUSIC_CAPTURE_APPLICATION_NAME = "musicCaptureApplicationName";
 	public static final String CLICKER_ENABLED = "clickerEnabled";
 	public static final String CLICKER_VOLUME_PERCENT = "clickerVolumePercent";
 	public static final String CLICKER_MINIMUM_XP_GAIN = "clickerMinimumXpGain";

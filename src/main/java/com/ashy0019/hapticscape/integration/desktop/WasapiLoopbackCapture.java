@@ -485,6 +485,11 @@ public final class WasapiLoopbackCapture implements AudioCaptureSource
 			return mono;
 		}
 
+		int sampleRate()
+		{
+			return sampleRate;
+		}
+
 		private double readSample(Pointer data, long offset, int bytesPerChannel)
 		{
 			if (floatingPoint && bitsPerSample == 32)

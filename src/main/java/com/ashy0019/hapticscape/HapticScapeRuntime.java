@@ -104,7 +104,9 @@ public final class HapticScapeRuntime implements AutoCloseable
             musicSyncService = new MusicSyncService(
                 intifaceService,
                 dependencies.getAudioCaptureSourceFactory(),
+				dependencies.getInitialAudioCaptureMode(),
                 dependencies.getInitialAudioCaptureEndpoint(),
+				dependencies.getInitialAudioCaptureApplication(),
                 musicSettingsFromSettings(dependencies.getSettings())
             );
             clickerService = new ClickerService(
@@ -243,6 +245,13 @@ public final class HapticScapeRuntime implements AutoCloseable
         ensureStarted();
         return dependencies.getAudioCaptureEndpointCatalog().listActiveEndpoints();
     }
+
+	public List<com.ashy0019.hapticscape.music.AudioCaptureApplication>
+		listAudioCaptureApplications()
+	{
+		ensureStarted();
+		return dependencies.getAudioCaptureApplicationCatalog().listActiveApplications();
+	}
 
     public ClickerService getClickerService()
     {

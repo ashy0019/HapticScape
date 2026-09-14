@@ -200,6 +200,27 @@ public final class SettingsBackedHapticScapeSettings implements HapticScapeSetti
         );
     }
 
+	@Override
+	public String musicCaptureMode()
+	{
+		return stringValue(HapticScapeSettingKeys.MUSIC_CAPTURE_MODE, "OUTPUT");
+	}
+
+	@Override
+	public String musicCaptureApplicationId()
+	{
+		return stringValue(HapticScapeSettingKeys.MUSIC_CAPTURE_APPLICATION_ID, "");
+	}
+
+	@Override
+	public String musicCaptureApplicationName()
+	{
+		return stringValue(
+			HapticScapeSettingKeys.MUSIC_CAPTURE_APPLICATION_NAME,
+			"Previously selected application"
+		);
+	}
+
     @Override
     public boolean clickerEnabled()
     {

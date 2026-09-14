@@ -5,11 +5,14 @@ import com.ashy0019.hapticscape.TestHapticScapeSettings;
 import com.ashy0019.hapticscape.music.MusicSyncSettings;
 import com.ashy0019.hapticscape.music.MusicSyncSnapshot;
 import com.ashy0019.hapticscape.music.AudioCaptureEndpoint;
+import com.ashy0019.hapticscape.music.AudioCaptureApplication;
+import com.ashy0019.hapticscape.music.AudioCaptureMode;
 import java.awt.Component;
 import java.awt.Container;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import javax.swing.AbstractButton;
 import javax.swing.JLabel;
 import javax.swing.JProgressBar;
@@ -179,6 +182,68 @@ public class MusicPanelTest
 			"musicAudioSourceRemoteNotice",
 			Component.class
 		).isVisible());
+	}
+
+	@Test
+	public void applicationModeListsMixerAppsAndPersistsLocalSelection() throws Exception
+	{
+		List<String> localChanges = new ArrayList<>();
+		List<AudioCaptureMode> modes = new ArrayList<>();
+		List<AudioCaptureApplication> applications = new ArrayList<>();
+		CountDownLatch scanned = new CountDownLatch(1);
+		CountDownLatch applied = new CountDownLatch(1);
+		MusicPanel panel = new MusicPanel(
+			new TestHapticScapeSettings(),
+			(target, key, value) -> { },
+			(target, key, value) -> localChanges.add(key + "=" + value),
+			ignored -> { },
+			() -> java.util.Collections.singletonList(AudioCaptureEndpoint.systemDefault()),
+			ignored -> { }
+		);
+		panel.configureApplicationCapture(
+			() ->
+			{
+				try
+				{
+					return java.util.Arrays.asList(
+						new AudioCaptureApplication("command:spotify.exe", "Spotify"),
+						new AudioCaptureApplication("command:client.exe", "Game client")
+					);
+				}
+				finally
+				{
+					scanned.countDown();
+				}
+			},
+			modes::add,
+			application ->
+			{
+				applications.add(application);
+				applied.countDown();
+			}
+		);
+
+		SwingUtilities.invokeAndWait(() -> component(
+			panel,
+			"musicCaptureMode",
+			JComboBox.class
+		).setSelectedItem(AudioCaptureMode.APPLICATION));
+		scanned.await();
+		assertTrue(applied.await(5, TimeUnit.SECONDS));
+
+		assertEquals(AudioCaptureMode.APPLICATION, modes.get(modes.size() - 1));
+		assertTrue(localChanges.contains(
+			HapticScapeSettingKeys.MUSIC_CAPTURE_MODE + "=APPLICATION"
+		));
+		assertEquals(2, component(
+			panel,
+			"musicAudioApplication",
+			JComboBox.class
+		).getItemCount());
+		assertFalse(applications.isEmpty());
+		assertTrue(localChanges.stream().anyMatch(change -> change.startsWith(
+			HapticScapeSettingKeys.MUSIC_CAPTURE_APPLICATION_ID + "="
+		)));
 	}
 
 	@Test
