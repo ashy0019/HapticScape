@@ -10,9 +10,10 @@ public final class MusicSyncService implements AutoCloseable
 	private static final long OUTPUT_INTERVAL_NANOS = 50_000_000L;
 
 	private final IntifaceService intifaceService;
-	private final Supplier<AudioCaptureSource> sourceFactory;
+	private final AudioCaptureSourceFactory sourceFactory;
 	private volatile Consumer<MusicSyncSnapshot> listener = ignored -> { };
 	private volatile MusicSyncSettings settings;
+	private volatile AudioCaptureEndpoint captureEndpoint;
 	private volatile MusicSyncSnapshot snapshot = MusicSyncSnapshot.disabled();
 	private volatile AudioCaptureSource source;
 	private volatile MusicSignalAnalyzer analyzer;
@@ -25,9 +26,46 @@ public final class MusicSyncService implements AutoCloseable
 		Supplier<AudioCaptureSource> sourceFactory,
 		MusicSyncSettings initialSettings)
 	{
+		this(
+			intifaceService,
+			ignored -> sourceFactory.get(),
+			AudioCaptureEndpoint.systemDefault(),
+			initialSettings
+		);
+	}
+
+	public MusicSyncService(
+		IntifaceService intifaceService,
+		AudioCaptureSourceFactory sourceFactory,
+		AudioCaptureEndpoint initialEndpoint,
+		MusicSyncSettings initialSettings)
+	{
 		this.intifaceService = Objects.requireNonNull(intifaceService, "intifaceService");
 		this.sourceFactory = Objects.requireNonNull(sourceFactory, "sourceFactory");
+		this.captureEndpoint = Objects.requireNonNull(initialEndpoint, "initialEndpoint");
 		this.settings = Objects.requireNonNull(initialSettings, "initialSettings");
+	}
+
+	public synchronized void updateCaptureEndpoint(AudioCaptureEndpoint next)
+	{
+		AudioCaptureEndpoint selected = Objects.requireNonNull(next, "next");
+		if (captureEndpoint.equals(selected)
+			&& captureEndpoint.isAvailable() == selected.isAvailable())
+		{
+			captureEndpoint = selected;
+			return;
+		}
+		captureEndpoint = selected;
+		if (settings.isEnabled())
+		{
+			stopCapture();
+			startCapture();
+		}
+	}
+
+	public AudioCaptureEndpoint getCaptureEndpoint()
+	{
+		return captureEndpoint;
 	}
 
 	public synchronized void updateSettings(MusicSyncSettings next)
@@ -82,10 +120,11 @@ public final class MusicSyncService implements AutoCloseable
 		analyzer.setResponse(settings.getResponse());
 		try
 		{
-			source = sourceFactory.get();
+			AudioCaptureEndpoint selectedEndpoint = captureEndpoint;
+			source = sourceFactory.create(selectedEndpoint);
 			publish(new MusicSyncSnapshot(
 				MusicSyncSnapshot.State.STARTING,
-				"Opening system audio",
+				"Opening " + selectedEndpoint.getDisplayName(),
 				0
 			));
 			source.start(new AudioCaptureSource.Listener()

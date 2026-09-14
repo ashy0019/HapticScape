@@ -103,6 +103,8 @@ public final class HapticScapeDesktopWindow implements AutoCloseable
 			this::sendTestAlert,
 			runtime::previewCustomPattern,
 			runtime.getMusicSyncService()::updateSettings,
+			runtime::listAudioCaptureEndpoints,
+			runtime.getMusicSyncService()::updateCaptureEndpoint,
 			runtime.getClickerService()::updateSettings,
 			runtime::playClick,
 			runtime.getUpdatePreferencesStore(),

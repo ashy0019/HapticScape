@@ -2,16 +2,22 @@ package com.ashy0019.hapticscape.ui;
 
 import com.ashy0019.hapticscape.HapticScapeSettingKeys;
 import com.ashy0019.hapticscape.HapticScapeSettingsSource;
+import com.ashy0019.hapticscape.music.AudioCaptureEndpoint;
 import com.ashy0019.hapticscape.music.MusicResponse;
 import com.ashy0019.hapticscape.music.MusicSyncSettings;
 import com.ashy0019.hapticscape.music.MusicSyncSnapshot;
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.function.Supplier;
 import java.util.function.Consumer;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JComboBox;
+import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JProgressBar;
@@ -22,7 +28,10 @@ import javax.swing.SwingUtilities;
 final class MusicPanel extends JPanel
 {
 	private final SettingsChangeSink settingsSink;
+	private final SettingsChangeSink localSettingsSink;
 	private final Consumer<MusicSyncSettings> settingsListener;
+	private final Supplier<List<AudioCaptureEndpoint>> endpointSupplier;
+	private final Consumer<AudioCaptureEndpoint> endpointListener;
 	private final JToggleButton enabledButton = new JToggleButton("Start music sync");
 	private final JComboBox<MusicResponse> responseComboBox =
 		new JComboBox<>(MusicResponse.values());
@@ -36,8 +45,21 @@ final class MusicPanel extends JPanel
 	private final JLabel responseHint = new JLabel();
 	private final JLabel statusLabel = new JLabel("Music sync is off");
 	private final JProgressBar outputMeter = new JProgressBar(0, 100);
+	private final JComboBox<AudioCaptureEndpoint> audioSourceComboBox = new JComboBox<>();
+	private final JButton refreshSourcesButton = new JButton("Refresh");
+	private final JPanel sourceControls = new JPanel();
+	private final JLabel sourceHint = new JLabel(
+		"Local to this computer; never shared remotely."
+	);
+	private final JLabel remoteSourceNotice = new JLabel(
+		"Audio source is chosen on the participant's computer."
+	);
 	private boolean updating;
 	private boolean remoteReadOnly;
+	private boolean captureSourceRemote;
+	private boolean endpointScanRunning;
+	private int endpointScanGeneration;
+	private AudioCaptureEndpoint selectedCaptureEndpoint;
 	private MusicSyncSnapshot.State displayedState = MusicSyncSnapshot.State.DISABLED;
 	private String displayedMessage = "Music sync is off";
 	private int displayedLevel;
@@ -47,8 +69,33 @@ final class MusicPanel extends JPanel
 		SettingsChangeSink settingsSink,
 		Consumer<MusicSyncSettings> settingsListener)
 	{
+		this(
+			config,
+			settingsSink,
+			settingsSink,
+			settingsListener,
+			() -> java.util.Collections.singletonList(AudioCaptureEndpoint.systemDefault()),
+			ignored -> { }
+		);
+	}
+
+	MusicPanel(
+		HapticScapeSettingsSource config,
+		SettingsChangeSink settingsSink,
+		SettingsChangeSink localSettingsSink,
+		Consumer<MusicSyncSettings> settingsListener,
+		Supplier<List<AudioCaptureEndpoint>> endpointSupplier,
+		Consumer<AudioCaptureEndpoint> endpointListener)
+	{
 		this.settingsSink = settingsSink;
+		this.localSettingsSink = localSettingsSink;
 		this.settingsListener = settingsListener;
+		this.endpointSupplier = Objects.requireNonNull(endpointSupplier, "endpointSupplier");
+		this.endpointListener = Objects.requireNonNull(endpointListener, "endpointListener");
+		selectedCaptureEndpoint = AudioCaptureEndpoint.fromPersisted(
+			config.musicCaptureEndpointId(),
+			config.musicCaptureEndpointName()
+		);
 		setName("musicSyncWorkspace");
 		setLayout(new BorderLayout());
 		setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
@@ -61,6 +108,14 @@ final class MusicPanel extends JPanel
 		sensitivitySlider.setName("musicSensitivity");
 		minimumSlider.setName("musicMinimumIntensity");
 		maximumSlider.setName("musicMaximumIntensity");
+		audioSourceComboBox.setName("musicAudioSource");
+		refreshSourcesButton.setName("musicAudioSourceRefresh");
+		sourceControls.setName("musicAudioSourceLocalControls");
+		remoteSourceNotice.setName("musicAudioSourceRemoteNotice");
+		PanelUi.setFixedWidth(audioSourceComboBox, PanelUi.SELECTOR_CONTROL_WIDTH);
+		audioSourceComboBox.addItem(selectedCaptureEndpoint);
+		audioSourceComboBox.setSelectedItem(selectedCaptureEndpoint);
+		audioSourceComboBox.setToolTipText(selectedCaptureEndpoint.getMenuLabel());
 		sensitivitySlider.setValue(clamp(config.musicSensitivityPercent(), 25, 200));
 		minimumSlider.setValue(clamp(config.musicMinimumIntensityPercent(), 0, 100));
 		maximumSlider.setValue(clamp(config.musicMaximumIntensityPercent(), 0, 100));
@@ -86,6 +141,7 @@ final class MusicPanel extends JPanel
 		refreshLabels();
 		refreshEnabledState();
 		configureListeners();
+		refreshAudioSources();
 	}
 
 	MusicSyncSettings getSettings()
@@ -122,6 +178,19 @@ final class MusicPanel extends JPanel
 	{
 		this.remoteReadOnly = remoteReadOnly;
 		refreshEnabledState();
+	}
+
+	void setCaptureSourceRemote(boolean captureSourceRemote)
+	{
+		this.captureSourceRemote = captureSourceRemote;
+		sourceControls.setVisible(!captureSourceRemote);
+		remoteSourceNotice.setVisible(captureSourceRemote);
+		refreshEnabledState();
+	}
+
+	AudioCaptureEndpoint getSelectedCaptureEndpoint()
+	{
+		return selectedCaptureEndpoint;
 	}
 
 	void disableMusicSync()
@@ -165,6 +234,17 @@ final class MusicPanel extends JPanel
 	private JPanel capturePanel()
 	{
 		JPanel panel = verticalSection("Capture", "musicCaptureSection");
+		sourceControls.setLayout(new BoxLayout(sourceControls, BoxLayout.Y_AXIS));
+		JPanel picker = new JPanel(new BorderLayout(6, 0));
+		picker.add(audioSourceComboBox, BorderLayout.CENTER);
+		picker.add(refreshSourcesButton, BorderLayout.EAST);
+		PanelUi.addPreferredHeightComponent(sourceControls, row("Audio source", picker));
+		sourceHint.setBorder(BorderFactory.createEmptyBorder(3, 1, 6, 1));
+		PanelUi.addPreferredHeightComponent(sourceControls, sourceHint);
+		panel.add(sourceControls);
+		remoteSourceNotice.setBorder(BorderFactory.createEmptyBorder(3, 1, 7, 1));
+		remoteSourceNotice.setVisible(false);
+		PanelUi.addPreferredHeightComponent(panel, remoteSourceNotice);
 		PanelUi.addPreferredHeightComponent(panel, outputMeter);
 
 		statusLabel.setBorder(BorderFactory.createEmptyBorder(5, 1, 5, 1));
@@ -209,6 +289,31 @@ final class MusicPanel extends JPanel
 
 	private void configureListeners()
 	{
+		refreshSourcesButton.addActionListener(event -> refreshAudioSources());
+		audioSourceComboBox.addActionListener(event ->
+		{
+			if (updating || captureSourceRemote)
+			{
+				return;
+			}
+			AudioCaptureEndpoint selected =
+				(AudioCaptureEndpoint) audioSourceComboBox.getSelectedItem();
+			if (selected == null)
+			{
+				return;
+			}
+			selectedCaptureEndpoint = selected;
+			audioSourceComboBox.setToolTipText(selected.getMenuLabel());
+			localSettingsSink.set(
+				HapticScapeSettingKeys.MUSIC_CAPTURE_ENDPOINT_ID,
+				selected.getId()
+			);
+			localSettingsSink.set(
+				HapticScapeSettingKeys.MUSIC_CAPTURE_ENDPOINT_NAME,
+				selected.getDisplayName()
+			);
+			endpointListener.accept(selected);
+		});
 		enabledButton.addActionListener(event ->
 		{
 			if (updating || remoteReadOnly)
@@ -340,6 +445,116 @@ final class MusicPanel extends JPanel
 		sensitivitySlider.setEnabled(editable);
 		minimumSlider.setEnabled(editable);
 		maximumSlider.setEnabled(editable);
+		audioSourceComboBox.setEnabled(!captureSourceRemote);
+		refreshSourcesButton.setEnabled(!captureSourceRemote && !endpointScanRunning);
+	}
+
+	private void refreshAudioSources()
+	{
+		if (captureSourceRemote)
+		{
+			return;
+		}
+		endpointScanRunning = true;
+		int scanGeneration = ++endpointScanGeneration;
+		refreshSourcesButton.setEnabled(false);
+		refreshSourcesButton.setText("Scanning…");
+		javax.swing.Timer timeout = new javax.swing.Timer(5_000, event ->
+		{
+			if (endpointScanRunning && endpointScanGeneration == scanGeneration)
+			{
+				endpointScanRunning = false;
+				refreshSourcesButton.setText("Refresh");
+				refreshSourcesButton.setEnabled(!captureSourceRemote);
+				sourceHint.setText("Audio-source scan timed out. Press Refresh to try again.");
+			}
+		});
+		timeout.setRepeats(false);
+		timeout.start();
+		Thread worker = new Thread(() ->
+		{
+			try
+			{
+				List<AudioCaptureEndpoint> endpoints = endpointSupplier.get();
+				SwingUtilities.invokeLater(() ->
+				{
+					if (endpointScanRunning && endpointScanGeneration == scanGeneration)
+					{
+						timeout.stop();
+						applyAvailableSources(endpoints);
+					}
+				});
+			}
+			catch (RuntimeException failure)
+			{
+				SwingUtilities.invokeLater(() ->
+				{
+					if (!endpointScanRunning || endpointScanGeneration != scanGeneration)
+					{
+						return;
+					}
+					timeout.stop();
+					endpointScanRunning = false;
+					refreshSourcesButton.setText("Refresh");
+					refreshSourcesButton.setEnabled(!captureSourceRemote);
+					sourceHint.setText("Unable to list Windows audio outputs.");
+					sourceHint.setToolTipText(failure.getMessage());
+				});
+			}
+		}, "hapticscape-audio-endpoints");
+		worker.setDaemon(true);
+		worker.start();
+	}
+
+	void applyAvailableSources(List<AudioCaptureEndpoint> discovered)
+	{
+		List<AudioCaptureEndpoint> endpoints = new ArrayList<>();
+		if (discovered != null)
+		{
+			endpoints.addAll(discovered);
+		}
+		if (endpoints.stream().noneMatch(AudioCaptureEndpoint::isSystemDefault))
+		{
+			endpoints.add(0, AudioCaptureEndpoint.systemDefault());
+		}
+
+		AudioCaptureEndpoint matched = endpoints.stream()
+			.filter(endpoint -> endpoint.equals(selectedCaptureEndpoint))
+			.findFirst()
+			.orElse(null);
+		if (matched == null)
+		{
+			matched = AudioCaptureEndpoint.unavailable(
+				selectedCaptureEndpoint.getId(),
+				selectedCaptureEndpoint.getDisplayName()
+			);
+			endpoints.add(matched);
+		}
+
+		updating = true;
+		try
+		{
+			audioSourceComboBox.removeAllItems();
+			for (AudioCaptureEndpoint endpoint : endpoints)
+			{
+				audioSourceComboBox.addItem(endpoint);
+			}
+			audioSourceComboBox.setSelectedItem(matched);
+			selectedCaptureEndpoint = matched;
+		}
+		finally
+		{
+			updating = false;
+		}
+		endpointListener.accept(matched);
+		endpointScanRunning = false;
+		refreshSourcesButton.setText("Refresh");
+		refreshSourcesButton.setEnabled(!captureSourceRemote);
+		audioSourceComboBox.setToolTipText(matched.getMenuLabel());
+		sourceHint.setText(matched.isAvailable()
+			? "Local to this computer; never shared remotely."
+			: "Selected source is unavailable. Choose another output or refresh.");
+		sourceHint.setToolTipText(null);
 	}
 
 	private void fireSettings()

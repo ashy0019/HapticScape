@@ -1,9 +1,11 @@
 package com.ashy0019.hapticscape.integration.desktop;
 
 import com.ashy0019.hapticscape.music.AudioCaptureSource;
+import com.ashy0019.hapticscape.music.AudioCaptureEndpoint;
 
 import com.sun.jna.Platform;
 import com.sun.jna.Pointer;
+import com.sun.jna.WString;
 import com.sun.jna.platform.win32.Guid.GUID;
 import com.sun.jna.platform.win32.Ole32;
 import com.sun.jna.platform.win32.WTypes;
@@ -42,7 +44,18 @@ public final class WasapiLoopbackCapture implements AudioCaptureSource
 	private static final long VOLUME_POLL_NANOS = 50_000_000L;
 
 	private final AtomicBoolean running = new AtomicBoolean();
+	private final AudioCaptureEndpoint endpoint;
 	private volatile Thread captureThread;
+
+	public WasapiLoopbackCapture()
+	{
+		this(AudioCaptureEndpoint.systemDefault());
+	}
+
+	public WasapiLoopbackCapture(AudioCaptureEndpoint endpoint)
+	{
+		this.endpoint = Objects.requireNonNull(endpoint, "endpoint");
+	}
 
 	@Override
 	public void start(Listener listener)
@@ -92,7 +105,14 @@ public final class WasapiLoopbackCapture implements AudioCaptureSource
 			enumerator = new MmDeviceEnumerator(enumeratorPointer.getValue());
 
 			PointerByReference devicePointer = new PointerByReference();
-			check(enumerator.getDefaultAudioEndpoint(E_RENDER, E_CONSOLE, devicePointer));
+			if (endpoint.isSystemDefault())
+			{
+				check(enumerator.getDefaultAudioEndpoint(E_RENDER, E_CONSOLE, devicePointer));
+			}
+			else
+			{
+				check(enumerator.getDevice(new WString(endpoint.getId()), devicePointer));
+			}
 			device = new MmDevice(devicePointer.getValue());
 
 			PointerByReference endpointVolumePointer = new PointerByReference();
@@ -124,7 +144,7 @@ public final class WasapiLoopbackCapture implements AudioCaptureSource
 			check(audioClient.getService(IID_AUDIO_CAPTURE_CLIENT, captureClientPointer));
 			captureClient = new AudioCaptureClient(captureClientPointer.getValue());
 			check(audioClient.startStream());
-			listener.onStarted("Listening to Windows system audio");
+			listener.onStarted("Listening to " + endpoint.getDisplayName());
 
 			double outputVolume = readOutputVolume(endpointVolume);
 			long nextVolumePoll = System.nanoTime() + VOLUME_POLL_NANOS;
@@ -152,7 +172,12 @@ public final class WasapiLoopbackCapture implements AudioCaptureSource
 		{
 			if (running.get())
 			{
-				listener.onError("Windows audio capture failed", error);
+				listener.onError(
+					endpoint.isSystemDefault()
+						? "Windows audio capture failed"
+						: "Selected audio source unavailable",
+					error
+				);
 			}
 		}
 		finally
@@ -269,6 +294,13 @@ public final class WasapiLoopbackCapture implements AudioCaptureSource
 		{
 			return (HRESULT) _invokeNativeObject(4, new Object[] {
 				getPointer(), dataFlow, role, device
+			}, HRESULT.class);
+		}
+
+		private HRESULT getDevice(WString id, PointerByReference device)
+		{
+			return (HRESULT) _invokeNativeObject(5, new Object[] {
+				getPointer(), id, device
 			}, HRESULT.class);
 		}
 	}

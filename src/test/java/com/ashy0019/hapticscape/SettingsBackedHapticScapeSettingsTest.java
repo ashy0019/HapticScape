@@ -27,6 +27,8 @@ public class SettingsBackedHapticScapeSettingsTest
         assertEquals("", settings.skillClickProfiles());
         assertEquals("ATTACK,COOKING", settings.clickerDisabledSkills());
         assertEquals(HapticScapeSettingsSource.DEFAULT_REMOTE_RELAY_URL, settings.remoteRelayUrl());
+		assertEquals("", settings.musicCaptureEndpointId());
+		assertEquals("Default Windows output", settings.musicCaptureEndpointName());
         assertTrue(settings.remoteSettingsAllowed());
         assertFalse(settings.remoteLiveHapticsAllowed());
         assertFalse(settings.remoteProtectedExitAllowed());
@@ -45,6 +47,8 @@ public class SettingsBackedHapticScapeSettingsTest
         store.set(HapticScapeSettingKeys.SKILL_CLICK_PROFILES, "v1|ATTACK,10,TWO,THREE,ONE");
         store.set(HapticScapeSettingKeys.REMOTE_RELAY_URL, "  wss://relay.example/relay  ");
         store.set(HapticScapeSettingKeys.REMOTE_MAXIMUM_DURATION_MILLIS, 25);
+		store.set(HapticScapeSettingKeys.MUSIC_CAPTURE_ENDPOINT_ID, "endpoint-2");
+		store.set(HapticScapeSettingKeys.MUSIC_CAPTURE_ENDPOINT_NAME, "Music channel");
 		store.set(HapticScapeSettingKeys.REMOTE_ACTIVITY_SHARING_ALLOWED, false);
 
         SettingsBackedHapticScapeSettings settings = new SettingsBackedHapticScapeSettings(
@@ -59,6 +63,8 @@ public class SettingsBackedHapticScapeSettingsTest
         assertEquals("v1|ATTACK,10,TWO,THREE,ONE", settings.skillClickProfiles());
         assertEquals("wss://relay.example/relay", settings.remoteRelayUrl());
         assertEquals(50, settings.remoteMaximumDurationMillis());
+		assertEquals("endpoint-2", settings.musicCaptureEndpointId());
+		assertEquals("Music channel", settings.musicCaptureEndpointName());
 		assertFalse(settings.remoteActivitySharingAllowed());
     }
 

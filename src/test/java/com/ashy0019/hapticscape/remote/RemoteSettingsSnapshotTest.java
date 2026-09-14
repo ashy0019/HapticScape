@@ -41,6 +41,8 @@ public class RemoteSettingsSnapshotTest
 		assertFalse(values.containsKey(HapticScapeSettingKeys.REMOTE_RELAY_URL));
 		assertFalse(values.containsKey(HapticScapeSettingKeys.REMOTE_SETTINGS_ALLOWED));
 		assertFalse(values.containsKey(HapticScapeSettingKeys.REMOTE_HAPTICS_ALLOWED));
+		assertFalse(values.containsKey(HapticScapeSettingKeys.MUSIC_CAPTURE_ENDPOINT_ID));
+		assertFalse(values.containsKey(HapticScapeSettingKeys.MUSIC_CAPTURE_ENDPOINT_NAME));
 		assertFalse(values.containsKey(HapticScapeSettingKeys.REMOTE_CLICKS_ALLOWED));
 		assertFalse(values.containsKey(
 			HapticScapeSettingKeys.REMOTE_DESKTOP_NOTIFICATIONS_ALLOWED
@@ -62,6 +64,19 @@ public class RemoteSettingsSnapshotTest
 				"wss://other.example/relay"
 			);
 			fail("Expected the local relay setting to be rejected");
+		}
+		catch (IllegalArgumentException expected)
+		{
+			// Expected.
+		}
+		try
+		{
+			snapshot.withConfigurationValue(
+				new Gson(),
+				HapticScapeSettingKeys.MUSIC_CAPTURE_ENDPOINT_ID,
+				"participant-device-id"
+			);
+			fail("Expected the local audio endpoint to be rejected");
 		}
 		catch (IllegalArgumentException expected)
 		{

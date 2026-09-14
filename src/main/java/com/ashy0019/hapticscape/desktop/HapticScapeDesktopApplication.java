@@ -7,6 +7,7 @@ import com.ashy0019.hapticscape.SettingsBackedHapticScapeSettings;
 import com.ashy0019.hapticscape.SkillCatalog;
 import com.ashy0019.hapticscape.integration.desktop.AwtDesktopNotificationService;
 import com.ashy0019.hapticscape.integration.desktop.DesktopAudioCaptureSources;
+import com.ashy0019.hapticscape.music.AudioCaptureEndpoint;
 import com.ashy0019.hapticscape.integration.desktop.DesktopDiscordDeepLinkInbox;
 import com.ashy0019.hapticscape.integration.desktop.DesktopSecretProtectors;
 import com.ashy0019.hapticscape.integration.desktop.DesktopSourceMessageService;
@@ -101,6 +102,11 @@ public final class HapticScapeDesktopApplication implements AutoCloseable
 			desktopNotifications,
 			sourceMessages,
 			DesktopAudioCaptureSources::systemOutput,
+			DesktopAudioCaptureSources.endpointCatalog(),
+			AudioCaptureEndpoint.fromPersisted(
+				settings.musicCaptureEndpointId(),
+				settings.musicCaptureEndpointName()
+			),
 			DesktopSecretProtectors.savedUnlockKeys(),
 			DesktopSecretProtectors.discordCredentials(),
 			launchOptions.getGameplayPort()

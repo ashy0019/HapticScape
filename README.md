@@ -210,7 +210,7 @@ On wide windows, the Forge can remain visible beside the main workspace. On smal
 
 ### Music sync
 
-Music sync is available on Windows. It analyzes the current Windows output mix with WASAPI loopback capture and maps the signal to continuous haptic output.
+Music sync is available on Windows. It analyzes a selected Windows output endpoint with WASAPI loopback capture and maps the signal to continuous haptic output. **Default Windows output** preserves the original follow-the-system behavior; the source picker can instead target any active render endpoint exposed by Windows, including generic virtual audio routes.
 
 Controls include:
 
@@ -220,10 +220,12 @@ Controls include:
 - Maximum haptic output.
 - Live output meter.
 - Windows master volume and mute scaling.
+- Local audio-source selection and manual endpoint refresh.
 
 Finite XP, alert, preview, remote pattern, and Live Forge output can temporarily take the haptic channel. Music sync resumes afterward.
 
 Music sync analyzes audio in memory. It does not record or upload the audio stream.
+The selected endpoint ID is stored only on that computer and is never included in Remote Play settings. If an explicitly selected endpoint disappears, Music sync stops with a visible error rather than silently capturing a different output.
 
 ### Audio click feedback
 
@@ -634,7 +636,8 @@ The source is Java-based, but the supported prebuilt release is Windows. Music s
 
 ### Music sync shows no output
 
-- Confirm audio is playing through the active Windows output device.
+- Confirm audio is playing through the endpoint selected under **Audio source**.
+- Select **Default Windows output** to follow the current Windows default, or press **Refresh** after connecting or enabling a new output device.
 - Confirm Windows is not muted.
 - Raise Music sensitivity and maximum intensity.
 - Raise minimum intensity if the device ignores low output values.

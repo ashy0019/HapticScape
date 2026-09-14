@@ -6,6 +6,8 @@ import com.ashy0019.hapticscape.device.IntifaceService;
 import java.net.URI;
 import java.time.Duration;
 import java.util.function.Consumer;
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -61,6 +63,34 @@ public class MusicSyncServiceTest
 		assertEquals(MusicSyncSnapshot.State.ERROR, service.getSnapshot().getState());
 		assertEquals("No output device", service.getSnapshot().getMessage());
 		assertTrue(intiface.liveStopped);
+	}
+
+	@Test
+	public void changingEndpointSafelyRestartsActiveCapture()
+	{
+		FakeIntifaceService intiface = new FakeIntifaceService();
+		List<FakeCaptureSource> captures = new ArrayList<>();
+		MusicSyncService service = new MusicSyncService(
+			intiface,
+			endpoint ->
+			{
+				FakeCaptureSource capture = new FakeCaptureSource();
+				captures.add(capture);
+				return capture;
+			},
+			new AudioCaptureEndpoint("endpoint-1", "Speakers"),
+			settings(false)
+		);
+
+		service.updateSettings(settings(true));
+		service.updateCaptureEndpoint(
+			new AudioCaptureEndpoint("endpoint-2", "Music channel")
+		);
+
+		assertEquals(2, captures.size());
+		assertTrue(captures.get(0).closed);
+		assertTrue(captures.get(1).started);
+		assertEquals("endpoint-2", service.getCaptureEndpoint().getId());
 	}
 
 	private static MusicSyncSettings settings(boolean enabled)

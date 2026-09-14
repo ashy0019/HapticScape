@@ -4,6 +4,9 @@ import com.ashy0019.hapticscape.audio.SoundPlayer;
 import com.ashy0019.hapticscape.host.DesktopNotificationService;
 import com.ashy0019.hapticscape.host.SourceMessageService;
 import com.ashy0019.hapticscape.music.AudioCaptureSource;
+import com.ashy0019.hapticscape.music.AudioCaptureEndpoint;
+import com.ashy0019.hapticscape.music.AudioCaptureEndpointCatalog;
+import com.ashy0019.hapticscape.music.AudioCaptureSourceFactory;
 import com.ashy0019.hapticscape.remote.SettingsStore;
 import com.ashy0019.hapticscape.remote.UnlockKeyProtector;
 import com.ashy0019.hapticscape.storage.HapticScapeStoragePaths;
@@ -29,7 +32,9 @@ public final class HapticScapeRuntimeDependencies
     private final SoundPlayer soundPlayer;
     private final DesktopNotificationService desktopNotifications;
     private final SourceMessageService sourceMessages;
-    private final Supplier<AudioCaptureSource> audioCaptureSourceFactory;
+    private final AudioCaptureSourceFactory audioCaptureSourceFactory;
+    private final AudioCaptureEndpointCatalog audioCaptureEndpointCatalog;
+    private final AudioCaptureEndpoint initialAudioCaptureEndpoint;
     private final UnlockKeyProtector savedUnlockKeyProtector;
     private final UnlockKeyProtector discordCredentialProtector;
     private final int gameplayPort;
@@ -49,6 +54,42 @@ public final class HapticScapeRuntimeDependencies
         UnlockKeyProtector discordCredentialProtector,
         int gameplayPort)
     {
+        this(
+            httpClient,
+            gson,
+            settings,
+            settingsStore,
+            skillCatalog,
+            storagePaths,
+            soundPlayer,
+            desktopNotifications,
+            sourceMessages,
+            ignored -> audioCaptureSourceFactory.get(),
+            AudioCaptureEndpointCatalog.systemDefaultOnly(),
+            AudioCaptureEndpoint.systemDefault(),
+            savedUnlockKeyProtector,
+            discordCredentialProtector,
+            gameplayPort
+        );
+    }
+
+    public HapticScapeRuntimeDependencies(
+        OkHttpClient httpClient,
+        Gson gson,
+        HapticScapeSettingsSource settings,
+        SettingsStore settingsStore,
+        SkillCatalog skillCatalog,
+        HapticScapeStoragePaths storagePaths,
+        SoundPlayer soundPlayer,
+        DesktopNotificationService desktopNotifications,
+        SourceMessageService sourceMessages,
+        AudioCaptureSourceFactory audioCaptureSourceFactory,
+        AudioCaptureEndpointCatalog audioCaptureEndpointCatalog,
+        AudioCaptureEndpoint initialAudioCaptureEndpoint,
+        UnlockKeyProtector savedUnlockKeyProtector,
+        UnlockKeyProtector discordCredentialProtector,
+        int gameplayPort)
+    {
         this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
         this.gson = Objects.requireNonNull(gson, "gson");
         this.settings = Objects.requireNonNull(settings, "settings");
@@ -64,6 +105,14 @@ public final class HapticScapeRuntimeDependencies
         this.audioCaptureSourceFactory = Objects.requireNonNull(
             audioCaptureSourceFactory,
             "audioCaptureSourceFactory"
+        );
+        this.audioCaptureEndpointCatalog = Objects.requireNonNull(
+            audioCaptureEndpointCatalog,
+            "audioCaptureEndpointCatalog"
+        );
+        this.initialAudioCaptureEndpoint = Objects.requireNonNull(
+            initialAudioCaptureEndpoint,
+            "initialAudioCaptureEndpoint"
         );
         this.savedUnlockKeyProtector = Objects.requireNonNull(
             savedUnlockKeyProtector,
@@ -125,9 +174,19 @@ public final class HapticScapeRuntimeDependencies
         return sourceMessages;
     }
 
-    Supplier<AudioCaptureSource> getAudioCaptureSourceFactory()
+    AudioCaptureSourceFactory getAudioCaptureSourceFactory()
     {
         return audioCaptureSourceFactory;
+    }
+
+    AudioCaptureEndpointCatalog getAudioCaptureEndpointCatalog()
+    {
+        return audioCaptureEndpointCatalog;
+    }
+
+    AudioCaptureEndpoint getInitialAudioCaptureEndpoint()
+    {
+        return initialAudioCaptureEndpoint;
     }
 
     UnlockKeyProtector getSavedUnlockKeyProtector()

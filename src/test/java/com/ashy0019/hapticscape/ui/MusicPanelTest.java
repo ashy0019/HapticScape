@@ -4,14 +4,17 @@ import com.ashy0019.hapticscape.HapticScapeSettingKeys;
 import com.ashy0019.hapticscape.TestHapticScapeSettings;
 import com.ashy0019.hapticscape.music.MusicSyncSettings;
 import com.ashy0019.hapticscape.music.MusicSyncSnapshot;
+import com.ashy0019.hapticscape.music.AudioCaptureEndpoint;
 import java.awt.Component;
 import java.awt.Container;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import javax.swing.AbstractButton;
 import javax.swing.JLabel;
 import javax.swing.JProgressBar;
 import javax.swing.JSlider;
+import javax.swing.JComboBox;
 import javax.swing.SwingUtilities;
 import org.junit.Test;
 
@@ -112,6 +115,106 @@ public class MusicPanelTest
 		assertFalse(component(panel, "musicSensitivity", Component.class).isEnabled());
 		assertFalse(component(panel, "musicMinimumIntensity", Component.class).isEnabled());
 		assertFalse(component(panel, "musicMaximumIntensity", Component.class).isEnabled());
+	}
+
+	@Test
+	public void localAudioSelectionPersistsOpaqueIdAndRestartsCapture() throws Exception
+	{
+		List<String> keys = new ArrayList<>();
+		List<AudioCaptureEndpoint> selected = new ArrayList<>();
+		CountDownLatch enumerated = new CountDownLatch(1);
+		MusicPanel panel = new MusicPanel(
+			new TestHapticScapeSettings(),
+			(target, key, value) -> { },
+			(target, key, value) -> keys.add(key + "=" + value),
+			ignored -> { },
+			() ->
+			{
+				try
+				{
+					return java.util.Arrays.asList(
+						AudioCaptureEndpoint.systemDefault(),
+						new AudioCaptureEndpoint("endpoint-2", "Music channel")
+					);
+				}
+				finally
+				{
+					enumerated.countDown();
+				}
+			},
+			selected::add
+		);
+		enumerated.await();
+		SwingUtilities.invokeAndWait(() -> { });
+		AudioCaptureEndpoint music = new AudioCaptureEndpoint(
+			"endpoint-2",
+			"Music channel"
+		);
+		SwingUtilities.invokeAndWait(() ->
+			component(panel, "musicAudioSource", JComboBox.class).setSelectedItem(music)
+		);
+
+		assertTrue(keys.contains(
+			HapticScapeSettingKeys.MUSIC_CAPTURE_ENDPOINT_ID + "=endpoint-2"
+		));
+		assertTrue(keys.contains(
+			HapticScapeSettingKeys.MUSIC_CAPTURE_ENDPOINT_NAME + "=Music channel"
+		));
+		assertEquals(music, selected.get(selected.size() - 1));
+	}
+
+	@Test
+	public void controllerSubjectViewDoesNotExposeEndpointPicker()
+	{
+		MusicPanel panel = panel(new ArrayList<>(), new ArrayList<>());
+		panel.setCaptureSourceRemote(true);
+
+		assertFalse(component(
+			panel,
+			"musicAudioSourceLocalControls",
+			Component.class
+		).isVisible());
+		assertTrue(component(
+			panel,
+			"musicAudioSourceRemoteNotice",
+			Component.class
+		).isVisible());
+	}
+
+	@Test
+	public void savedSourceIsVisibleWhileWindowsScanIsStillRunning() throws Exception
+	{
+		CountDownLatch scanStarted = new CountDownLatch(1);
+		CountDownLatch releaseScan = new CountDownLatch(1);
+		MusicPanel panel = new MusicPanel(
+			new TestHapticScapeSettings(),
+			(target, key, value) -> { },
+			(target, key, value) -> { },
+			ignored -> { },
+			() ->
+			{
+				scanStarted.countDown();
+				try
+				{
+					releaseScan.await();
+				}
+				catch (InterruptedException failure)
+				{
+					Thread.currentThread().interrupt();
+				}
+				return java.util.Collections.singletonList(
+					AudioCaptureEndpoint.systemDefault()
+				);
+			},
+			ignored -> { }
+		);
+		scanStarted.await();
+
+		assertEquals(
+			AudioCaptureEndpoint.systemDefault(),
+			component(panel, "musicAudioSource", JComboBox.class).getSelectedItem()
+		);
+		releaseScan.countDown();
 	}
 
 	private static MusicPanel panel(
