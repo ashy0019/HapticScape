@@ -12,8 +12,16 @@ public enum HapticPatternPreset
 	SINGLE("Single pulse", new double[]{1.0}, new int[]{1}),
 	DOUBLE("Double pulse", new double[]{1.0, 0.0, 1.0}, new int[]{2, 1, 2}),
 	TRIPLE("Triple pulse", new double[]{1.0, 0.0, 1.0, 0.0, 1.0}, new int[]{2, 1, 2, 1, 2}),
-	ASCENDING("Ascending", new double[]{0.35, 0.0, 0.65, 0.0, 1.0}, new int[]{2, 1, 2, 1, 2}),
-	DESCENDING("Descending", new double[]{1.0, 0.0, 0.65, 0.0, 0.35}, new int[]{2, 1, 2, 1, 2});
+	ASCENDING(
+		"Ascending",
+		new double[]{0.34, 0.42, 0.50, 0.57, 0.64, 0.71, 0.78, 0.84, 0.89, 0.93, 0.97, 1.0},
+		new int[]{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
+	),
+	DESCENDING(
+		"Descending",
+		new double[]{1.0, 0.97, 0.93, 0.89, 0.84, 0.78, 0.71, 0.64, 0.57, 0.50, 0.42, 0.34},
+		new int[]{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
+	);
 
 	private final String displayName;
 	private final double[] intensityFactors;

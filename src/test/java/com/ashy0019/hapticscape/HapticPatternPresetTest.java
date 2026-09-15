@@ -5,6 +5,7 @@ import java.time.Duration;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class HapticPatternPresetTest
 {
@@ -24,19 +25,39 @@ public class HapticPatternPresetTest
 	}
 
 	@Test
-	public void ascendingPatternBuildsThreeIncreasingPulses()
+	public void ascendingPatternBuildsContinuousNonlinearRamp()
 	{
 		HapticPattern pattern = HapticPatternPreset.ASCENDING.createPattern(
 			0.8,
 			Duration.ofMillis(500)
 		);
 
-		assertEquals(5, pattern.getSteps().size());
-		assertEquals(0.28, pattern.getSteps().get(0).getIntensity(), 0.0001);
-		assertEquals(0.0, pattern.getSteps().get(1).getIntensity(), 0.0001);
-		assertEquals(0.52, pattern.getSteps().get(2).getIntensity(), 0.0001);
-		assertEquals(0.0, pattern.getSteps().get(3).getIntensity(), 0.0001);
-		assertEquals(0.8, pattern.getSteps().get(4).getIntensity(), 0.0001);
+		assertEquals(12, pattern.getSteps().size());
+		assertEquals(0.272, pattern.getSteps().get(0).getIntensity(), 0.0001);
+		assertEquals(0.8, pattern.getSteps().get(11).getIntensity(), 0.0001);
+		for (int index = 1; index < pattern.getSteps().size(); index++)
+		{
+			assertTrue(pattern.getSteps().get(index).getIntensity()
+				> pattern.getSteps().get(index - 1).getIntensity());
+		}
+	}
+
+	@Test
+	public void descendingPatternBuildsContinuousNonlinearRamp()
+	{
+		HapticPattern pattern = HapticPatternPreset.DESCENDING.createPattern(
+			0.8,
+			Duration.ofMillis(500)
+		);
+
+		assertEquals(12, pattern.getSteps().size());
+		assertEquals(0.8, pattern.getSteps().get(0).getIntensity(), 0.0001);
+		assertEquals(0.272, pattern.getSteps().get(11).getIntensity(), 0.0001);
+		for (int index = 1; index < pattern.getSteps().size(); index++)
+		{
+			assertTrue(pattern.getSteps().get(index).getIntensity()
+				< pattern.getSteps().get(index - 1).getIntensity());
+		}
 	}
 
 	@Test
